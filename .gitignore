@@ -1,0 +1,24 @@
+# This repository contains only the TES WPF solution and its application project.
+/*
+!/.gitignore
+!/.gitattributes
+!/Ruinao.slnx
+!/RuinaoHardwareDebugWpf/
+
+# Visual Studio and .NET build output
+**/.vs/
+**/bin/
+**/obj/
+**/*.user
+**/*.suo
+
+# Local runtime data and diagnostics
+**/*.log
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/capture_output/
+
+# OS metadata
+**/.DS_Store
+**/Thumbs.db
