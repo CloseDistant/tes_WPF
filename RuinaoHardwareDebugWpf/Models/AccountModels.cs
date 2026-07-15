@@ -45,3 +45,18 @@ public sealed record ChangePasswordRequest(
     string NewPassword,
     string ConfirmPassword);
 
+public sealed record ResetPasswordRequest(
+    long UserId,
+    string NewPassword,
+    string ConfirmPassword);
+
+public sealed record AccountListItemInfo(
+    long UserId,
+    string LoginName,
+    string DisplayName,
+    int RoleId,
+    bool IsActive,
+    long CreatedAtUnixMs)
+{
+    public string RoleName => AccountRoles.GetName(RoleId);
+}

@@ -90,6 +90,7 @@ public sealed class AppDatabaseInitializer : IAppDatabaseInitializer
         public List<AccountAuditLogEntity> AccountAuditLogs { get; } = [];
         public List<PatientEntity> Patients { get; } = [];
         public List<AppStateEntity> AppStates { get; } = [];
+        public List<FeatureVisibilityEntity> FeatureVisibilities { get; } = [];
         public List<StimulationRecordEntity> StimulationRecords { get; } = [];
         public List<AssessmentSessionEntity> AssessmentSessions { get; } = [];
         public List<AssessmentModuleRecordEntity> AssessmentModuleRecords { get; } = [];
@@ -110,6 +111,7 @@ public sealed class AppDatabaseInitializer : IAppDatabaseInitializer
             await LoadOptionalAsync(source.AccountAuditLogs, result.AccountAuditLogs, "account_audit_logs", logger, cancellationToken);
             await LoadOptionalAsync(source.Patients, result.Patients, "patients", logger, cancellationToken);
             await LoadOptionalAsync(source.AppStates, result.AppStates, "app_state", logger, cancellationToken);
+            await LoadOptionalAsync(source.FeatureVisibilities, result.FeatureVisibilities, "feature_visibility", logger, cancellationToken);
             await LoadOptionalAsync(source.StimulationRecords, result.StimulationRecords, "stimulation_records", logger, cancellationToken);
             await LoadOptionalAsync(source.AssessmentSessions, result.AssessmentSessions, "assessment_sessions", logger, cancellationToken);
             await LoadOptionalAsync(source.AssessmentModuleRecords, result.AssessmentModuleRecords, "assessment_module_records", logger, cancellationToken);
@@ -127,6 +129,7 @@ public sealed class AppDatabaseInitializer : IAppDatabaseInitializer
             context.AccountAuditLogs.AddRange(AccountAuditLogs);
             context.Patients.AddRange(Patients);
             context.AppStates.AddRange(AppStates);
+            context.FeatureVisibilities.AddRange(FeatureVisibilities);
             context.StimulationRecords.AddRange(StimulationRecords);
             context.AssessmentSessions.AddRange(AssessmentSessions);
             context.AssessmentModuleRecords.AddRange(AssessmentModuleRecords);

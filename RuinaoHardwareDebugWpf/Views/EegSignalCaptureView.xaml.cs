@@ -13,13 +13,6 @@ namespace RuinaoHardwareDebugWpf.Views;
 
 public partial class EegSignalCaptureView : UserControl
 {
-    private static readonly HashSet<string> Core1020Electrodes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Fpz", "Fz", "Cz", "Pz", "Oz",
-        "F3", "F4", "C3", "C4", "P3", "P4",
-        "O1", "O2", "F7", "F8", "T7", "T8", "P7", "P8"
-    };
-
     private static readonly Lazy<IReadOnlyDictionary<string, EegElectrodeCoordinate>> ElectrodeCoordinates = new(LoadElectrodeCoordinates);
 
     private readonly List<ElectrodeVisual> electrodeVisuals = new();
@@ -187,35 +180,31 @@ public partial class EegSignalCaptureView : UserControl
         var height = Math.Max(260, ElectrodeCanvas.ActualHeight);
         var dotSize = GetElectrodeDotSize(width, height);
         var dotRadius = dotSize / 2;
-        var coreHaloSize = dotSize + 8;
-        var extendedHaloSize = dotSize + 4;
         var centerX = width / 2;
-        var centerY = height * 0.48;
-        var rx = Math.Max(1, width * 0.43 - dotRadius);
-        var ry = Math.Max(1, Math.Min(height * 0.34, rx * 0.86) - dotRadius);
-        Point ToCanvasPoint(Point normalized) => new(centerX + normalized.X * rx, centerY - normalized.Y * ry);
+        var centerY = height * 0.51;
+        var radius = Math.Max(1, Math.Min(width * 0.43, height * 0.40) - dotRadius);
+        Point ToCanvasPoint(Point normalized) => new(centerX + normalized.X * radius, centerY - normalized.Y * radius);
 
         var head = new Ellipse
         {
-            Width = rx * 2,
-            Height = ry * 2,
+            Width = radius * 2,
+            Height = radius * 2,
             Stroke = new SolidColorBrush(Color.FromRgb(48, 54, 69)),
             StrokeThickness = 2,
             Fill = new SolidColorBrush(Color.FromRgb(28, 32, 43))
         };
-        Canvas.SetLeft(head, centerX - rx);
-        Canvas.SetTop(head, centerY - ry);
+        Canvas.SetLeft(head, centerX - radius);
+        Canvas.SetTop(head, centerY - radius);
         ElectrodeCanvas.Children.Add(head);
 
         var contourBrush = new SolidColorBrush(Color.FromRgb(62, 68, 91));
-        var guideBrush = new SolidColorBrush(Color.FromRgb(126, 132, 152));
         var nose = new Polygon
         {
             Points = new PointCollection
             {
-                new(centerX - rx * 0.08, centerY - ry * 1.0),
-                new(centerX, centerY - ry * 1.12),
-                new(centerX + rx * 0.08, centerY - ry * 1.0)
+                new(centerX - radius * 0.08, centerY - radius),
+                new(centerX, centerY - radius * 1.12),
+                new(centerX + radius * 0.08, centerY - radius)
             },
             Stroke = contourBrush,
             StrokeThickness = 1.4,
@@ -223,12 +212,12 @@ public partial class EegSignalCaptureView : UserControl
         };
         ElectrodeCanvas.Children.Add(nose);
 
-        foreach (var earX in new[] { centerX - rx * 1.04, centerX + rx * 1.04 })
+        foreach (var earX in new[] { centerX - radius * 1.04, centerX + radius * 1.04 })
         {
             var ear = new Ellipse
             {
-                Width = rx * 0.18,
-                Height = ry * 0.38,
+                Width = radius * 0.18,
+                Height = radius * 0.38,
                 Stroke = contourBrush,
                 StrokeThickness = 1.4,
                 Fill = Brushes.Transparent
@@ -236,40 +225,6 @@ public partial class EegSignalCaptureView : UserControl
             Canvas.SetLeft(ear, earX - ear.Width / 2);
             Canvas.SetTop(ear, centerY - ear.Height / 2);
             ElectrodeCanvas.Children.Add(ear);
-        }
-
-        var centerGuide = new Line
-        {
-            X1 = centerX,
-            Y1 = centerY - ry * 0.94,
-            X2 = centerX,
-            Y2 = centerY + ry * 0.65,
-            Stroke = guideBrush,
-            StrokeThickness = 1,
-            StrokeDashArray = new DoubleCollection { 4, 4 },
-            Opacity = 0.55
-        };
-        ElectrodeCanvas.Children.Add(centerGuide);
-
-        for (var i = 0; i < config.ChannelCount; i++)
-        {
-            var name = config.ChannelNames[i];
-            var lookupName = GetElectrodeCoordinateName(name);
-            var point = ToCanvasPoint(GetElectrode1020Position(name));
-            var isCore1020 = Core1020Electrodes.Contains(lookupName);
-            var halo = new Ellipse
-            {
-                Width = isCore1020 ? coreHaloSize : extendedHaloSize,
-                Height = isCore1020 ? coreHaloSize : extendedHaloSize,
-                Stroke = guideBrush,
-                StrokeThickness = isCore1020 ? 1.4 : 1,
-                StrokeDashArray = isCore1020 ? new DoubleCollection { 4, 3 } : null,
-                Fill = Brushes.Transparent,
-                Opacity = isCore1020 ? 0.8 : 0.55
-            };
-            Canvas.SetLeft(halo, point.X - halo.Width / 2);
-            Canvas.SetTop(halo, point.Y - halo.Height / 2);
-            ElectrodeCanvas.Children.Add(halo);
         }
 
         for (var i = 0; i < config.ChannelCount; i++)
@@ -303,12 +258,7 @@ public partial class EegSignalCaptureView : UserControl
 
     private static string GetElectrodeCoordinateName(string name)
     {
-        return name switch
-        {
-            "REF" => "A1",
-            "GND" => "A2",
-            _ => name
-        };
+        return name;
     }
 
     private static string GetElectrodeDisplayName(string name)
@@ -318,7 +268,7 @@ public partial class EegSignalCaptureView : UserControl
 
     private static IReadOnlyDictionary<string, EegElectrodeCoordinate> LoadElectrodeCoordinates()
     {
-        var path = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Eeg", "EEG_64_electrodes_coordinates.json");
+        var path = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Eeg", "EEG_64_standard_1020_coordinates.json");
         if (!File.Exists(path))
         {
             return new Dictionary<string, EegElectrodeCoordinate>(StringComparer.OrdinalIgnoreCase);

@@ -9,6 +9,9 @@ public enum AssessmentModuleKind
     VideoBrowse,
     VoiceBaseline,
     WordReading,
+    ShortTextReading,
+    EmotionQuestion,
+    DotProbe,
     Questionnaire,
     BasicInformation,
     GenericTask,
@@ -58,6 +61,24 @@ public sealed class WordReadingAssessmentModuleViewModel(string code, string key
     : AssessmentModuleViewModel(code, key, developmentOnly)
 {
     public override AssessmentModuleKind Kind => AssessmentModuleKind.WordReading;
+}
+
+public sealed class ShortTextReadingAssessmentModuleViewModel(string code, string key, bool developmentOnly)
+    : AssessmentModuleViewModel(code, key, developmentOnly)
+{
+    public override AssessmentModuleKind Kind => AssessmentModuleKind.ShortTextReading;
+}
+
+public sealed class EmotionQuestionAssessmentModuleViewModel(string code, string key, bool developmentOnly)
+    : AssessmentModuleViewModel(code, key, developmentOnly)
+{
+    public override AssessmentModuleKind Kind => AssessmentModuleKind.EmotionQuestion;
+}
+
+public sealed class DotProbeAssessmentModuleViewModel(string code, string key, bool developmentOnly)
+    : AssessmentModuleViewModel(code, key, developmentOnly)
+{
+    public override AssessmentModuleKind Kind => AssessmentModuleKind.DotProbe;
 }
 
 public sealed class QuestionnaireAssessmentModuleViewModel(string code, string key, bool developmentOnly)
@@ -132,6 +153,9 @@ public sealed class AssessmentWorkbenchCoordinator : ObservableObject
             "video_browse" => new VideoBrowseAssessmentModuleViewModel(code, key, developmentOnly),
             "voice_baseline" => new VoiceAssessmentModuleViewModel(code, key, developmentOnly),
             "word_reading" => new WordReadingAssessmentModuleViewModel(code, key, developmentOnly),
+            "short_text_reading" => new ShortTextReadingAssessmentModuleViewModel(code, key, developmentOnly),
+            "emotion_question" => new EmotionQuestionAssessmentModuleViewModel(code, key, developmentOnly),
+            "dot_probe" => new DotProbeAssessmentModuleViewModel(code, key, developmentOnly),
             "basic_info" => new BasicInformationAssessmentModuleViewModel(code, key, developmentOnly),
             "sync_test" => new GenericAssessmentModuleViewModel(code, key, developmentOnly, AssessmentModuleKind.SynchronizationTest),
             _ when code.StartsWith("questionnaire_", StringComparison.Ordinal) => new QuestionnaireAssessmentModuleViewModel(code, key, developmentOnly),

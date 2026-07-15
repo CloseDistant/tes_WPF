@@ -6,24 +6,28 @@ using System.Globalization;
 
 public sealed class LocalPatientService : IPatientService
 {
-    private const string CurrentPatientKey = "current_patient_code";
     private const int MaxRetryCount = 3;
     private readonly ILoggingService logger;
     private readonly IAppDatabaseInitializer databaseInitializer;
     private readonly PatientDataProtector dataProtector;
+    private readonly IAccountService accountService;
     private readonly SemaphoreSlim initializeGate = new(1, 1);
     private readonly SemaphoreSlim writeGate = new(1, 1);
     private bool ready;
     private PatientRecord? currentPatient;
+    private long? currentPatientOwnerUserId;
 
     public LocalPatientService(
         ILoggingService logger,
         IAppDatabaseInitializer databaseInitializer,
-        PatientDataProtector dataProtector)
+        PatientDataProtector dataProtector,
+        IAccountService accountService)
     {
         this.logger = logger;
         this.databaseInitializer = databaseInitializer;
         this.dataProtector = dataProtector;
+        this.accountService = accountService;
+        this.accountService.CurrentUserChanged += (_, _) => ClearCurrentPatient();
     }
 
     public event EventHandler? CurrentPatientChanged;
@@ -33,26 +37,7 @@ public sealed class LocalPatientService : IPatientService
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await EnsureReadyAsync(cancellationToken);
-        await using var context = new CaptureDbContext(AppDatabasePathProvider.MainDatabasePath);
-        var currentCode = await context.AppStates
-            .Where(item => item.Key == CurrentPatientKey)
-            .Select(item => item.Value)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var entity = string.IsNullOrWhiteSpace(currentCode)
-            ? null
-            : await context.Patients.FirstOrDefaultAsync(item => item.PatientCode == currentCode, cancellationToken);
-        entity ??= await context.Patients.OrderByDescending(item => item.UpdatedAtUnixMs).FirstOrDefaultAsync(cancellationToken);
-        if (entity is null)
-        {
-            return;
-        }
-
-        currentPatient = ToRecord(entity);
-        await SaveCurrentPatientCodeAsync(context, entity.PatientCode, cancellationToken);
-        await context.SaveChangesAsync(cancellationToken);
-        CurrentPatientChanged?.Invoke(this, EventArgs.Empty);
-        logger.Info($"当前患者已恢复：{entity.PatientCode}");
+        ClearCurrentPatient();
     }
 
     public Task<PatientRecord> CreatePatientAsync(PatientSaveRequest request, CancellationToken cancellationToken = default)
@@ -61,6 +46,7 @@ public sealed class LocalPatientService : IPatientService
         return ExecuteWriteAsync(async () =>
         {
             await EnsureReadyAsync(cancellationToken);
+            var owner = RequirePatientManager();
             await using var context = new CaptureDbContext(AppDatabasePathProvider.MainDatabasePath);
             await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
             var now = DateTimeOffset.Now;
@@ -75,6 +61,7 @@ public sealed class LocalPatientService : IPatientService
 
             var entity = new PatientEntity
             {
+                OwnerUserId = owner.UserId,
                 PatientCode = patientCode,
                 Name = request.Name.Trim(),
                 Gender = request.Sex!.Value.ToStorageCode(),
@@ -89,13 +76,20 @@ public sealed class LocalPatientService : IPatientService
                 UpdatedAtUnixMs = now.ToUnixTimeMilliseconds()
             };
             context.Patients.Add(entity);
-            await SaveCurrentPatientCodeAsync(context, patientCode, cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
             currentPatient = ToRecord(entity);
+            currentPatientOwnerUserId = owner.UserId;
             CurrentPatientChanged?.Invoke(this, EventArgs.Empty);
-            logger.Info($"新增患者：{patientCode}");
+            await accountService.RecordAuditAsync(
+                owner.UserId,
+                null,
+                "create_patient",
+                "success",
+                $"创建患者：patientCode={patientCode}",
+                cancellationToken);
+            logger.Info($"新增患者：patientCode={patientCode}, ownerUserId={owner.UserId}");
             return currentPatient;
         }, cancellationToken);
     }
@@ -103,6 +97,7 @@ public sealed class LocalPatientService : IPatientService
     public async Task<string> GenerateNextPatientCodeAsync(CancellationToken cancellationToken = default)
     {
         await EnsureReadyAsync(cancellationToken);
+        RequirePatientManager();
         await using var context = new CaptureDbContext(AppDatabasePathProvider.MainDatabasePath);
         return await GeneratePatientCodeAsync(context, DateTimeOffset.Now, cancellationToken);
     }
@@ -113,8 +108,11 @@ public sealed class LocalPatientService : IPatientService
         return ExecuteWriteAsync(async () =>
         {
             await EnsureReadyAsync(cancellationToken);
+            var owner = RequirePatientManager();
             await using var context = new CaptureDbContext(AppDatabasePathProvider.MainDatabasePath);
-            var entity = await context.Patients.FirstOrDefaultAsync(item => item.PatientCode == request.PatientCode, cancellationToken)
+            var entity = await context.Patients.FirstOrDefaultAsync(
+                    item => item.PatientCode == request.PatientCode && item.OwnerUserId == owner.UserId,
+                    cancellationToken)
                 ?? throw new InvalidOperationException($"未找到患者：{request.PatientCode}");
 
             entity.Name = request.Name.Trim();
@@ -129,13 +127,20 @@ public sealed class LocalPatientService : IPatientService
             await context.SaveChangesAsync(cancellationToken);
 
             var record = ToRecord(entity);
-            if (currentPatient?.PatientCode == record.PatientCode)
+            if (currentPatient?.PatientCode == record.PatientCode && currentPatientOwnerUserId == owner.UserId)
             {
                 currentPatient = record;
                 CurrentPatientChanged?.Invoke(this, EventArgs.Empty);
             }
 
-            logger.Info($"更新患者：{record.PatientCode}");
+            await accountService.RecordAuditAsync(
+                owner.UserId,
+                null,
+                "update_patient",
+                "success",
+                $"更新患者：patientCode={record.PatientCode}",
+                cancellationToken);
+            logger.Info($"更新患者：patientCode={record.PatientCode}, ownerUserId={owner.UserId}");
             return record;
         }, cancellationToken);
     }
@@ -143,8 +148,12 @@ public sealed class LocalPatientService : IPatientService
     public async Task<IReadOnlyList<PatientRecord>> GetPatientsAsync(CancellationToken cancellationToken = default)
     {
         await EnsureReadyAsync(cancellationToken);
+        var owner = RequirePatientManager();
         await using var context = new CaptureDbContext(AppDatabasePathProvider.MainDatabasePath);
-        var entities = await context.Patients.OrderByDescending(item => item.UpdatedAtUnixMs).ToListAsync(cancellationToken);
+        var entities = await context.Patients
+            .Where(item => item.OwnerUserId == owner.UserId)
+            .OrderByDescending(item => item.UpdatedAtUnixMs)
+            .ToListAsync(cancellationToken);
         return entities.Select(ToRecord).ToList();
     }
 
@@ -158,26 +167,34 @@ public sealed class LocalPatientService : IPatientService
         return ExecuteWriteAsync(async () =>
         {
             await EnsureReadyAsync(cancellationToken);
+            var owner = RequirePatientManager();
             await using var context = new CaptureDbContext(AppDatabasePathProvider.MainDatabasePath);
-            var entity = await context.Patients.FirstOrDefaultAsync(item => item.PatientCode == patientCode, cancellationToken)
+            var entity = await context.Patients.FirstOrDefaultAsync(
+                    item => item.PatientCode == patientCode && item.OwnerUserId == owner.UserId,
+                    cancellationToken)
                 ?? throw new InvalidOperationException($"未找到患者：{patientCode}");
-            await SaveCurrentPatientCodeAsync(context, patientCode, cancellationToken);
-            await context.SaveChangesAsync(cancellationToken);
             currentPatient = ToRecord(entity);
+            currentPatientOwnerUserId = owner.UserId;
             CurrentPatientChanged?.Invoke(this, EventArgs.Empty);
-            logger.Info($"切换患者：{patientCode}");
+            await accountService.RecordAuditAsync(
+                owner.UserId,
+                null,
+                "switch_patient",
+                "success",
+                $"切换患者：patientCode={patientCode}",
+                cancellationToken);
+            logger.Info($"切换患者：patientCode={patientCode}, ownerUserId={owner.UserId}");
             return currentPatient;
         }, cancellationToken);
     }
 
     public async Task<string> GetRequiredCurrentPatientCodeAsync(CancellationToken cancellationToken = default)
     {
-        if (currentPatient is null)
-        {
-            await InitializeAsync(cancellationToken);
-        }
-
-        return currentPatient?.PatientCode ?? throw new InvalidOperationException("请先新增或选择患者，再开始采集。");
+        await EnsureReadyAsync(cancellationToken);
+        var owner = RequirePatientManager();
+        return currentPatient is not null && currentPatientOwnerUserId == owner.UserId
+            ? currentPatient.PatientCode
+            : throw new InvalidOperationException("请先新增或选择患者，再开始采集。");
     }
 
     private async Task EnsureReadyAsync(CancellationToken cancellationToken)
@@ -263,19 +280,27 @@ public sealed class LocalPatientService : IPatientService
         return true;
     }
 
-    private static async Task SaveCurrentPatientCodeAsync(CaptureDbContext context, string patientCode, CancellationToken cancellationToken)
+    private CurrentUserInfo RequirePatientManager()
     {
-        var now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-        var state = await context.AppStates.FirstOrDefaultAsync(item => item.Key == CurrentPatientKey, cancellationToken);
-        if (state is null)
+        var user = accountService.CurrentUser;
+        if (user is null)
         {
-            context.AppStates.Add(new AppStateEntity { Key = CurrentPatientKey, Value = patientCode, UpdatedAtUnixMs = now });
+            throw new InvalidOperationException("请先登录 Admin 或 Doctor 账号。");
         }
-        else
+
+        if (user.RoleId is not (AccountRoles.Admin or AccountRoles.Doctor))
         {
-            state.Value = patientCode;
-            state.UpdatedAtUnixMs = now;
+            throw new InvalidOperationException("只有 Admin 或 Doctor 可以管理患者信息。");
         }
+
+        return user;
+    }
+
+    private void ClearCurrentPatient()
+    {
+        currentPatient = null;
+        currentPatientOwnerUserId = null;
+        CurrentPatientChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private static async Task<string> GeneratePatientCodeAsync(CaptureDbContext context, DateTimeOffset now, CancellationToken cancellationToken)

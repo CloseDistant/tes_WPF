@@ -24,6 +24,10 @@ internal sealed class CaptureDbContext : DbContext
 
     public DbSet<AppStateEntity> AppStates => Set<AppStateEntity>();
 
+    public DbSet<FeatureVisibilityEntity> FeatureVisibilities => Set<FeatureVisibilityEntity>();
+
+    public DbSet<PrescriptionEntity> Prescriptions => Set<PrescriptionEntity>();
+
     public DbSet<StimulationRecordEntity> StimulationRecords => Set<StimulationRecordEntity>();
 
     public DbSet<AssessmentSessionEntity> AssessmentSessions => Set<AssessmentSessionEntity>();

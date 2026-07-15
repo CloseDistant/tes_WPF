@@ -14,4 +14,17 @@ public partial class MainView : UserControl
     {
         InitializeComponent();
     }
+
+    /// <summary>
+    /// 关闭窗口前先收起所有顶层下拉菜单，让 Popup 在当前输入事件结束前释放鼠标捕获。
+    /// </summary>
+    public void CloseTransientPopups()
+    {
+        DeviceDropDownToggle.IsChecked = false;
+        SimulationDropDownToggle.IsChecked = false;
+        ToolsDropDownToggle.IsChecked = false;
+        AccountDropDownToggle.IsChecked = false;
+        MoreDropDownToggle.IsChecked = false;
+        PatientDropDownToggle.IsChecked = false;
+    }
 }

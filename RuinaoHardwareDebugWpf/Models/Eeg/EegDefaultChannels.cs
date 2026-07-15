@@ -10,7 +10,7 @@ public static class EegDefaultChannels
         "FC6", "FT8", "T7", "C5", "C3", "C1", "Cz", "C2",
         "C4", "C6", "T8", "TP7", "CP5", "CP3", "CP1", "CPz",
         "CP2", "CP4", "CP6", "TP8", "P7", "P5", "P3", "P1",
-        "Pz", "P2", "P4", "P6", "P8", "PO7", "PO3", "POz",
-        "PO4", "PO8", "O1", "Oz", "O2", "Iz", "REF", "GND"
+        "Pz", "P2", "P4", "P6", "P8", "PO7", "PO5", "PO3",
+        "POz", "PO4", "PO6", "PO8", "O1", "Oz", "O2", "Iz"
     };
 }

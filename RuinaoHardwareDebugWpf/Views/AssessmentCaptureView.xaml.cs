@@ -562,7 +562,7 @@ public partial class AssessmentCaptureView : UserControl
         if (!viewModel.IsCalibrationStage)
         {
             // 第三步结束后，下一帧到来时触发录制收尾。
-            // 这样眼动校准和图片浏览都能共用同一套完成逻辑。
+            // 所有任务类模块共用该完成入口，具体流程状态由各模块 ViewModel 维护。
             StopModuleRecording(viewModel, "completed", viewModel.Localize("CaptureWorkspaceModuleMediaCompleted", viewModel.CurrentModule));
             return;
         }

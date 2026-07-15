@@ -8,8 +8,55 @@ namespace RuinaoHardwareDebugWpf.Views;
 /// </summary>
 public partial class ConfigView : UserControl
 {
+    private System.Windows.Window? ownerWindow;
+
     public ConfigView()
     {
         InitializeComponent();
+    }
+
+    private void ConfigView_Loaded(object sender, System.Windows.RoutedEventArgs e)
+    {
+        DetachWindowKeyHandler();
+        ownerWindow = System.Windows.Window.GetWindow(this);
+        if (ownerWindow is not null)
+        {
+            ownerWindow.PreviewKeyDown += ConfigView_PreviewKeyDown;
+        }
+
+        Focus();
+        System.Windows.Input.Keyboard.Focus(this);
+    }
+
+    private void ConfigView_Unloaded(object sender, System.Windows.RoutedEventArgs e)
+    {
+        DetachWindowKeyHandler();
+    }
+
+    private void ConfigView_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (DataContext is not ConfigViewModel viewModel || e.IsRepeat)
+        {
+            return;
+        }
+
+        if (e.Key is System.Windows.Input.Key.LeftShift or System.Windows.Input.Key.RightShift)
+        {
+            viewModel.RegisterShiftPress(DateTimeOffset.Now);
+            return;
+        }
+
+        viewModel.ResetShiftSequence();
+    }
+
+    private void DetachWindowKeyHandler()
+    {
+        if (ownerWindow is null)
+        {
+            return;
+        }
+
+        ownerWindow.PreviewKeyDown -= ConfigView_PreviewKeyDown;
+        ownerWindow = null;
     }
 }

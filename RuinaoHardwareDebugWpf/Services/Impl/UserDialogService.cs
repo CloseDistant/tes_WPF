@@ -21,11 +21,20 @@ public sealed class UserDialogService : IUserDialogService
 
     public void ShowInformation(string title, string message)
     {
-        MessageBox.Show(Application.Current?.MainWindow, message, title, MessageBoxButton.OK, MessageBoxImage.Information);
+        ShowMessageDialog(title, message, ThemedMessageKind.Information);
     }
 
     public void ShowError(string title, string message)
     {
-        MessageBox.Show(Application.Current?.MainWindow, message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+        ShowMessageDialog(title, message, ThemedMessageKind.Error);
+    }
+
+    private static void ShowMessageDialog(string title, string message, ThemedMessageKind kind)
+    {
+        var dialog = new ThemedMessageDialog(title, message, kind)
+        {
+            Owner = Application.Current?.MainWindow
+        };
+        dialog.ShowDialog();
     }
 }

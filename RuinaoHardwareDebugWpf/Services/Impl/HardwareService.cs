@@ -125,13 +125,26 @@ public sealed class HardwareService : IHardwareService
     /// 启动某个 TI 刺激组。
     /// 流程：如果尚未连接，则自动联机并启动心跳；然后下发参数和启动命令。
     /// </summary>
-    public async Task<HardwareOperationResult> StartGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default)
+    public async Task<HardwareOperationResult> StartGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        PrescriptionDefinition parameterRecord,
+        CancellationToken cancellationToken = default)
     {
         await RunDeviceOperationAsync(token => StartGroupOnProtocolBridgeAsync(group, token), cancellationToken);
-        await stimulationRecordService.RecordAsync(new StimulationRecordRequest("start", group.Title, selectedChannelNames, "running"), cancellationToken);
+        await stimulationRecordService.RecordAsync(
+            new StimulationRecordRequest(
+                "start",
+                group.Title,
+                selectedChannelNames,
+                "running",
+                parameterRecord.StimulationType,
+                parameterRecord.Name,
+                ParameterSnapshotJson: StimulationRecordParameters.ToJson(parameterRecord)),
+            cancellationToken);
 
         logger.Hardware($"启动刺激：已生成 {group.Title} 通道启动帧，channels={selectedChannelNames}");
-        return Result("设备：协议库 | 模式：TI | 刺激：运行中");
+        return Result($"设备：协议库 | 模式：{parameterRecord.StimulationType} | 刺激：运行中");
     }
 
     /// <summary>
@@ -141,7 +154,7 @@ public sealed class HardwareService : IHardwareService
     public async Task<HardwareOperationResult> PauseGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default)
     {
         await RunDeviceOperationAsync(token => PauseGroupOnProtocolBridgeAsync(group, token), cancellationToken);
-        await stimulationRecordService.RecordAsync(new StimulationRecordRequest("pause", group.Title, selectedChannelNames, "paused"), cancellationToken);
+        await stimulationRecordService.RecordAsync(new StimulationRecordRequest("pause", group.Title, selectedChannelNames, "paused", "TI"), cancellationToken);
 
         logger.Hardware($"暂停/停止刺激：已生成 {group.Title} 通道停止帧，channels={selectedChannelNames}");
         return Result("设备：协议库 | 模式：TI | 刺激：已暂停");
@@ -151,13 +164,37 @@ public sealed class HardwareService : IHardwareService
     /// 紧急停止某个 TI 刺激组。
     /// 流程：下发参数，再下发急停命令。
     /// </summary>
-    public async Task<HardwareOperationResult> EmergencyStopGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default)
+    public async Task<HardwareOperationResult> EmergencyStopGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string stimulationType = "TI",
+        CancellationToken cancellationToken = default)
     {
         await RunDeviceOperationAsync(token => EmergencyStopGroupOnProtocolBridgeAsync(group, token), cancellationToken);
-        await stimulationRecordService.RecordAsync(new StimulationRecordRequest("emergency_stop", group.Title, selectedChannelNames, "stopped"), cancellationToken);
+        await stimulationRecordService.RecordAsync(new StimulationRecordRequest("emergency_stop", group.Title, selectedChannelNames, "stopped", stimulationType), cancellationToken);
 
         logger.Hardware($"紧急停止：已生成 {group.Title} 通道停止帧，channels={selectedChannelNames}");
-        return Result("设备：协议库 | 模式：TI | 刺激：已急停");
+        return Result($"设备：协议库 | 模式：{stimulationType} | 刺激：已急停");
+    }
+
+    public async Task<HardwareOperationResult> CompleteGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string stimulationType,
+        CancellationToken cancellationToken = default)
+    {
+        await RunDeviceOperationAsync(token => PauseGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+        await stimulationRecordService.RecordAsync(
+            new StimulationRecordRequest(
+                "complete",
+                group.Title,
+                selectedChannelNames,
+                "completed",
+                stimulationType),
+            cancellationToken);
+
+        logger.Hardware($"刺激完成：已停止 {group.Title} 通道输出，channels={selectedChannelNames}");
+        return Result($"设备：协议库 | 模式：{stimulationType} | 刺激：已完成");
     }
 
     /// <summary>

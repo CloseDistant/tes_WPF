@@ -514,7 +514,7 @@
 
         <Border Grid.Row="0"
                 Style="{StaticResource Card}"
-                Padding="16,12"
+                Padding="16,10"
                 Margin="0,0,0,12">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -522,16 +522,11 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel>
-                    <TextBlock Text="{Binding WorkspaceTitleText}"
-                               Foreground="{StaticResource Gold}"
-                               FontSize="20"
-                               FontWeight="SemiBold" />
-                    <TextBlock Margin="0,5,0,0"
-                               Foreground="{StaticResource SubText}"
-                               FontSize="12"
-                               Text="{Binding WorkspaceDescriptionText}" />
-                </StackPanel>
+                <TextBlock Text="{Binding WorkspaceTitleText}"
+                           Foreground="{StaticResource Gold}"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
 
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
@@ -852,6 +847,236 @@
                                                     <TextBlock Text="{Binding WordReadingRestText}"
                                                                Foreground="{StaticResource SubText}"
                                                                FontSize="15"
+                                                               TextAlignment="Center"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <Grid Visibility="{Binding IsShortTextReadingStage, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                  Background="#11141D">
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            MaxWidth="900"
+                                                            Margin="56,28"
+                                                            Visibility="{Binding IsShortTextReadingPromptVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding ShortTextReadingTitleText}"
+                                                               Foreground="{StaticResource Text}"
+                                                               FontSize="26"
+                                                               FontWeight="SemiBold"
+                                                               TextAlignment="Center"
+                                                               Margin="0,0,0,12" />
+                                                    <TextBlock Text="{Binding ShortTextReadingPassageTitleText}"
+                                                               Foreground="{StaticResource Gold}"
+                                                               FontSize="16"
+                                                               FontWeight="SemiBold"
+                                                               TextAlignment="Center"
+                                                               Margin="0,0,0,24" />
+                                                    <TextBlock Text="{Binding ShortTextReadingPassageText}"
+                                                               Foreground="{StaticResource Text}"
+                                                               FontSize="22"
+                                                               FontWeight="SemiBold"
+                                                               LineHeight="38"
+                                                               TextAlignment="Left"
+                                                               TextWrapping="Wrap"
+                                                               Margin="0,0,0,22" />
+                                                    <TextBlock Text="{Binding ShortTextReadingStatusText}"
+                                                               Foreground="{StaticResource SubText}"
+                                                               FontSize="15"
+                                                               TextAlignment="Center"
+                                                               TextWrapping="Wrap"
+                                                               Margin="0,0,0,18" />
+                                                    <Button Content="{Binding ShortTextReadingStartButtonText}"
+                                                            Command="{Binding StartShortTextReadingCommand}"
+                                                            Style="{StaticResource PrimaryCaptureButton}"
+                                                            MinWidth="220"
+                                                            Padding="32,10"
+                                                            Visibility="{Binding ShowShortTextReadingStartAction, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                </StackPanel>
+
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            Width="520"
+                                                            Visibility="{Binding IsShortTextReadingResting, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding RestTitleText}"
+                                                               Foreground="{StaticResource Text}"
+                                                               FontSize="26"
+                                                               FontWeight="SemiBold"
+                                                               TextAlignment="Center"
+                                                               Margin="0,0,0,14" />
+                                                    <TextBlock Text="{Binding ShortTextReadingRestText}"
+                                                               Foreground="{StaticResource SubText}"
+                                                               FontSize="15"
+                                                               TextAlignment="Center"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <Grid Visibility="{Binding IsEmotionQuestionStage, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                  Background="#11141D">
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            Width="620"
+                                                            Margin="0,0,0,56"
+                                                            Visibility="{Binding IsEmotionQuestionWaiting, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding EmotionQuestionTitleText}"
+                                                               Foreground="{StaticResource Text}"
+                                                               FontSize="28"
+                                                               FontWeight="SemiBold"
+                                                               TextAlignment="Center"
+                                                               Margin="0,0,0,18" />
+                                                    <TextBlock Text="{Binding EmotionQuestionStatusText}"
+                                                               Foreground="{StaticResource SubText}"
+                                                               FontSize="16"
+                                                               TextAlignment="Center"
+                                                               TextWrapping="Wrap"
+                                                               Margin="0,0,0,24" />
+                                                    <Button Content="{Binding EmotionQuestionStartButtonText}"
+                                                            Command="{Binding StartEmotionQuestionCommand}"
+                                                            Style="{StaticResource PrimaryCaptureButton}"
+                                                            Width="280"
+                                                            Padding="32,10" />
+                                                </StackPanel>
+
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            MaxWidth="960"
+                                                            Margin="56,28"
+                                                            Visibility="{Binding IsEmotionQuestionPromptVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding EmotionQuestionTitleText}"
+                                                               Foreground="{StaticResource Text}"
+                                                               FontSize="26"
+                                                               FontWeight="SemiBold"
+                                                               TextAlignment="Center"
+                                                               Margin="0,0,0,12" />
+                                                    <TextBlock Text="{Binding EmotionQuestionProgressText}"
+                                                               Foreground="{StaticResource Gold}"
+                                                               FontSize="16"
+                                                               FontWeight="SemiBold"
+                                                               TextAlignment="Center"
+                                                               Margin="0,0,0,24" />
+                                                    <TextBlock Text="{Binding EmotionQuestionText}"
+                                                               Foreground="{StaticResource Text}"
+                                                               FontSize="24"
+                                                               FontWeight="SemiBold"
+                                                               LineHeight="40"
+                                                               TextAlignment="Center"
+                                                               TextWrapping="Wrap"
+                                                               Margin="0,0,0,24" />
+                                                    <TextBlock Text="{Binding EmotionQuestionStatusText}"
+                                                               Foreground="{StaticResource SubText}"
+                                                               FontSize="15"
+                                                               TextAlignment="Center"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            Width="520"
+                                                            Visibility="{Binding IsEmotionQuestionResting, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding RestTitleText}"
+                                                               Foreground="{StaticResource Text}"
+                                                               FontSize="26"
+                                                               FontWeight="SemiBold"
+                                                               TextAlignment="Center"
+                                                               Margin="0,0,0,14" />
+                                                    <TextBlock Text="{Binding EmotionQuestionRestText}"
+                                                               Foreground="{StaticResource SubText}"
+                                                               FontSize="15"
+                                                               TextAlignment="Center"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <Grid Visibility="{Binding IsDotProbeStage, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                  Background="#11141D"
+                                                  ClipToBounds="True">
+                                                <!-- 前空屏和后空屏不渲染额外内容，保持中央区域纯色。 -->
+                                                <TextBlock Text="+"
+                                                           Foreground="{StaticResource Text}"
+                                                           FontSize="64"
+                                                           FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Visibility="{Binding IsDotProbeFixation, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                                                <Grid Margin="0,20"
+                                                      Visibility="{Binding IsDotProbePictures, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="9*" />
+                                                        <ColumnDefinition Width="82*" />
+                                                        <ColumnDefinition Width="9*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="*" />
+                                                        <RowDefinition Height="18" />
+                                                        <RowDefinition Height="*" />
+                                                    </Grid.RowDefinitions>
+                                                    <Image Grid.Row="0"
+                                                           Grid.Column="1"
+                                                           Source="{Binding DotProbeTopImagePath}"
+                                                           Stretch="Uniform"
+                                                           MaxWidth="900"
+                                                           MaxHeight="300"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Bottom" />
+                                                    <Image Grid.Row="2"
+                                                           Grid.Column="1"
+                                                           Source="{Binding DotProbeBottomImagePath}"
+                                                           Stretch="Uniform"
+                                                           MaxWidth="900"
+                                                           MaxHeight="300"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Top" />
+                                                </Grid>
+
+                                                <Grid Visibility="{Binding IsDotProbeProbe, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="*"
+                                                               Foreground="{StaticResource Text}"
+                                                               FontSize="70"
+                                                               FontWeight="Bold"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Top"
+                                                               Margin="0,70,0,0"
+                                                               Visibility="{Binding IsDotProbeProbeTop, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                    <TextBlock Text="*"
+                                                               Foreground="{StaticResource Text}"
+                                                               FontSize="70"
+                                                               FontWeight="Bold"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Bottom"
+                                                               Margin="0,0,0,70"
+                                                               Visibility="{Binding IsDotProbeProbeBottom, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                    <StackPanel Orientation="Horizontal"
+                                                                HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center"
+                                                                Visibility="{Binding ShowDotProbeResponseButtons, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <Button Content="{Binding DotProbeUpText}"
+                                                                Command="{Binding DotProbeRespondUpCommand}"
+                                                                Style="{StaticResource PrimaryCaptureButton}"
+                                                                Width="170"
+                                                                Height="54"
+                                                                Margin="0,0,18,0" />
+                                                        <Button Content="{Binding DotProbeDownText}"
+                                                                Command="{Binding DotProbeRespondDownCommand}"
+                                                                Style="{StaticResource PrimaryCaptureButton}"
+                                                                Width="170"
+                                                                Height="54" />
+                                                    </StackPanel>
+                                                </Grid>
+
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            Width="520"
+                                                            Visibility="{Binding IsDotProbeResting, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding DotProbeRestTitleText}"
+                                                               Foreground="{StaticResource Text}"
+                                                               FontSize="28"
+                                                               FontWeight="SemiBold"
+                                                               TextAlignment="Center"
+                                                               Margin="0,0,0,14" />
+                                                    <TextBlock Text="{Binding DotProbeRestText}"
+                                                               Foreground="{StaticResource SubText}"
+                                                               FontSize="16"
                                                                TextAlignment="Center"
                                                                TextWrapping="Wrap" />
                                                 </StackPanel>
@@ -1314,10 +1539,7 @@
                                        Foreground="{StaticResource Gold}"
                                        FontSize="12"
                                        FontWeight="SemiBold"
-                                       TextWrapping="Wrap"
-                                       Margin="0,0,0,4" />
-                            <TextBlock Text="{Binding CameraPanelDescriptionText}"
-                                       Style="{StaticResource MutedText}" />
+                                       TextWrapping="Wrap" />
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -1341,12 +1563,9 @@
                                            Foreground="{StaticResource SubText}"
                                            FontSize="11" />
                             </Border>
-                            <StackPanel>
-                                <TextBlock Text="{Binding ModuleFlowTitleText}" Style="{StaticResource SectionTitle}" />
-                                <TextBlock Text="{Binding ModuleFlowDescriptionText}"
-                                           Style="{StaticResource MutedText}"
-                                           Margin="0,4,0,0" />
-                            </StackPanel>
+                            <TextBlock Text="{Binding ModuleFlowTitleText}"
+                                       Style="{StaticResource SectionTitle}"
+                                       VerticalAlignment="Center" />
                         </DockPanel>
 
                         <ScrollViewer Grid.Row="1"

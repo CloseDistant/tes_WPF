@@ -3,9 +3,9 @@
 namespace RuinaoHardwareDebugWpf;
 
 using System.ComponentModel;
-using System.Windows.Threading;
 using System.Diagnostics;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 /// <summary>
 /// 主窗口的后台代码（Code-Behind）。
@@ -20,9 +20,13 @@ public partial class MainWindow : Window
     private readonly MainViewModel viewModel = AppComposition.CreateMainViewModel();
     private readonly ILoggingService logger = (ILoggingService)AppComposition.Services.GetService(typeof(ILoggingService))!;
     private readonly IRuntimeTelemetryService telemetry = (IRuntimeTelemetryService)AppComposition.Services.GetService(typeof(IRuntimeTelemetryService))!;
+    private readonly IAccountService accountService = (IAccountService)AppComposition.Services.GetService(typeof(IAccountService))!;
     private long lastRenderTicks;
     private bool closeAfterShutdown;
     private bool shutdownInProgress;
+    private bool shutdownRequested;
+
+    internal bool IsShutdownRequested => shutdownRequested || shutdownInProgress || closeAfterShutdown;
 
     public MainWindow()
     {
@@ -31,12 +35,14 @@ public partial class MainWindow : Window
         // 把 ViewModel 设为窗口的数据上下文，XAML 里的绑定才能找到属性。
         DataContext = viewModel;
         viewModel.CloseRequested += OnCloseRequested;
+        RegisterAuthenticationEvents();
         Closing += OnClosing;
         CompositionTarget.Rendering += OnRendering;
         Closed += (_, _) =>
         {
             CompositionTarget.Rendering -= OnRendering;
             viewModel.CloseRequested -= OnCloseRequested;
+            UnregisterAuthenticationEvents();
         };
         logger.Info("主窗口创建完成");
     }
@@ -53,12 +59,24 @@ public partial class MainWindow : Window
 
     private void OnCloseRequested(object? sender, EventArgs e)
     {
+        if (IsShutdownRequested)
+        {
+            return;
+        }
+
+        shutdownRequested = true;
         logger.Info("收到退出软件命令，关闭主窗口");
-        Close();
+        MainContent.CloseTransientPopups();
+
+        // 退出按钮位于 Popup 内，等待当前鼠标输入事件结束后再关闭窗口。
+        _ = Dispatcher.BeginInvoke(new Action(Close), DispatcherPriority.ContextIdle);
     }
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
+        shutdownRequested = true;
+        MainContent.CloseTransientPopups();
+
         if (closeAfterShutdown)
         {
             return;

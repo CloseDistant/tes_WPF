@@ -7,10 +7,14 @@ public sealed class LocalAccountService : IAccountService
 {
     private const string DefaultAdminLoginName = "Admin";
     private const string DefaultAdminPassword = "123456";
+    private const string RememberedLoginNameKey = "last_login_name";
+    private const int MaxFailedLoginAttempts = 5;
+    private static readonly TimeSpan LoginLockoutDuration = TimeSpan.FromMinutes(30);
 
     private readonly ILoggingService logger;
     private readonly IAppDatabaseInitializer databaseInitializer;
     private readonly SemaphoreSlim databaseGate = new(1, 1);
+    private readonly SemaphoreSlim loginGate = new(1, 1);
     private bool initialized;
     private CurrentUserInfo? currentUser;
 
@@ -37,6 +41,56 @@ public sealed class LocalAccountService : IAccountService
         await EnsureInitializedAsync(cancellationToken);
     }
 
+    public async Task<string?> GetRememberedLoginNameAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken);
+        await using var context = new CaptureDbContext(GetDatabasePath());
+        return await context.AppStates
+            .AsNoTracking()
+            .Where(item => item.Key == RememberedLoginNameKey)
+            .Select(item => item.Value)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task SetRememberedLoginNameAsync(string? loginName, CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken);
+        await using var context = new CaptureDbContext(GetDatabasePath());
+        var state = await context.AppStates.FirstOrDefaultAsync(
+            item => item.Key == RememberedLoginNameKey,
+            cancellationToken);
+        var normalizedLoginName = string.IsNullOrWhiteSpace(loginName) ? null : loginName.Trim();
+
+        if (normalizedLoginName is null)
+        {
+            if (state is not null)
+            {
+                context.AppStates.Remove(state);
+                await context.SaveChangesAsync(cancellationToken);
+            }
+
+            return;
+        }
+
+        var now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+        if (state is null)
+        {
+            context.AppStates.Add(new AppStateEntity
+            {
+                Key = RememberedLoginNameKey,
+                Value = normalizedLoginName,
+                UpdatedAtUnixMs = now
+            });
+        }
+        else
+        {
+            state.Value = normalizedLoginName;
+            state.UpdatedAtUnixMs = now;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<AccountLoginResult> LoginAsync(string loginName, string password, CancellationToken cancellationToken = default)
     {
         await EnsureInitializedAsync(cancellationToken);
@@ -47,7 +101,6 @@ public sealed class LocalAccountService : IAccountService
             return new AccountLoginResult(false, null, "登录名和密码不能为空");
         }
 
-        await using var context = new AccountDbContext(GetDatabasePath());
         var normalizedLoginName = loginName.Trim();
         if (!IsValidLoginName(normalizedLoginName))
         {
@@ -55,21 +108,60 @@ public sealed class LocalAccountService : IAccountService
             return new AccountLoginResult(false, null, "登录名或密码错误");
         }
 
-        var user = await context.Users.FirstOrDefaultAsync(
-            item => item.LoginName == normalizedLoginName && item.IsActive,
-            cancellationToken);
-
-        if (user is null || !PasswordHasher.VerifyPassword(password, user.PasswordHash, user.PasswordSalt))
+        await loginGate.WaitAsync(cancellationToken);
+        try
         {
-            await WriteAuditAsync(null, user?.Id, "login", "failed", "登录名或密码错误", cancellationToken);
-            return new AccountLoginResult(false, null, "登录名或密码错误");
-        }
+            await using var context = new AccountDbContext(GetDatabasePath());
+            var user = await context.Users.FirstOrDefaultAsync(
+                item => item.LoginName == normalizedLoginName && item.IsActive,
+                cancellationToken);
 
-        var info = ToCurrentUser(user);
-        CurrentUser = info;
-        await WriteAuditAsync(info.UserId, info.UserId, "login", "success", "登录成功", cancellationToken);
-        logger.Info($"账号登录：userId={info.UserId}, role={info.RoleName}");
-        return new AccountLoginResult(true, info, user.MustChangePassword ? "首次登录需要修改密码" : "登录成功");
+            if (user is null)
+            {
+                await WriteAuditAsync(null, null, "login", "failed", "登录名或密码错误", cancellationToken);
+                return new AccountLoginResult(false, null, "登录名或密码错误");
+            }
+
+            var now = DateTimeOffset.Now;
+            if (user.LockoutEndUnixMs is long lockoutEndUnixMs
+                && lockoutEndUnixMs > now.ToUnixTimeMilliseconds())
+            {
+                var message = FormatLockoutMessage(lockoutEndUnixMs, now);
+                await WriteAuditAsync(null, user.Id, "login", "blocked", message, cancellationToken);
+                return new AccountLoginResult(false, null, message);
+            }
+
+            if (user.LockoutEndUnixMs is not null)
+            {
+                user.FailedLoginAttempts = 0;
+                user.LockoutEndUnixMs = null;
+            }
+
+            if (!PasswordHasher.VerifyPassword(password, user.PasswordHash, user.PasswordSalt))
+            {
+                user.FailedLoginAttempts++;
+                var message = BuildFailedLoginMessage(user, now);
+                user.UpdatedAtUnixMs = now.ToUnixTimeMilliseconds();
+                await context.SaveChangesAsync(cancellationToken);
+                await WriteAuditAsync(null, user.Id, "login", "failed", message, cancellationToken);
+                return new AccountLoginResult(false, null, message);
+            }
+
+            user.FailedLoginAttempts = 0;
+            user.LockoutEndUnixMs = null;
+            user.UpdatedAtUnixMs = now.ToUnixTimeMilliseconds();
+            await context.SaveChangesAsync(cancellationToken);
+
+            var info = ToCurrentUser(user);
+            CurrentUser = info;
+            await WriteAuditAsync(info.UserId, info.UserId, "login", "success", "登录成功", cancellationToken);
+            logger.Info($"账号登录：userId={info.UserId}, role={info.RoleName}");
+            return new AccountLoginResult(true, info, user.MustChangePassword ? "首次登录需要修改密码" : "登录成功");
+        }
+        finally
+        {
+            loginGate.Release();
+        }
     }
 
     public async Task LogoutAsync(CancellationToken cancellationToken = default)
@@ -130,18 +222,78 @@ public sealed class LocalAccountService : IAccountService
         return ToCurrentUser(user);
     }
 
+    public async Task<IReadOnlyList<AccountListItemInfo>> GetAccountListAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken);
+
+        var operatorUser = CurrentUser;
+        if (operatorUser is null || operatorUser.RoleId != AccountRoles.Admin)
+        {
+            await WriteAuditAsync(
+                operatorUser?.UserId,
+                null,
+                "view_account_list",
+                "failed",
+                "非 Admin 账号尝试查看账号列表",
+                cancellationToken);
+            throw new InvalidOperationException("只有 Admin 可以查看账号列表");
+        }
+
+        await using var context = new AccountDbContext(GetDatabasePath());
+        var users = await context.Users
+            .AsNoTracking()
+            .OrderBy(item => item.RoleId)
+            .ThenBy(item => item.Id)
+            .Select(item => new AccountListItemInfo(
+                item.Id,
+                item.LoginName,
+                item.DisplayName,
+                item.RoleId,
+                item.IsActive,
+                item.CreatedAtUnixMs))
+            .ToListAsync(cancellationToken);
+
+        await WriteAuditAsync(
+            operatorUser.UserId,
+            null,
+            "view_account_list",
+            "success",
+            $"查看账号列表，共 {users.Count} 个账号",
+            cancellationToken);
+
+        return users;
+    }
+
     public async Task ChangePasswordAsync(ChangePasswordRequest request, CancellationToken cancellationToken = default)
     {
         await EnsureInitializedAsync(cancellationToken);
 
-        if (string.IsNullOrWhiteSpace(request.NewPassword))
+        if (CurrentUser?.UserId != request.UserId)
         {
-            throw new InvalidOperationException("新密码不能为空");
+            await WriteAuditAsync(
+                CurrentUser?.UserId,
+                request.UserId,
+                "change_password",
+                "failed",
+                "尝试通过个人改密接口修改其他账号",
+                cancellationToken);
+            throw new InvalidOperationException("只能修改当前登录账号的密码");
         }
 
-        if (request.NewPassword != request.ConfirmPassword)
+        try
         {
-            throw new InvalidOperationException("两次输入的密码不一致");
+            ValidatePassword(request.NewPassword, request.ConfirmPassword);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await WriteAuditAsync(
+                CurrentUser?.UserId,
+                request.UserId,
+                "change_password",
+                "failed",
+                ex.Message,
+                cancellationToken);
+            throw;
         }
 
         await using var context = new AccountDbContext(GetDatabasePath());
@@ -151,6 +303,8 @@ public sealed class LocalAccountService : IAccountService
         var password = PasswordHasher.HashPassword(request.NewPassword);
         user.PasswordHash = password.Hash;
         user.PasswordSalt = password.Salt;
+        user.FailedLoginAttempts = 0;
+        user.LockoutEndUnixMs = null;
         user.MustChangePassword = false;
         user.UpdatedAtUnixMs = DateTimeOffset.Now.ToUnixTimeMilliseconds();
         context.Users.Update(user);
@@ -166,6 +320,67 @@ public sealed class LocalAccountService : IAccountService
         logger.Info($"修改账号密码：target={user.Id}");
 
         if (CurrentUser?.UserId == request.UserId)
+        {
+            CurrentUser = null;
+        }
+    }
+
+    public async Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken);
+
+        var operatorUser = CurrentUser;
+        if (operatorUser is null || operatorUser.RoleId != AccountRoles.Admin)
+        {
+            await WriteAuditAsync(
+                operatorUser?.UserId,
+                request.UserId,
+                "reset_password",
+                "failed",
+                "非 Admin 账号尝试重置密码",
+                cancellationToken);
+            throw new InvalidOperationException("只有 Admin 可以重置账号密码");
+        }
+
+        try
+        {
+            ValidatePassword(request.NewPassword, request.ConfirmPassword);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await WriteAuditAsync(
+                operatorUser.UserId,
+                request.UserId,
+                "reset_password",
+                "failed",
+                ex.Message,
+                cancellationToken);
+            throw;
+        }
+
+        await using var context = new AccountDbContext(GetDatabasePath());
+        var user = await context.Users.FirstOrDefaultAsync(item => item.Id == request.UserId && item.IsActive, cancellationToken)
+            ?? throw new InvalidOperationException("账号不存在或已停用");
+
+        var password = PasswordHasher.HashPassword(request.NewPassword);
+        user.PasswordHash = password.Hash;
+        user.PasswordSalt = password.Salt;
+        user.FailedLoginAttempts = 0;
+        user.LockoutEndUnixMs = null;
+        user.MustChangePassword = true;
+        user.UpdatedAtUnixMs = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+        await context.SaveChangesAsync(cancellationToken);
+
+        await WriteAuditAsync(
+            operatorUser.UserId,
+            user.Id,
+            "reset_password",
+            "success",
+            $"重置账号密码：{user.LoginName}",
+            cancellationToken);
+        logger.Info($"重置账号密码：operator={operatorUser.UserId}, target={user.Id}");
+
+        if (operatorUser.UserId == user.Id)
         {
             CurrentUser = null;
         }
@@ -254,6 +469,26 @@ public sealed class LocalAccountService : IAccountService
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    private static string BuildFailedLoginMessage(AccountUserEntity user, DateTimeOffset now)
+    {
+        if (user.FailedLoginAttempts >= MaxFailedLoginAttempts)
+        {
+            user.FailedLoginAttempts = MaxFailedLoginAttempts;
+            user.LockoutEndUnixMs = now.Add(LoginLockoutDuration).ToUnixTimeMilliseconds();
+            return "密码连续输错 5 次，账号已限制登录 30 分钟";
+        }
+
+        var remainingAttempts = MaxFailedLoginAttempts - user.FailedLoginAttempts;
+        return $"登录名或密码错误，仅剩 {remainingAttempts} 次机会";
+    }
+
+    private static string FormatLockoutMessage(long lockoutEndUnixMs, DateTimeOffset now)
+    {
+        var remaining = DateTimeOffset.FromUnixTimeMilliseconds(lockoutEndUnixMs) - now;
+        var remainingMinutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
+        return $"该账号已限制登录，请在 {remainingMinutes} 分钟后重试";
+    }
+
     private static void ValidateCreateUserRequest(CreateAccountRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.LoginName)
@@ -282,6 +517,19 @@ public sealed class LocalAccountService : IAccountService
     private static bool IsValidLoginName(string loginName)
     {
         return loginName.Length > 0 && loginName.All(static ch => ch is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9');
+    }
+
+    private static void ValidatePassword(string password, string confirmPassword)
+    {
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            throw new InvalidOperationException("新密码不能为空");
+        }
+
+        if (password != confirmPassword)
+        {
+            throw new InvalidOperationException("两次输入的密码不一致");
+        }
     }
 
     private static CurrentUserInfo ToCurrentUser(AccountUserEntity user)

@@ -14,19 +14,6 @@ public sealed class SimViewModel : ObservableObject
 }
 
 /// <summary>
-/// 设置页面 ViewModel（占位）。
-/// </summary>
-public sealed class ConfigViewModel : ObservableObject
-{
-    private readonly IConfigService configService;
-
-    public ConfigViewModel(IConfigService configService)
-    {
-        this.configService = configService;
-    }
-}
-
-/// <summary>
 /// 设备管理页面 ViewModel（占位）。
 /// </summary>
 public sealed class DeviceViewModel : ObservableObject
@@ -36,19 +23,6 @@ public sealed class DeviceViewModel : ObservableObject
     public DeviceViewModel(IHardwareService hardwareService)
     {
         this.hardwareService = hardwareService;
-    }
-}
-
-/// <summary>
-/// 报告页面 ViewModel（占位）。
-/// </summary>
-public sealed class ReportViewModel : ObservableObject
-{
-    private readonly IReportService reportService;
-
-    public ReportViewModel(IReportService reportService)
-    {
-        this.reportService = reportService;
     }
 }
 

@@ -57,6 +57,9 @@ public sealed class NullPatientService : IPatientService
 public sealed class NullStimulationRecordService : IStimulationRecordService
 {
     public Task RecordAsync(StimulationRecordRequest request, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task<IReadOnlyList<StimulationTreatmentRecord>> GetTreatmentRecordsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<StimulationTreatmentRecord>>(Array.Empty<StimulationTreatmentRecord>());
 }
 
 public sealed class NullConfigService : IConfigService

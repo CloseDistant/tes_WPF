@@ -12,6 +12,8 @@ internal static class CaptureDbContextModelConfiguration
     {
         ConfigurePatient(modelBuilder);
         ConfigureAppState(modelBuilder);
+        ConfigureFeatureVisibility(modelBuilder);
+        ConfigurePrescription(modelBuilder);
         ConfigureStimulationRecord(modelBuilder);
         ConfigureAssessmentSession(modelBuilder);
         ConfigureAssessmentModuleRecord(modelBuilder);
@@ -51,6 +53,8 @@ internal static class CaptureDbContextModelConfiguration
         entity.ToTable("patients");
         entity.HasKey(item => item.Id);
         entity.HasIndex(item => item.PatientCode).IsUnique();
+        entity.HasIndex(item => item.OwnerUserId);
+        entity.Property(item => item.OwnerUserId).HasColumnName("owner_user_id");
         entity.Property(item => item.PatientCode).HasColumnName("patient_code");
         entity.Property(item => item.Name).HasColumnName("name");
         entity.Property(item => item.Gender).HasColumnName("gender");
@@ -75,17 +79,58 @@ internal static class CaptureDbContextModelConfiguration
         entity.Property(item => item.UpdatedAtUnixMs).HasColumnName("updated_at_unix_ms");
     }
 
+    private static void ConfigureFeatureVisibility(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<FeatureVisibilityEntity>();
+        entity.ToTable("feature_visibility");
+        entity.HasKey(item => item.FeatureKey);
+        entity.Property(item => item.FeatureKey).HasColumnName("feature_key");
+        entity.Property(item => item.IsVisible).HasColumnName("is_visible");
+        entity.Property(item => item.UpdatedByUserId).HasColumnName("updated_by_user_id");
+        entity.Property(item => item.UpdatedAtUnixMs).HasColumnName("updated_at_unix_ms");
+    }
+
+    private static void ConfigurePrescription(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<PrescriptionEntity>();
+        entity.ToTable("prescriptions");
+        entity.HasKey(item => item.Id);
+        entity.HasIndex(item => item.Name);
+        entity.Property(item => item.Id).HasColumnName("id");
+        entity.Property(item => item.Name).HasColumnName("name");
+        entity.Property(item => item.Indication).HasColumnName("indication");
+        entity.Property(item => item.StimulationType).HasColumnName("stimulation_type");
+        entity.Property(item => item.CurrentMilliamp).HasColumnName("current_milliamp");
+        entity.Property(item => item.DeliveryMode).HasColumnName("delivery_mode");
+        entity.Property(item => item.TotalDurationMinutes).HasColumnName("total_duration_minutes");
+        entity.Property(item => item.IntervalMinutes).HasColumnName("interval_minutes");
+        entity.Property(item => item.SessionDurationMinutes).HasColumnName("session_duration_minutes");
+        entity.Property(item => item.Course).HasColumnName("course");
+        entity.Property(item => item.RampUpSeconds).HasColumnName("ramp_up_seconds");
+        entity.Property(item => item.RampDownSeconds).HasColumnName("ramp_down_seconds");
+        entity.Property(item => item.EvidenceGrade).HasColumnName("evidence_grade");
+        entity.Property(item => item.IsBuiltin).HasColumnName("is_builtin");
+        entity.Property(item => item.CreatedAtUnixMs).HasColumnName("created_at_unix_ms");
+        entity.Property(item => item.UpdatedAtUnixMs).HasColumnName("updated_at_unix_ms");
+    }
+
     private static void ConfigureStimulationRecord(ModelBuilder modelBuilder)
     {
         var entity = modelBuilder.Entity<StimulationRecordEntity>();
         entity.ToTable("stimulation_records");
         entity.HasKey(item => item.Id);
         entity.HasIndex(item => new { item.PatientCode, item.EventTimeUnixMs });
+        entity.HasIndex(item => new { item.OperatorUserId, item.EventTimeUnixMs });
+        entity.Property(item => item.OperatorUserId).HasColumnName("operator_user_id");
         entity.Property(item => item.PatientCode).HasColumnName("patient_code");
         entity.Property(item => item.Action).HasColumnName("action");
         entity.Property(item => item.GroupTitle).HasColumnName("group_title");
         entity.Property(item => item.SelectedChannelNames).HasColumnName("selected_channel_names");
         entity.Property(item => item.Status).HasColumnName("status");
+        entity.Property(item => item.StimulationType).HasColumnName("stimulation_type");
+        entity.Property(item => item.PrescriptionName).HasColumnName("prescription_name");
+        entity.Property(item => item.AdverseReactionRecord).HasColumnName("adverse_reaction_record");
+        entity.Property(item => item.ParameterSnapshotJson).HasColumnName("parameter_snapshot_json");
         entity.Property(item => item.EventTimeUnixMs).HasColumnName("event_time_unix_ms");
     }
 

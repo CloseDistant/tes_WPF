@@ -7,6 +7,7 @@
 internal sealed class PatientEntity
 {
     public long Id { get; set; }
+    public long? OwnerUserId { get; set; }
     public string PatientCode { get; set; } = string.Empty;
     public string? Name { get; set; }
     public string? Gender { get; set; }
@@ -28,14 +29,47 @@ internal sealed class AppStateEntity
     public long UpdatedAtUnixMs { get; set; }
 }
 
+internal sealed class FeatureVisibilityEntity
+{
+    public string FeatureKey { get; set; } = string.Empty;
+    public bool IsVisible { get; set; } = true;
+    public long? UpdatedByUserId { get; set; }
+    public long UpdatedAtUnixMs { get; set; }
+}
+
+internal sealed class PrescriptionEntity
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Indication { get; set; } = string.Empty;
+    public string StimulationType { get; set; } = string.Empty;
+    public double CurrentMilliamp { get; set; }
+    public string DeliveryMode { get; set; } = string.Empty;
+    public int TotalDurationMinutes { get; set; }
+    public int? IntervalMinutes { get; set; }
+    public int? SessionDurationMinutes { get; set; }
+    public string Course { get; set; } = string.Empty;
+    public int RampUpSeconds { get; set; }
+    public int RampDownSeconds { get; set; }
+    public string EvidenceGrade { get; set; } = string.Empty;
+    public bool IsBuiltin { get; set; }
+    public long CreatedAtUnixMs { get; set; }
+    public long UpdatedAtUnixMs { get; set; }
+}
+
 internal sealed class StimulationRecordEntity
 {
     public long Id { get; set; }
-    public string PatientCode { get; set; } = string.Empty;
+    public long? OperatorUserId { get; set; }
+    public string? PatientCode { get; set; }
     public string Action { get; set; } = string.Empty;
     public string GroupTitle { get; set; } = string.Empty;
     public string SelectedChannelNames { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+    public string? StimulationType { get; set; }
+    public string? PrescriptionName { get; set; }
+    public string AdverseReactionRecord { get; set; } = string.Empty;
+    public string? ParameterSnapshotJson { get; set; }
     public long EventTimeUnixMs { get; set; }
 }
 

@@ -8,6 +8,16 @@
              mc:Ignorable="d"
              Background="#11141D">
     <UserControl.Resources>
+        <DataTemplate DataType="{x:Type local:StimulationTypeSelectionViewModel}">
+            <views:StimulationTypeSelectionView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type local:DirectCurrentControlViewModel}">
+            <views:DirectCurrentControlView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type local:PrescriptionViewModel}">
+            <views:PrescriptionView />
+        </DataTemplate>
+
         <DataTemplate DataType="{x:Type local:TiControlViewModel}">
             <views:TiControlView />
         </DataTemplate>
@@ -55,7 +65,7 @@
         <Border Grid.Row="0" Background="#2A2B31" BorderBrush="#333640" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="160" />
+                    <ColumnDefinition Width="240" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal"
@@ -66,32 +76,15 @@
                                FontSize="15"
                                VerticalAlignment="Center"
                                Margin="0,0,3,0" />
-                    <TextBlock Text="inper"
+                    <TextBlock Text="经颅直流电刺激上位机软件"
                                Foreground="#F1F2F5"
-                               FontSize="15"
+                               FontSize="14"
                                VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" Margin="10,0" VerticalAlignment="Center">
-                        <ToggleButton x:Name="PrescriptionDropDownToggle"
-                                      Content="{Binding Localization.PrescriptionMenuText}"
-                                      Style="{StaticResource ToolbarDropDownButton}" />
-                        <Popup IsOpen="{Binding IsChecked, ElementName=PrescriptionDropDownToggle}"
-                               PlacementTarget="{Binding ElementName=PrescriptionDropDownToggle}"
-                               Placement="Bottom"
-                               StaysOpen="False">
-                            <Border Background="#1C202B" BorderBrush="#303645" BorderThickness="1" MinWidth="150">
-                                <StackPanel>
-                                    <Button Content="{Binding Localization.NewPrescriptionText}" Style="{StaticResource ToolbarDropDownItem}" />
-                                    <Button Content="{Binding Localization.ImportPrescriptionText}" Style="{StaticResource ToolbarDropDownItem}" />
-                                    <Button Content="{Binding Localization.PrescriptionListText}" Style="{StaticResource ToolbarDropDownItem}" />
-                                </StackPanel>
-                            </Border>
-                        </Popup>
-                    </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="10,0" VerticalAlignment="Center">
                         <ToggleButton x:Name="DeviceDropDownToggle"
                                       Content="{Binding Localization.DeviceMenuText}"
@@ -109,14 +102,16 @@
                                     <Button Content="{Binding Localization.DisconnectText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding DisconnectCommand}" />
                                     <Border Height="1" Background="#303645" Margin="0,4" />
                                     <Button Content="{Binding Localization.HandshakeText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding HandshakeCommand}" />
-                                    <Button Content="{Binding Localization.ReadProductModelText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ReadProductModelCommand}" />
-                                    <Button Content="{Binding Localization.ReadBoardModelText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ReadBoardModelCommand}" />
-                                    <Button Content="{Binding Localization.ImpedanceCheckText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding CheckImpedanceCommand}" />
+                                    <Button Content="{Binding Localization.ReadProductModelText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ReadProductModelCommand}" Visibility="Collapsed" />
+                                    <Button Content="{Binding Localization.ReadBoardModelText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ReadBoardModelCommand}" Visibility="Collapsed" />
                                 </StackPanel>
                             </Border>
                         </Popup>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="10,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal"
+                                Margin="10,0"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding SimulationMenuVisibility}">
                         <ToggleButton x:Name="SimulationDropDownToggle"
                                       Content="{Binding Localization.SimulationMenuText}"
                                       Style="{StaticResource ToolbarDropDownButton}" />
@@ -145,28 +140,9 @@
                                     BorderBrush="#303645"
                                     BorderThickness="1"
                                     MinWidth="150">
-                                <StackPanel>
-                                    <Button Content="{Binding Localization.SwitchLanguageText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ToggleLanguageCommand}" />
-                                    <Button Content="{Binding Localization.OpenLogFolderText}" Style="{StaticResource ToolbarDropDownItem}" />
-                                    <Button Content="{Binding Localization.ExportConfigText}" Style="{StaticResource ToolbarDropDownItem}" />
-                                </StackPanel>
-                            </Border>
-                        </Popup>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="10,0" VerticalAlignment="Center">
-                        <ToggleButton x:Name="HelpDropDownToggle"
-                                      Content="{Binding Localization.HelpMenuText}"
-                                      Style="{StaticResource ToolbarDropDownButton}" />
-                        <Popup IsOpen="{Binding IsChecked, ElementName=HelpDropDownToggle}"
-                               PlacementTarget="{Binding ElementName=HelpDropDownToggle}"
-                               Placement="Bottom"
-                               StaysOpen="False">
-                            <Border Background="#1C202B" BorderBrush="#303645" BorderThickness="1" MinWidth="150">
-                                <StackPanel>
-                                    <Button Content="{Binding Localization.UserGuideText}" Style="{StaticResource ToolbarDropDownItem}" />
-                                    <Button Content="{Binding Localization.ShortcutHelpText}" Style="{StaticResource ToolbarDropDownItem}" />
-                                    <Button Content="{Binding Localization.AboutText}" Style="{StaticResource ToolbarDropDownItem}" />
-                                </StackPanel>
+                                <Button Content="{Binding Localization.ImpedanceCheckText}"
+                                        Style="{StaticResource ToolbarDropDownItem}"
+                                        Command="{Binding CheckImpedanceCommand}" />
                             </Border>
                         </Popup>
                     </StackPanel>
@@ -196,6 +172,10 @@
                                             Style="{StaticResource ToolbarDropDownItem}"
                                             Command="{Binding RegisterAccountCommand}"
                                             Visibility="{Binding AdminMenuVisibility}" />
+                                    <Button Content="账号列表"
+                                            Style="{StaticResource ToolbarDropDownItem}"
+                                            Command="{Binding ViewAccountListCommand}"
+                                            Visibility="{Binding AdminMenuVisibility}" />
                                     <Button Content="切换账号"
                                             Style="{StaticResource ToolbarDropDownItem}"
                                             Command="{Binding SwitchAccountCommand}"
@@ -218,19 +198,6 @@
                                StaysOpen="False">
                             <Border Background="#1C202B" BorderBrush="#303645" BorderThickness="1" MinWidth="150">
                                 <StackPanel>
-                                    <TextBlock Text="{Binding CurrentSessionSummary}"
-                                               Foreground="{StaticResource SubText}"
-                                               FontSize="11"
-                                               Padding="14,8"
-                                               TextTrimming="CharacterEllipsis" />
-                                    <Button Content="结束当前 Session"
-                                            Style="{StaticResource ToolbarDropDownItem}"
-                                            Command="{Binding EndCurrentSessionCommand}"
-                                            Visibility="{Binding ActiveSessionVisibility}" />
-                                    <Border Height="1" Background="#303645" Margin="0,4" />
-                                    <Button Content="{Binding Localization.SystemInfoText}" Style="{StaticResource ToolbarDropDownItem}" />
-                                    <Button Content="{Binding Localization.PlaceholderFeatureText}" Style="{StaticResource ToolbarDropDownItem}" />
-                                    <Border Height="1" Background="#303645" Margin="0,4" />
                                     <Button Content="{Binding Localization.ExitApplicationText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ExitCommand}" />
                                 </StackPanel>
                             </Border>
@@ -278,7 +245,8 @@
                                           BorderBrush="#3A4050"
                                           BorderThickness="1"
                                           FontWeight="SemiBold"
-                                          Cursor="Hand" />
+                                          Cursor="Hand"
+                                          Visibility="{Binding PatientMenuVisibility}" />
                             <Popup IsOpen="{Binding IsChecked, ElementName=PatientDropDownToggle}"
                                    PlacementTarget="{Binding ElementName=PatientDropDownToggle}"
                                    Placement="Bottom"
@@ -435,6 +403,59 @@
                 </Button.Template>
             </Button>
         </Grid>
+
+        <Border Grid.Row="1"
+                Width="330"
+                MinHeight="72"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="0,16,18,0"
+                Padding="0"
+                Panel.ZIndex="100"
+                Background="#202632"
+                BorderBrush="{Binding ToastAccent}"
+                BorderThickness="1"
+                CornerRadius="5"
+                Visibility="{Binding ToastVisibility}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="4" />
+                    <ColumnDefinition Width="48" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Background="{Binding ToastAccent}"
+                        CornerRadius="4,0,0,4" />
+                <Border Grid.Column="1"
+                        Width="28"
+                        Height="28"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="#151A23"
+                        BorderBrush="{Binding ToastAccent}"
+                        BorderThickness="1"
+                        CornerRadius="14">
+                    <TextBlock Text="{Binding ToastIcon}"
+                               Foreground="{Binding ToastAccent}"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Grid.Column="2"
+                            Margin="2,13,16,12"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ToastTitle}"
+                               Foreground="#F1F4F8"
+                               FontSize="13"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding ToastMessage}"
+                               Foreground="#AEB8C8"
+                               FontSize="12"
+                               Margin="0,4,0,0"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+        </Border>
 
         <Border Grid.Row="2" Background="#0D1017" BorderBrush="#252A35" BorderThickness="0,1,0,0">
             <TextBlock Text="{Binding ShellState.FooterStatus}"

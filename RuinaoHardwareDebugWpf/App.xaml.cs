@@ -29,6 +29,14 @@ public partial class App : Application
         // 捕获 UI 线程未处理异常（比如按钮点击里抛出的异常没 try-catch）。
         DispatcherUnhandledException += (_, args) =>
         {
+            if (MainWindow is MainWindow { IsShutdownRequested: true }
+                && IsPopupShutdownException(args.Exception))
+            {
+                Logger.Warning("软件关闭阶段已忽略 WPF Popup 鼠标捕获异常。");
+                args.Handled = true;
+                return;
+            }
+
             Logger.Error("界面线程未处理异常", args.Exception);
             args.Handled = true;
 
@@ -86,5 +94,20 @@ public partial class App : Application
         return exception is OutOfMemoryException
             or AccessViolationException
             or BadImageFormatException;
+    }
+
+    private static bool IsPopupShutdownException(Exception exception)
+    {
+        if (exception is not NullReferenceException || string.IsNullOrWhiteSpace(exception.StackTrace))
+        {
+            return false;
+        }
+
+        return exception.StackTrace.Contains(
+                   "System.Windows.Controls.Primitives.Popup.OnLostMouseCapture",
+                   StringComparison.Ordinal)
+               && exception.StackTrace.Contains(
+                   "System.Windows.Input.StylusWisp",
+                   StringComparison.Ordinal);
     }
 }

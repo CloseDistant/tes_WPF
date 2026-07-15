@@ -10,11 +10,32 @@ public interface IStimulationEngine
     StimulationExecutionState CurrentState { get; }
 
     /// <summary>启动 TI 刺激组。</summary>
-    Task<HardwareOperationResult> StartTiGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default);
+    Task<HardwareOperationResult> StartTiGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string prescriptionName,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>启动 tDCS 通道组。</summary>
+    Task<HardwareOperationResult> StartDirectCurrentGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string prescriptionName,
+        CancellationToken cancellationToken = default);
 
     /// <summary>暂停 TI 刺激组。</summary>
     Task<HardwareOperationResult> PauseTiGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default);
 
     /// <summary>急停 TI 刺激组。</summary>
     Task<HardwareOperationResult> EmergencyStopTiGroupAsync(TiGroup group, string reason, CancellationToken cancellationToken = default);
+
+    /// <summary>急停 tDCS 通道组。</summary>
+    Task<HardwareOperationResult> EmergencyStopDirectCurrentGroupAsync(TiGroup group, string reason, CancellationToken cancellationToken = default);
+
+    /// <summary>通道倒计时自然结束并生成完成记录。</summary>
+    Task<HardwareOperationResult> CompleteGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string stimulationType,
+        CancellationToken cancellationToken = default);
 }

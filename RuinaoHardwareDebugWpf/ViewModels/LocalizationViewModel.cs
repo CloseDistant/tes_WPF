@@ -65,14 +65,21 @@ public sealed class LocalizationViewModel : ObservableObject
     public string PlaceholderFeatureText => T("PlaceholderFeature");
     public string ExitApplicationText => T("ExitApplication");
     public string StartButtonText => T("StartButton");
+    public string SynchronizedStartButtonText => T("SynchronizedStartButton");
     public string EmergencyStopButtonText => T("EmergencyStopButton");
     public string NameLabel => T("Name");
     public string SexLabel => T("Sex");
     public string AgeLabel => T("Age");
     public string NavigationText => T("Navigation");
     public string ControlText => T("Control");
+    public string StimulationTypeTitleText => T("StimulationTypeTitle");
+    public string StimulationTypeHintText => T("StimulationTypeHint");
+    public string TemporalInterferenceText => T("TemporalInterference");
+    public string TranscranialDirectCurrentText => T("TranscranialDirectCurrent");
+    public string ComingSoonText => T("ComingSoon");
     public string BackText => T("Back");
     public string ModeTitleText => T("ModeTitle");
+    public string DirectCurrentModeTitleText => T("DirectCurrentModeTitle");
     public string ChannelHintText => T("ChannelHint");
     public string RemainingTimeLabel => T("RemainingTime");
     public string StatusMonitorLabel => T("StatusMonitor");
@@ -88,6 +95,7 @@ public sealed class LocalizationViewModel : ObservableObject
     public string ContinuousModeText => T("ContinuousMode");
     public string DurationLabel => T("Duration");
     public string IntervalTimeLabel => T("IntervalTime");
+    public string SingleDurationLabel => T("SingleDuration");
     public string CarrierFrequencyLabel => T("CarrierFrequency");
     public string WaveformLabel => T("Waveform");
     public string ElectrodeLabel => T("Electrode");
@@ -105,6 +113,8 @@ public sealed class LocalizationViewModel : ObservableObject
     public string FemSimulationStatusText => T("FemSimulationStatus");
     public string DeviceOnlineText => T("DeviceOnline");
     public string DeviceOfflineText => T("DeviceOffline");
+
+    public string FeatureText(string localizationKey) => T(localizationKey);
 
     /// <summary>根据页面获取页面标题。</summary>
     public string PageTitle(AppPage page) => page switch

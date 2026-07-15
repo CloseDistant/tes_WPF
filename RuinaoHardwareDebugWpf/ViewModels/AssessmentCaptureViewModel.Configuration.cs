@@ -38,6 +38,16 @@ public sealed partial class AssessmentCaptureViewModel
 
     private sealed record WordReadingGroup(string[] Words, int WordGroupType);
 
+    /// <summary>
+    /// 短文朗读段落配置。段落类型只用于事件记录和后续算法分析，不在界面显示。
+    /// </summary>
+    private sealed record ShortTextReadingPassage(string Text, int PassageType);
+
+    /// <summary>
+    /// 情绪问答问题配置。问题类型只用于事件记录和后续算法分析，不在界面显示。
+    /// </summary>
+    private sealed record EmotionQuestionPrompt(string Text, int QuestionType);
+
     private sealed record QuestionnaireQuestion(int Number, string Text, string[]? AnswerOptions = null);
 
     /// <summary>
@@ -63,6 +73,9 @@ public sealed partial class AssessmentCaptureViewModel
     private const string VideoBrowseModuleCode = "video_browse";
     private const string VoiceBaselineModuleCode = "voice_baseline";
     private const string WordReadingModuleCode = "word_reading";
+    private const string ShortTextReadingModuleCode = "short_text_reading";
+    private const string EmotionQuestionModuleCode = "emotion_question";
+    private const string DotProbeModuleCode = "dot_probe";
     private const string BasicInfoModuleCode = "basic_info";
     private const string QuestionnaireAModuleCode = "questionnaire_a";
     private const string QuestionnaireBModuleCode = "questionnaire_b";
@@ -102,6 +115,10 @@ public sealed partial class AssessmentCaptureViewModel
 
     private const int WordReadingGroupSeconds = 15;
 
+    private const int ShortTextReadingPassageSeconds = 30;
+
+    private const int EmotionQuestionAnswerSeconds = 30;
+
     private static readonly CaptureWorkbenchModule[] CaptureWorkbenchModules =
     [
         new(EyeCalibrationModuleCode, "ModuleEyeCalibration"),
@@ -109,9 +126,9 @@ public sealed partial class AssessmentCaptureViewModel
         new(VideoBrowseModuleCode, "ModuleVideoBrowse"),
         new(VoiceBaselineModuleCode, "ModuleVoiceBaseline"),
         new(WordReadingModuleCode, "ModuleWordReading"),
-        new("short_text_reading", "ModuleShortTextReading"),
-        new("emotion_question", "ModuleEmotionQuestion"),
-        new("dot_probe", "ModuleDotProbe"),
+        new(ShortTextReadingModuleCode, "ModuleShortTextReading"),
+        new(EmotionQuestionModuleCode, "ModuleEmotionQuestion"),
+        new(DotProbeModuleCode, "ModuleDotProbe"),
         new("emotion_oddball", "ModuleEmotionOddball"),
         new("emotion_letter_search", "ModuleEmotionLetterSearch"),
         new("emotion_stroop", "ModuleEmotionStroop"),
@@ -181,6 +198,30 @@ public sealed partial class AssessmentCaptureViewModel
         Completed
     }
 
+    /// <summary>
+    /// 短文朗读第三步内部状态。第一段手动开始，后续段落由固定休息倒计时自动推进。
+    /// </summary>
+    private enum ShortTextReadingPhase
+    {
+        Idle,
+        WaitingToStart,
+        Reading,
+        Resting,
+        Completed
+    }
+
+    /// <summary>
+    /// 情绪问答第三步内部状态。第一题手动开始，后续问题由固定休息倒计时自动推进。
+    /// </summary>
+    private enum EmotionQuestionPhase
+    {
+        Idle,
+        WaitingToStart,
+        Answering,
+        Resting,
+        Completed
+    }
+
     private static readonly VoiceBaselineItem[] VoiceBaselineItems =
     [
         new("请您连续发出“啊（a）”的声音", "啊", 1),
@@ -196,6 +237,32 @@ public sealed partial class AssessmentCaptureViewModel
         new(["昼夜交替", "由表及里", "就地取材", "平铺直叙", "按部就班", "南来北往"], 3),
         new(["万念俱灰", "家破人亡", "众叛亲离", "颠沛流离", "痛不欲生", "孤苦伶仃"], 2),
         new(["意气风发", "喜笑颜开", "旗开得胜", "精神抖擞", "心满意足", "兴高采烈"], 1)
+    ];
+
+    private static readonly ShortTextReadingPassage[] ShortTextReadingPassages =
+    [
+        new(
+            "选取一百五十克绿豆，用清水淘洗，剔除浮沫与坏豆；在容器内铺设无菌纱布，倒入浸泡八小时的豆粒；每日早晚各进行一次淋水操作，水量需完全浸透布料又不过度积水；将容器放在避光处，环境温度维持在二十五摄氏度，五至七天后即可采收豆芽。",
+            3),
+        new(
+            "夜深十二点半，客厅再成修罗场，父亲摔杯砸碗，母亲尖声咒骂；争吵的声音击碎他仅剩的一点倦意，他蜷缩在被窝里，数着心跳对抗着噪音；他早已记不清这是他们多少次干架了，乌烟瘴气的家里总是争吵不休，弱小的他无奈又无助，只有默默地流泪。",
+            2),
+        new(
+            "阳光明媚的春日午后，她和家人朋友们围坐在户外的野餐垫上，分享着各自带来的美食，讲述着生活中的趣事。时而传出阵阵欢声笑语；轻松愉快的氛围让她倍感欢乐和温暖，看着身边这些亲密的家人和朋友，她感到自己的生活是如此的美好和幸福。",
+            1)
+    ];
+
+    private static readonly EmotionQuestionPrompt[] EmotionQuestionPrompts =
+    [
+        new(
+            "问题1：你最近的心情怎么样？请你讲一两件最近让你感到开心或者不开心的事情，说说是什么事情？怎么发生的？你是什么样的感受？讲得越详细越好。",
+            3),
+        new(
+            "问题2：请你仔细想一想，讲述一两件与你相关或你遇到过的，让你感到特别有能量、非常开心、幸福、得意或满意的事情，讲得越详细越好。",
+            1),
+        new(
+            "问题3：请你讲述一两件与你相关或你遇到过的，让你感到非常难过、伤心、烦躁、苦恼或者痛苦的事情，说说是什么事情？怎么发生的？当时你的感受如何？讲得越详细越好。",
+            2)
     ];
 
     private static readonly string[] BasicInfoGenderOptions = ["男", "女"];

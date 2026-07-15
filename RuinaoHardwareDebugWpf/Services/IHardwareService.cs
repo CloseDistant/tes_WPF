@@ -54,7 +54,11 @@ public interface IHardwareService
     /// <summary>
     /// 启动指定 TI 组的刺激。
     /// </summary>
-    Task<HardwareOperationResult> StartGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default);
+    Task<HardwareOperationResult> StartGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        PrescriptionDefinition parameterRecord,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 暂停指定 TI 组的刺激。
@@ -64,7 +68,18 @@ public interface IHardwareService
     /// <summary>
     /// 紧急停止指定 TI 组的刺激。
     /// </summary>
-    Task<HardwareOperationResult> EmergencyStopGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default);
+    Task<HardwareOperationResult> EmergencyStopGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string stimulationType = "TI",
+        CancellationToken cancellationToken = default);
+
+    /// <summary>停止已完成通道并写入自然完成记录。</summary>
+    Task<HardwareOperationResult> CompleteGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string stimulationType,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 软件退出时调用：优雅地停止心跳等后台任务。

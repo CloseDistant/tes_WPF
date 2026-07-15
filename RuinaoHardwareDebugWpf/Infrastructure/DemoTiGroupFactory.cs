@@ -50,8 +50,9 @@ public sealed class DemoTiGroupFactory : ITiGroupFactory
                         RampDownS = "0.5",
                         DurationS = "1200",
                         IntervalS = "0",
+                        SingleDurationS = "60",
                         FrequencyHz = "1000",
-                        Polarity = "+",
+                        Polarity = "不掉转",
                         AccentBrush = accent
                     },
                     new ChannelConfig
@@ -64,8 +65,9 @@ public sealed class DemoTiGroupFactory : ITiGroupFactory
                         RampDownS = "0.5",
                         DurationS = "1200",
                         IntervalS = "0",
+                        SingleDurationS = "60",
                         FrequencyHz = groupIndex == 7 ? "1130" : "1010",
-                        Polarity = "-",
+                        Polarity = "不掉转",
                         AccentBrush = accent
                     }
                 }

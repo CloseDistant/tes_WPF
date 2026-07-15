@@ -21,6 +21,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
     private readonly IUserDialogService userDialogService;
     private readonly IModuleEventRecorder moduleEventRecorder;
     private readonly IUnifiedSessionService unifiedSessionService;
+    private readonly IPatientService patientService;
     private readonly AssessmentWorkbenchCoordinator workbenchCoordinator;
     private readonly DispatcherTimer calibrationTimer = new();
     private readonly DispatcherTimer pictureBrowseTimer = new();
@@ -124,6 +125,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         IUserDialogService userDialogService,
         IModuleEventRecorder moduleEventRecorder,
         IUnifiedSessionService unifiedSessionService,
+        IPatientService patientService,
         AssessmentWorkbenchCoordinator workbenchCoordinator)
     {
         CaptureMediaRecorder = captureMediaRecorder;
@@ -131,6 +133,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         this.userDialogService = userDialogService;
         this.moduleEventRecorder = moduleEventRecorder;
         this.unifiedSessionService = unifiedSessionService;
+        this.patientService = patientService;
         this.workbenchCoordinator = workbenchCoordinator;
         this.localization.LanguageChanged += (_, _) =>
         {
@@ -152,12 +155,16 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         PreviousQuestionnaireQuestionCommand = new RelayCommand(_ => GoToPreviousQuestionnaireQuestion());
         NextQuestionnaireQuestionCommand = new RelayCommand(_ => GoToNextQuestionnaireQuestion());
         SubmitQuestionnaireCommand = new AsyncRelayCommand(_ => SubmitQuestionnaireAsync());
+        StartShortTextReadingCommand = new RelayCommand(_ => StartShortTextReadingFirstPassage());
+        InitializeEmotionQuestionModule();
+        InitializeDotProbeModule();
         LoadModuleProgressItems();
         frameSaveStatusText = T("CaptureWorkspaceRecordingPending");
         basicInfoSaveStatusText = T("CaptureWorkspaceFormPending");
         questionnaireSaveStatusText = T("CaptureWorkspaceFormPending");
         voiceBaselineStatusText = T("CaptureWorkspaceRecordingPending");
         wordReadingStatusText = T("CaptureWorkspaceRecordingPending");
+        shortTextReadingStatusText = T("CaptureWorkspaceRecordingPending");
         selectedCameraDevice = T("CaptureWorkspaceNoCameraSelected");
         cameraStatusText = T("CaptureWorkspaceChooseCamera");
         CameraDevices.Add(T("CaptureWorkspaceNoCameraDetected"));
@@ -170,6 +177,8 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         voiceBaselineTimer.Tick += (_, _) => AdvanceVoiceBaseline();
         wordReadingTimer.Interval = TimeSpan.FromSeconds(1);
         wordReadingTimer.Tick += (_, _) => AdvanceWordReading();
+        shortTextReadingTimer.Interval = TimeSpan.FromSeconds(1);
+        shortTextReadingTimer.Tick += (_, _) => AdvanceShortTextReading();
         syncTestTimer.Interval = TimeSpan.FromSeconds(1);
         syncTestTimer.Tick += (_, _) => AdvanceSyncTest();
         LoadCameraDevices();
@@ -177,6 +186,12 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
 
     public async Task<string> GetOrStartUnifiedSessionKeyAsync(CancellationToken cancellationToken = default)
     {
+        if (patientService.CurrentPatient is null)
+        {
+            userDialogService.ShowInformation("数字表型采集", "请先新增或选择患者，再开始数字表型采集。");
+            throw new InvalidOperationException("数字表型采集需要当前患者信息。");
+        }
+
         return (await unifiedSessionService.GetOrStartAsync(cancellationToken)).SessionKey;
     }
 
@@ -188,6 +203,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         VideoBrowseModuleCode => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "VideoBrowseDemo.mp4"),
         VoiceBaselineModuleCode => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "VoiceBaselineDemo.mp4"),
         WordReadingModuleCode => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "WordReadingDemo.mp4"),
+        ShortTextReadingModuleCode => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "ShortTextReadingDemo.mp4"),
+        EmotionQuestionModuleCode => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "EmotionQuestionDemo.mp4"),
+        DotProbeModuleCode => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "DotProbeDemo.mp4"),
         _ => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "EyeCalibrationDemo.mp4")
     };
 
@@ -211,8 +229,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
 
     public string WorkspaceTitleText => T("AssessmentCapture");
 
-    public string WorkspaceDescriptionText => T("CaptureWorkspaceDescription");
-
     public string CurrentModuleBadgeText => T("CaptureWorkspaceModuleBadge", CurrentModule);
 
     public string WorkbenchStatusText => IsFormModule
@@ -222,8 +238,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
     public string ProcessTitleText => T("CaptureWorkspaceProcessTitle");
 
     public string CurrentStepText => T("CaptureWorkspaceCurrentStep", CurrentDevStepText);
-
-    public string ProcessDescriptionText => T("CaptureWorkspaceProcessDescription");
 
     public string DemoStepTitleText => T("CaptureWorkspaceDemoStep");
 
@@ -245,11 +259,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
 
     public string CameraPreviewPlaceholderText => T("CaptureWorkspaceCameraPreview");
 
-    public string CameraPanelDescriptionText => T("CaptureWorkspaceCameraPanelDescription");
-
     public string ModuleFlowTitleText => T("CaptureWorkspaceModuleFlowTitle");
-
-    public string ModuleFlowDescriptionText => T("CaptureWorkspaceModuleFlowDescription");
 
     public string DevelopmentClickableText => T("CaptureWorkspaceDevelopmentClickable");
 
@@ -397,6 +407,12 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
 
     public bool IsWordReadingModule => CurrentModuleCode == WordReadingModuleCode;
 
+    public bool IsShortTextReadingModule => CurrentModuleCode == ShortTextReadingModuleCode;
+
+    public bool IsEmotionQuestionModule => CurrentModuleCode == EmotionQuestionModuleCode;
+
+    public bool IsDotProbeModule => CurrentModuleCode == DotProbeModuleCode;
+
     public bool IsBasicInfoModule => CurrentModuleCode == BasicInfoModuleCode;
 
     public bool IsQuestionnaireModule => GetQuestionnaireDefinition(CurrentModuleCode) is not null;
@@ -416,6 +432,12 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
     public bool IsVoiceBaselineStage => IsCalibrationStage && IsVoiceBaselineModule;
 
     public bool IsWordReadingStage => IsCalibrationStage && IsWordReadingModule;
+
+    public bool IsShortTextReadingStage => IsCalibrationStage && IsShortTextReadingModule;
+
+    public bool IsEmotionQuestionStage => IsCalibrationStage && IsEmotionQuestionModule;
+
+    public bool IsDotProbeStage => IsCalibrationStage && IsDotProbeModule;
 
     public bool IsBasicInfoStage => IsCalibrationStage && IsBasicInfoModule;
 
@@ -459,7 +481,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
 
     public bool ShowWordReadingStartAction => IsWordReadingWaiting && wordReadingIndex == 0;
 
-    public bool IsFallbackStage => !IsDemoStage && !IsEyeCalibrationStage && !IsPictureBrowseStage && !IsVideoBrowseStage && !IsVoiceBaselineStage && !IsWordReadingStage && !IsBasicInfoStage && !IsQuestionnaireStage && !IsSyncTestStage;
+    public bool IsFallbackStage => !IsDemoStage && !IsEyeCalibrationStage && !IsPictureBrowseStage && !IsVideoBrowseStage && !IsVoiceBaselineStage && !IsWordReadingStage && !IsShortTextReadingStage && !IsEmotionQuestionStage && !IsDotProbeStage && !IsBasicInfoStage && !IsQuestionnaireStage && !IsSyncTestStage;
 
     public bool IsCompletionStage => currentStep == CaptureWorkbenchStep.Completed;
 
@@ -864,6 +886,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         CaptureWorkbenchStep.ModuleExecution when IsBasicInfoModule => T("CaptureWorkspaceMainBasicInfo"),
         CaptureWorkbenchStep.ModuleExecution when IsVoiceBaselineModule => T("CaptureWorkspaceMainVoiceBaseline"),
         CaptureWorkbenchStep.ModuleExecution when IsWordReadingModule => T("CaptureWorkspaceMainWordReading"),
+        CaptureWorkbenchStep.ModuleExecution when IsShortTextReadingModule => T("CaptureWorkspaceMainShortTextReading"),
+        CaptureWorkbenchStep.ModuleExecution when IsEmotionQuestionModule => T("CaptureWorkspaceMainEmotionQuestion"),
+        CaptureWorkbenchStep.ModuleExecution when IsDotProbeModule => T("CaptureWorkspaceMainDotProbe"),
         CaptureWorkbenchStep.ModuleExecution when IsPictureBrowseModule => T("CaptureWorkspaceMainPictureBrowse"),
         CaptureWorkbenchStep.ModuleExecution when IsVideoBrowseModule => T("CaptureWorkspaceMainVideoBrowse"),
         CaptureWorkbenchStep.ModuleExecution => T("CaptureWorkspaceMainEyeCalibration"),
@@ -984,7 +1009,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
 
     /// <summary>
     /// 开始当前模块第三步。
-    /// 眼动校准进入校准点序列，图片浏览/视频浏览进入对应素材展示序列。
+    /// 每个已实现任务模块进入自己的显式状态机，不允许通过通用兜底代替模块流程。
     /// </summary>
     public void StartCurrentModule()
     {
@@ -1011,6 +1036,18 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         else if (IsWordReadingModule)
         {
             BeginWordReadingSequence();
+        }
+        else if (IsShortTextReadingModule)
+        {
+            BeginShortTextReadingSequence();
+        }
+        else if (IsEmotionQuestionModule)
+        {
+            BeginEmotionQuestionSequence();
+        }
+        else if (IsDotProbeModule)
+        {
+            BeginDotProbeSequence();
         }
         else
         {
@@ -1246,6 +1283,18 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
             else if (IsWordReadingModule)
             {
                 BeginWordReadingSequence();
+            }
+            else if (IsShortTextReadingModule)
+            {
+                BeginShortTextReadingSequence();
+            }
+            else if (IsEmotionQuestionModule)
+            {
+                BeginEmotionQuestionSequence();
+            }
+            else if (IsDotProbeModule)
+            {
+                BeginDotProbeSequence();
             }
             else if (IsSyncTestModule)
             {
@@ -1498,6 +1547,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         ResetVideoBrowseState();
         ResetVoiceBaselineState();
         ResetWordReadingState();
+        ResetShortTextReadingState();
+        ResetEmotionQuestionState();
+        ResetDotProbeState();
         ResetSyncTestState();
     }
 
@@ -1571,12 +1623,10 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         // 任意模块或步骤变化后，统一刷新这些派生绑定，避免局部状态不同步。
         OnPropertyChanged(nameof(CurrentDevStepText));
         OnPropertyChanged(nameof(WorkspaceTitleText));
-        OnPropertyChanged(nameof(WorkspaceDescriptionText));
         OnPropertyChanged(nameof(CurrentModuleBadgeText));
         OnPropertyChanged(nameof(WorkbenchStatusText));
         OnPropertyChanged(nameof(ProcessTitleText));
         OnPropertyChanged(nameof(CurrentStepText));
-        OnPropertyChanged(nameof(ProcessDescriptionText));
         OnPropertyChanged(nameof(DemoStepTitleText));
         OnPropertyChanged(nameof(FaceStepTitleText));
         OnPropertyChanged(nameof(CompletedStepTitleText));
@@ -1590,9 +1640,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         OnPropertyChanged(nameof(CameraPanelTitleText));
         OnPropertyChanged(nameof(RefreshButtonText));
         OnPropertyChanged(nameof(CameraPreviewPlaceholderText));
-        OnPropertyChanged(nameof(CameraPanelDescriptionText));
         OnPropertyChanged(nameof(ModuleFlowTitleText));
-        OnPropertyChanged(nameof(ModuleFlowDescriptionText));
         OnPropertyChanged(nameof(DevelopmentClickableText));
         OnPropertyChanged(nameof(DemoVideoPath));
         OnPropertyChanged(nameof(DemoVideoUri));
@@ -1613,6 +1661,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         OnPropertyChanged(nameof(IsVideoBrowseModule));
         OnPropertyChanged(nameof(IsVoiceBaselineModule));
         OnPropertyChanged(nameof(IsWordReadingModule));
+        OnPropertyChanged(nameof(IsShortTextReadingModule));
+        OnPropertyChanged(nameof(IsEmotionQuestionModule));
+        OnPropertyChanged(nameof(IsDotProbeModule));
         OnPropertyChanged(nameof(IsBasicInfoModule));
         OnPropertyChanged(nameof(IsQuestionnaireModule));
         OnPropertyChanged(nameof(IsFormModule));
@@ -1623,6 +1674,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         OnPropertyChanged(nameof(IsVideoBrowseStage));
         OnPropertyChanged(nameof(IsVoiceBaselineStage));
         OnPropertyChanged(nameof(IsWordReadingStage));
+        OnPropertyChanged(nameof(IsShortTextReadingStage));
+        OnPropertyChanged(nameof(IsEmotionQuestionStage));
+        OnPropertyChanged(nameof(IsDotProbeStage));
         OnPropertyChanged(nameof(IsBasicInfoStage));
         OnPropertyChanged(nameof(IsQuestionnaireStage));
         OnPropertyChanged(nameof(IsSyncTestStage));
@@ -1644,6 +1698,24 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         OnPropertyChanged(nameof(IsWordReadingResting));
         OnPropertyChanged(nameof(IsWordReadingPromptVisible));
         OnPropertyChanged(nameof(ShowWordReadingStartAction));
+        OnPropertyChanged(nameof(IsShortTextReadingWaiting));
+        OnPropertyChanged(nameof(IsShortTextReadingActive));
+        OnPropertyChanged(nameof(IsShortTextReadingResting));
+        OnPropertyChanged(nameof(IsShortTextReadingPromptVisible));
+        OnPropertyChanged(nameof(ShowShortTextReadingStartAction));
+        OnPropertyChanged(nameof(IsEmotionQuestionWaiting));
+        OnPropertyChanged(nameof(IsEmotionQuestionAnswering));
+        OnPropertyChanged(nameof(IsEmotionQuestionResting));
+        OnPropertyChanged(nameof(IsEmotionQuestionPromptVisible));
+        OnPropertyChanged(nameof(IsDotProbePreBlank));
+        OnPropertyChanged(nameof(IsDotProbeFixation));
+        OnPropertyChanged(nameof(IsDotProbePictures));
+        OnPropertyChanged(nameof(IsDotProbePostBlank));
+        OnPropertyChanged(nameof(IsDotProbeProbe));
+        OnPropertyChanged(nameof(IsDotProbeResting));
+        OnPropertyChanged(nameof(IsDotProbeProbeTop));
+        OnPropertyChanged(nameof(IsDotProbeProbeBottom));
+        OnPropertyChanged(nameof(ShowDotProbeResponseButtons));
         OnPropertyChanged(nameof(IsFallbackStage));
         OnPropertyChanged(nameof(IsCompletionStage));
         OnPropertyChanged(nameof(IsGenericFallbackStage));
@@ -1699,11 +1771,29 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
         OnPropertyChanged(nameof(WordReadingStartButtonText));
         OnPropertyChanged(nameof(WordReadingGroupTitleText));
         OnPropertyChanged(nameof(WordReadingCurrentWords));
+        OnPropertyChanged(nameof(ShortTextReadingTitleText));
+        OnPropertyChanged(nameof(ShortTextReadingStartButtonText));
+        OnPropertyChanged(nameof(ShortTextReadingPassageTitleText));
+        OnPropertyChanged(nameof(ShortTextReadingPassageText));
+        OnPropertyChanged(nameof(EmotionQuestionTitleText));
+        OnPropertyChanged(nameof(EmotionQuestionStartButtonText));
+        OnPropertyChanged(nameof(EmotionQuestionProgressText));
+        OnPropertyChanged(nameof(EmotionQuestionText));
         OnPropertyChanged(nameof(RestTitleText));
         OnPropertyChanged(nameof(VoiceBaselineStatusText));
         OnPropertyChanged(nameof(VoiceBaselineRestText));
         OnPropertyChanged(nameof(WordReadingStatusText));
         OnPropertyChanged(nameof(WordReadingRestText));
+        OnPropertyChanged(nameof(ShortTextReadingStatusText));
+        OnPropertyChanged(nameof(ShortTextReadingRestText));
+        OnPropertyChanged(nameof(EmotionQuestionStatusText));
+        OnPropertyChanged(nameof(EmotionQuestionRestText));
+        OnPropertyChanged(nameof(DotProbeTopImagePath));
+        OnPropertyChanged(nameof(DotProbeBottomImagePath));
+        OnPropertyChanged(nameof(DotProbeRestTitleText));
+        OnPropertyChanged(nameof(DotProbeRestText));
+        OnPropertyChanged(nameof(DotProbeUpText));
+        OnPropertyChanged(nameof(DotProbeDownText));
         OnPropertyChanged(nameof(SelectedBasicInfoGender));
         OnPropertyChanged(nameof(SelectedBasicInfoGenderDisplay));
         OnPropertyChanged(nameof(BasicInfoBirthDateText));

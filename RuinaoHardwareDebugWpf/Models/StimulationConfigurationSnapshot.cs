@@ -9,6 +9,7 @@ public sealed record StimulationChannelSnapshot(
     string RampDownS,
     string DurationS,
     string IntervalS,
+    string SingleDurationS,
     string FrequencyHz,
     string Polarity,
     string StimulationMode);
@@ -32,6 +33,7 @@ public sealed record StimulationConfigurationSnapshot(
                 channel.RampDownS,
                 channel.DurationS,
                 channel.IntervalS,
+                channel.SingleDurationS,
                 channel.FrequencyHz,
                 channel.Polarity,
                 channel.StimulationMode)).ToArray());
@@ -52,6 +54,7 @@ public sealed record StimulationConfigurationSnapshot(
                 RampDownS = channel.RampDownS,
                 DurationS = channel.DurationS,
                 IntervalS = channel.IntervalS,
+                SingleDurationS = channel.SingleDurationS,
                 FrequencyHz = channel.FrequencyHz,
                 Polarity = channel.Polarity,
                 StimulationMode = channel.StimulationMode

@@ -21,12 +21,18 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private readonly ILoggingService logger;
     private readonly IUserDialogService userDialogService;
     private readonly IAccountService accountService;
+    private readonly IFeatureVisibilityService featureVisibilityService;
     private readonly IPatientService patientService;
     private readonly ISessionLifecycleCoordinator sessionLifecycleCoordinator;
 
     private AppPage currentPage = AppPage.Control;
     private ObservableObject? currentPageViewModel;
     private bool isSidebarCollapsed;
+    private bool isToastVisible;
+    private bool isToastSuccess;
+    private string toastTitle = string.Empty;
+    private string toastMessage = string.Empty;
+    private CancellationTokenSource? toastDismissCts;
     private readonly SemaphoreSlim shutdownGate = new(1, 1);
     private bool shutdownCompleted;
     private Task initializationTask = Task.CompletedTask;
@@ -39,6 +45,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         ILoggingService logger,
         IUserDialogService userDialogService,
         IAccountService accountService,
+        IFeatureVisibilityService featureVisibilityService,
         IPatientService patientService,
         ISessionLifecycleCoordinator sessionLifecycleCoordinator,
         NavigationViewModel navigation,
@@ -46,7 +53,10 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         PatientViewModel patient,
         ShellStateViewModel shellState,
         MonitorViewModel monitor,
+        StimulationTypeSelectionViewModel stimulationTypeSelection,
         TiControlViewModel tiControl,
+        DirectCurrentControlViewModel directCurrentControl,
+        PrescriptionViewModel prescription,
         EegSignalCaptureViewModel eegSignalCapture,
         AssessmentCaptureViewModel assessmentCapture,
         FemSimulationViewModel femSimulation,
@@ -59,6 +69,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         this.logger = logger;
         this.userDialogService = userDialogService;
         this.accountService = accountService;
+        this.featureVisibilityService = featureVisibilityService;
         this.patientService = patientService;
         this.sessionLifecycleCoordinator = sessionLifecycleCoordinator;
 
@@ -67,7 +78,10 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         Patient = patient;
         ShellState = shellState;
         Monitor = monitor;
+        StimulationTypeSelection = stimulationTypeSelection;
         TiControl = tiControl;
+        DirectCurrentControl = directCurrentControl;
+        Prescription = prescription;
         EegSignalCapture = eegSignalCapture;
         AssessmentCapture = assessmentCapture;
         FemSimulation = femSimulation;
@@ -81,13 +95,30 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         AppendLog("UI READY  hardware debug prototype");
         AppendLog("PROTO DLL READY  RuinaoTesProtocol referenced");
 
-        // 硬件命令统一通过 CreateHardwareCommand 包装异常处理。
-        ConnectCommand = CreateHardwareCommand(_ => ConnectDeviceAsync());
-        DisconnectCommand = CreateHardwareCommand(_ => DisconnectDeviceAsync());
-        HandshakeCommand = CreateHardwareCommand(_ => HandshakeDeviceAsync());
+        // 设备菜单操作复用统一 Toast；异步命令在收到结果前会自动禁用对应按钮。
+        ConnectCommand = new AsyncRelayCommand(
+            ConnectDeviceAsync,
+            onError: exception => HandleDeviceOperationError(
+                "联机失败",
+                "设备联机失败，请检查设备连接和通讯配置后重试。",
+                exception));
+        DisconnectCommand = new AsyncRelayCommand(
+            DisconnectDeviceAsync,
+            onError: exception => HandleDeviceOperationError(
+                "断开失败",
+                "设备断开失败，请检查通讯状态后重试。",
+                exception));
+        HandshakeCommand = new AsyncRelayCommand(
+            HandshakeDeviceAsync,
+            onError: exception => HandleDeviceOperationError(
+                "握手检测失败",
+                "未收到有效的握手反馈，请检查设备连接后重试。",
+                exception));
         ReadProductModelCommand = CreateHardwareCommand(_ => ReadProductModelAsync());
         ReadBoardModelCommand = CreateHardwareCommand(_ => ReadBoardModelAsync());
-        CheckImpedanceCommand = CreateHardwareCommand(_ => CheckImpedanceAsync());
+        CheckImpedanceCommand = new AsyncRelayCommand(
+            CheckImpedanceAsync,
+            onError: HandleImpedanceRefreshError);
 
         ExitCommand = CreateHardwareCommand(async _ =>
         {
@@ -101,6 +132,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         ToggleSidebarCommand = new RelayCommand(_ => ToggleSidebar());
         LoginCommand = CreateHardwareCommand(_ => LoginAsync());
         RegisterAccountCommand = CreateHardwareCommand(_ => RegisterAccountAsync());
+        ViewAccountListCommand = CreateHardwareCommand(_ => ViewAccountListAsync());
         SwitchAccountCommand = CreateHardwareCommand(_ => SwitchAccountAsync());
         LogoutCommand = CreateHardwareCommand(_ => LogoutAsync());
         EditPatientCommand = CreateHardwareCommand(_ => EditPatientAsync());
@@ -120,15 +152,26 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         });
 
         TiControl.HardwareOperationCompleted += (_, result) => ApplyHardwareResult(result);
+        DirectCurrentControl.HardwareOperationCompleted += (_, result) => ApplyHardwareResult(result);
+        TiControl.BackRequested += (_, _) => ShowStimulationTypeSelection();
+        DirectCurrentControl.BackRequested += (_, _) => ShowStimulationTypeSelection();
+        Prescription.UseRequested += (_, item) => ApplyPrescription(item);
+        Report.ReuseRequested += (_, item) => ApplyPrescription(item);
+        StimulationTypeSelection.TemporalInterferenceRequested += (_, _) => ShowTemporalInterference();
+        StimulationTypeSelection.DirectCurrentRequested += (_, _) => ShowDirectCurrent();
+        featureVisibilityService.VisibilityChanged += (_, _) => ApplyFeatureVisibility();
         accountService.CurrentUserChanged += (_, _) => NotifyAccountChanged();
         sessionLifecycleCoordinator.CurrentSessionChanged += (_, _) => NotifyUnifiedSessionChanged();
         FemSimulation.Initialize(this);
 
-        // 默认打开 TI 控制页面。
+        // 默认打开电刺激类型选择页。
         Navigation.Select(CurrentPage);
-        CurrentPageViewModel = TiControl;
+        CurrentPageViewModel = StimulationTypeSelection;
 
-        initializationTask = Task.WhenAll(InitializeAccountAsync(), InitializePatientAsync());
+        initializationTask = Task.WhenAll(
+            InitializeAccountAsync(),
+            InitializePatientAsync(),
+            InitializeFeatureVisibilityAsync());
     }
 
     /// <summary>左侧导航 ViewModel。</summary>
@@ -146,8 +189,17 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     /// <summary>总览监控 ViewModel。</summary>
     public MonitorViewModel Monitor { get; }
 
+    /// <summary>电刺激类型选择页面 ViewModel。</summary>
+    public StimulationTypeSelectionViewModel StimulationTypeSelection { get; }
+
     /// <summary>TI 控制页面 ViewModel。</summary>
     public TiControlViewModel TiControl { get; }
+
+    /// <summary>tDCS 独立页面 ViewModel。</summary>
+    public DirectCurrentControlViewModel DirectCurrentControl { get; }
+
+    /// <summary>公用处方管理页面 ViewModel。</summary>
+    public PrescriptionViewModel Prescription { get; }
 
     /// <summary>EEG 采集页面 ViewModel。</summary>
     public EegSignalCaptureViewModel EegSignalCapture { get; }
@@ -181,6 +233,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     public ICommand ToggleSidebarCommand { get; }
     public ICommand LoginCommand { get; }
     public ICommand RegisterAccountCommand { get; }
+    public ICommand ViewAccountListCommand { get; }
     public ICommand SwitchAccountCommand { get; }
     public ICommand LogoutCommand { get; }
     public ICommand EditPatientCommand { get; }
@@ -196,6 +249,28 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     public Visibility ActiveSessionVisibility => sessionLifecycleCoordinator.CurrentSession is null
         ? Visibility.Collapsed
         : Visibility.Visible;
+
+    public Visibility SimulationMenuVisibility => featureVisibilityService.IsVisible(FeatureKeys.NavigationFem)
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility ToastVisibility => isToastVisible ? Visibility.Visible : Visibility.Collapsed;
+
+    public string ToastTitle
+    {
+        get => toastTitle;
+        private set => SetProperty(ref toastTitle, value);
+    }
+
+    public string ToastMessage
+    {
+        get => toastMessage;
+        private set => SetProperty(ref toastMessage, value);
+    }
+
+    public string ToastIcon => isToastSuccess ? "✓" : "!";
+
+    public string ToastAccent => isToastSuccess ? "#56D981" : "#FF626B";
 
     public bool IsLoggedIn => accountService.CurrentUser is not null;
 
@@ -226,6 +301,12 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     public System.Windows.Visibility LoggedInMenuVisibility => IsLoggedIn ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
 
     public System.Windows.Visibility AdminMenuVisibility => IsAdminLoggedIn ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+    public bool CanManagePatients => accountService.CurrentUser?.RoleId is AccountRoles.Admin or AccountRoles.Doctor;
+
+    public System.Windows.Visibility PatientMenuVisibility => CanManagePatients
+        ? System.Windows.Visibility.Visible
+        : System.Windows.Visibility.Collapsed;
 
     public bool IsSidebarCollapsed
     {
@@ -365,14 +446,14 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
             AppPage.FemSimulation => FemSimulation,
             AppPage.Settings => Config,
             AppPage.Dashboard => Monitor,
-            AppPage.Control => TiControl,
+            AppPage.Control => StimulationTypeSelection,
             AppPage.EegSignalCapture => EegSignalCapture,
             AppPage.ClosedLoopControl => ConfigurePlaceholder(page),
             AppPage.AssessmentCapture => AssessmentCapture,
             AppPage.ElectrodePlanning => ConfigurePlaceholder(page),
             AppPage.HeadModel => ConfigurePlaceholder(page),
-            AppPage.ProtocolManager => ConfigurePlaceholder(page),
-            AppPage.TreatmentHistory => ConfigurePlaceholder(page),
+            AppPage.ProtocolManager => Prescription,
+            AppPage.TreatmentHistory => Report,
             AppPage.Help => ConfigurePlaceholder(page),
             _ => TiControl
         };
@@ -403,13 +484,17 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     /// </summary>
     private IEnumerable<NavItem> CreateNavigationItems()
     {
-        yield return new NavItem(AppPage.Dashboard, Localization.PageTitle(AppPage.Dashboard));
-        yield return new NavItem(AppPage.Control, Localization.ControlText);
-        yield return new NavItem(AppPage.EegSignalCapture, Localization.EegSignalCaptureText);
-        yield return new NavItem(AppPage.AssessmentCapture, Localization.AssessmentCaptureText);
-        yield return new NavItem(AppPage.ClosedLoopControl, Localization.ClosedLoopControlText);
-        yield return new NavItem(AppPage.HeadModel, Localization.HeadModelText);
-        yield return new NavItem(AppPage.FemSimulation, Localization.FemSimulationText);
+        foreach (var definition in FeatureCatalog.Navigation)
+        {
+            if (featureVisibilityService.IsVisible(definition.Key))
+            {
+                yield return new NavItem(
+                    definition.Page,
+                    Localization.FeatureText(definition.LocalizationKey));
+            }
+        }
+
+        // 设置页是恢复导航显示的唯一入口，固定显示且不允许被屏蔽。
         yield return new NavItem(AppPage.Settings, Localization.SettingsText);
     }
 
@@ -461,9 +546,72 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         ShellState.FooterStatus = result.FooterStatus;
     }
 
+    private void ShowToast(bool success, string title, string message)
+    {
+        toastDismissCts?.Cancel();
+        toastDismissCts?.Dispose();
+        toastDismissCts = new CancellationTokenSource();
+
+        isToastSuccess = success;
+        ToastTitle = title;
+        ToastMessage = message;
+        isToastVisible = true;
+        OnPropertyChanged(nameof(ToastVisibility));
+        OnPropertyChanged(nameof(ToastIcon));
+        OnPropertyChanged(nameof(ToastAccent));
+
+        _ = HideToastAfterDelayAsync(toastDismissCts);
+    }
+
+    private async Task HideToastAfterDelayAsync(CancellationTokenSource owner)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3), owner.Token);
+            if (!ReferenceEquals(toastDismissCts, owner))
+            {
+                return;
+            }
+
+            isToastVisible = false;
+            OnPropertyChanged(nameof(ToastVisibility));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(toastDismissCts, owner))
+            {
+                toastDismissCts = null;
+                owner.Dispose();
+            }
+        }
+    }
+
+    private void HandleImpedanceRefreshError(Exception exception)
+    {
+        logger.Error("阻抗刷新失败", exception);
+        ShellState.FooterStatus = $"阻抗刷新失败：{exception.Message}";
+        ShowToast(false, "刷新失败", "未收到有效的阻抗反馈，请检查设备连接后重试。");
+    }
+
+    private void HandleDeviceOperationError(string title, string message, Exception exception)
+    {
+        logger.Error(title, exception);
+        ShellState.FooterStatus = $"{title}：{exception.Message}";
+        ShowToast(false, title, message);
+    }
+
     /// <summary>导航到指定页面。</summary>
     public void Navigate(AppPage page)
     {
+        if (currentPage == page && page == AppPage.Control)
+        {
+            ShowStimulationTypeSelection();
+            return;
+        }
+
         if (EegSignalCapture.IsRecording && currentPage == AppPage.EegSignalCapture && page != currentPage)
         {
             throw new InvalidOperationException("EEG 采集中请使用异步页面切换入口。");
@@ -479,6 +627,11 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     {
         if (currentPage == page)
         {
+            if (page == AppPage.Control)
+            {
+                ShowStimulationTypeSelection();
+            }
+
             return;
         }
 
@@ -492,20 +645,105 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
     private void ChangeCurrentPage(AppPage page)
     {
+        if (currentPage == AppPage.Settings && page != AppPage.Settings)
+        {
+            Config.LeaveSettingsPage();
+        }
+
         if (!SetProperty(ref currentPage, page))
         {
             return;
         }
 
-        if (page == AppPage.Control)
+        if (page == AppPage.Settings)
         {
-            TiControl.RestoreLastSelection();
+            Config.EnterSettingsPage();
         }
 
         CurrentPageViewModel = ResolvePageViewModel(page);
         Navigation.Select(page);
         OnPropertyChanged(nameof(PageTitle));
         AppendLog($"NAVIGATE {page}");
+    }
+
+    private void ShowTemporalInterference()
+    {
+        TiControl.RestoreLastSelection();
+        CurrentPageViewModel = TiControl;
+        AppendLog("STIMULATION TYPE TI selected");
+    }
+
+    private void ShowStimulationTypeSelection()
+    {
+        StimulationTypeSelection.RefreshVisibility();
+        CurrentPageViewModel = StimulationTypeSelection;
+        Navigation.Select(AppPage.Control);
+        AppendLog("STIMULATION TYPE selection");
+    }
+
+    private void ShowDirectCurrent()
+    {
+        CurrentPageViewModel = DirectCurrentControl;
+        ShellState.FooterStatus = "经颅直流电刺激参数设置";
+        AppendLog("STIMULATION TYPE tDCS selected");
+    }
+
+    private void ApplyPrescription(PrescriptionDefinition prescription)
+    {
+        if (currentPage != AppPage.Control)
+        {
+            ChangeCurrentPage(AppPage.Control);
+        }
+
+        if (prescription.StimulationType == "TI")
+        {
+            TiControl.ApplyPrescription(prescription);
+            CurrentPageViewModel = TiControl;
+            Navigation.Select(AppPage.Control);
+        }
+        else
+        {
+            DirectCurrentControl.ApplyPrescription(prescription);
+            ShowDirectCurrent();
+        }
+        ShellState.FooterStatus = $"已应用处方：{prescription.Name}";
+        AppendLog($"PRESCRIPTION applied {prescription.Id}");
+    }
+
+    private async Task InitializeFeatureVisibilityAsync()
+    {
+        await Config.InitializeAsync();
+        ApplyFeatureVisibility();
+    }
+
+    private void ApplyFeatureVisibility()
+    {
+        BuildNavigationItems();
+        OnPropertyChanged(nameof(SimulationMenuVisibility));
+
+        if (!IsPageVisible(CurrentPage))
+        {
+            var fallbackPage = FeatureCatalog.Navigation
+                .Where(item => featureVisibilityService.IsVisible(item.Key))
+                .Select(item => (AppPage?)item.Page)
+                .FirstOrDefault() ?? AppPage.Settings;
+            ChangeCurrentPage(fallbackPage);
+            return;
+        }
+
+        Navigation.Select(CurrentPage);
+        StimulationTypeSelection.RefreshVisibility();
+    }
+
+    private bool IsPageVisible(AppPage page)
+    {
+        if (page == AppPage.Settings)
+        {
+            return true;
+        }
+
+        var definition = FeatureCatalog.Navigation.FirstOrDefault(item => item.Page == page);
+        return definition is null || featureVisibilityService.IsVisible(definition.Key);
     }
 
     public void ToggleSidebar()
@@ -596,19 +834,25 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     }
 
     // 这些方法被对应 Command 调用，再转给 IHardwareService。
-    public async Task ConnectDeviceAsync()
+    public async Task ConnectDeviceAsync(CancellationToken cancellationToken = default)
     {
-        ApplyHardwareResult(await hardwareService.ConnectAsync());
+        var result = await hardwareService.ConnectAsync(cancellationToken);
+        ApplyHardwareResult(result);
+        ShowToast(true, "联机成功", "设备已联机，通讯链路已建立。");
     }
 
-    public async Task HandshakeDeviceAsync()
+    public async Task HandshakeDeviceAsync(CancellationToken cancellationToken = default)
     {
-        ApplyHardwareResult(await hardwareService.HandshakeAsync());
+        var result = await hardwareService.HandshakeAsync(cancellationToken);
+        ApplyHardwareResult(result);
+        ShowToast(true, "握手检测成功", "握手检测通过，设备通讯正常。");
     }
 
-    public async Task DisconnectDeviceAsync()
+    public async Task DisconnectDeviceAsync(CancellationToken cancellationToken = default)
     {
-        ApplyHardwareResult(await hardwareService.DisconnectAsync());
+        var result = await hardwareService.DisconnectAsync(cancellationToken);
+        ApplyHardwareResult(result);
+        ShowToast(true, "断开成功", "设备连接已断开。");
     }
 
     public async Task ReadProductModelAsync()
@@ -621,8 +865,10 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         ApplyHardwareResult(await hardwareService.ReadBoardModelAsync());
     }
 
-    public async Task CheckImpedanceAsync()
+    public async Task CheckImpedanceAsync(CancellationToken cancellationToken = default)
     {
-        ApplyHardwareResult(await hardwareService.CheckImpedanceAsync());
+        var result = await hardwareService.CheckImpedanceAsync(cancellationToken);
+        ApplyHardwareResult(result);
+        ShowToast(true, "刷新成功", "阻抗值已刷新。");
     }
 }

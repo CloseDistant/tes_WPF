@@ -72,6 +72,7 @@ public static class AppComposition
         services.AddTransient<ICameraCaptureService, OpenCvCameraCaptureService>(); // 摄像头设备生命周期
         services.AddSingleton<IUserDialogService, UserDialogService>(); // 统一确认弹窗服务
         services.AddSingleton<IAccountService, LocalAccountService>(); // 本地离线账号服务
+        services.AddSingleton<IFeatureVisibilityService, LocalFeatureVisibilityService>(); // Admin 功能显示配置
         services.AddSingleton<IPatientService, LocalPatientService>(); // 本地患者服务
         services.AddSingleton<IStimulationRecordService, LocalStimulationRecordService>(); // 刺激记录服务
         services.AddSingleton<IEegSegmentFileWriter, EegSegmentFileWriter>(); // EEG 分段二进制写入
@@ -94,7 +95,10 @@ public static class AppComposition
         services.AddTransient<PatientViewModel>();         // 患者信息
         services.AddTransient<ShellStateViewModel>();      // 底部状态栏
         services.AddTransient<MonitorViewModel>();         // 总览面板
+        services.AddTransient<StimulationTypeSelectionViewModel>(); // 电刺激类型选择页
         services.AddTransient<TiControlViewModel>();       // TI 控制面板
+        services.AddTransient<DirectCurrentControlViewModel>(); // tDCS 独立页面
+        services.AddTransient<PrescriptionViewModel>(); // 公用处方管理页面
         services.AddSingleton<EegSignalCaptureViewModel>(); // EEG 采集面板
         services.AddSingleton<AssessmentCaptureViewModel>(); // 采集工作台：导航切换时保留模块进度
         services.AddSingleton<AssessmentWorkbenchCoordinator>(); // 数字表型工作台流程协调器和模块 VM 容器

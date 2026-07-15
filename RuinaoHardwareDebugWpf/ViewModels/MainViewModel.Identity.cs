@@ -35,6 +35,12 @@ public sealed partial class MainViewModel
 
     private async Task CreatePatientAsync()
     {
+        if (!CanManagePatients)
+        {
+            ShellState.FooterStatus = "只有 Admin 或 Doctor 可以新增患者";
+            return;
+        }
+
         var dialog = new PatientFormDialog(null)
         {
             Owner = System.Windows.Application.Current?.MainWindow
@@ -56,6 +62,12 @@ public sealed partial class MainViewModel
 
     private async Task EditPatientAsync()
     {
+        if (!CanManagePatients)
+        {
+            ShellState.FooterStatus = "只有 Admin 或 Doctor 可以编辑患者信息";
+            return;
+        }
+
         var current = patientService.CurrentPatient;
         if (current is null)
         {
@@ -79,6 +91,12 @@ public sealed partial class MainViewModel
 
     private async Task SwitchPatientAsync()
     {
+        if (!CanManagePatients)
+        {
+            ShellState.FooterStatus = "只有 Admin 或 Doctor 可以切换患者";
+            return;
+        }
+
         var patients = await patientService.GetPatientsAsync();
         if (patients.Count == 0)
         {
@@ -220,6 +238,22 @@ public sealed partial class MainViewModel
         }
     }
 
+    private Task ViewAccountListAsync()
+    {
+        if (!accountService.IsCurrentUserAdmin())
+        {
+            ShellState.FooterStatus = "只有 Admin 可以查看账号列表";
+            return Task.CompletedTask;
+        }
+
+        var dialog = new AccountListDialog(accountService)
+        {
+            Owner = System.Windows.Application.Current?.MainWindow
+        };
+        dialog.ShowDialog();
+        return Task.CompletedTask;
+    }
+
     private async Task SwitchAccountAsync()
     {
         var previousUser = accountService.CurrentUser;
@@ -247,6 +281,8 @@ public sealed partial class MainViewModel
         OnPropertyChanged(nameof(LoginMenuVisibility));
         OnPropertyChanged(nameof(LoggedInMenuVisibility));
         OnPropertyChanged(nameof(AdminMenuVisibility));
+        OnPropertyChanged(nameof(CanManagePatients));
+        OnPropertyChanged(nameof(PatientMenuVisibility));
     }
 
     private async Task<CurrentUserInfo?> ShowLoginDialogAsync()

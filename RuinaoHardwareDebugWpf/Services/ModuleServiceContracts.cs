@@ -58,7 +58,20 @@ public sealed record StimulationRecordRequest(
     string Action,
     string GroupTitle,
     string SelectedChannelNames,
-    string Status);
+    string Status,
+    string? StimulationType = null,
+    string? PrescriptionName = null,
+    string? AdverseReactionRecord = null,
+    string? ParameterSnapshotJson = null);
+
+public sealed record StimulationTreatmentRecord(
+    long Id,
+    string PatientDisplay,
+    string StimulationType,
+    DateOnly TreatmentDate,
+    string PrescriptionName,
+    string AdverseReactionRecord,
+    PrescriptionDefinition ParameterRecord);
 
 /// <summary>
 /// 患者服务接口。
@@ -88,6 +101,8 @@ public interface IPatientService
 public interface IStimulationRecordService
 {
     Task RecordAsync(StimulationRecordRequest request, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<StimulationTreatmentRecord>> GetTreatmentRecordsAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>

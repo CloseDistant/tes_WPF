@@ -21,6 +21,8 @@ internal static class AccountDbContextModelConfiguration
         entity.Property(item => item.RoleId).HasColumnName("role_id");
         entity.Property(item => item.PasswordHash).HasColumnName("password_hash");
         entity.Property(item => item.PasswordSalt).HasColumnName("password_salt");
+        entity.Property(item => item.FailedLoginAttempts).HasColumnName("failed_login_attempts");
+        entity.Property(item => item.LockoutEndUnixMs).HasColumnName("lockout_end_unix_ms");
         entity.Property(item => item.MustChangePassword).HasColumnName("must_change_password");
         entity.Property(item => item.IsActive).HasColumnName("is_active");
         entity.Property(item => item.CreatedAtUnixMs).HasColumnName("created_at_unix_ms");

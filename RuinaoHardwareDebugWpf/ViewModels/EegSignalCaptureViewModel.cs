@@ -11,6 +11,7 @@ public sealed class EegSignalCaptureViewModel : ObservableObject
     private readonly IEegRecordingService recordingService;
     private readonly IUnifiedSessionService unifiedSessionService;
     private readonly IUserDialogService userDialogService;
+    private readonly IPatientService patientService;
     private readonly object markerWriteSync = new();
     private readonly AsyncRelayCommand startCommand;
     private readonly AsyncRelayCommand stopCommand;
@@ -27,12 +28,14 @@ public sealed class EegSignalCaptureViewModel : ObservableObject
         IEegAcquisitionService acquisitionService,
         IEegRecordingService recordingService,
         IUnifiedSessionService unifiedSessionService,
-        IUserDialogService userDialogService)
+        IUserDialogService userDialogService,
+        IPatientService patientService)
     {
         this.acquisitionService = acquisitionService;
         this.recordingService = recordingService;
         this.unifiedSessionService = unifiedSessionService;
         this.userDialogService = userDialogService;
+        this.patientService = patientService;
         state = acquisitionService.State;
 
         startCommand = new AsyncRelayCommand(StartAsync, () => !IsRecording, HandleOperationError);
@@ -125,6 +128,12 @@ public sealed class EegSignalCaptureViewModel : ObservableObject
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
+        if (patientService.CurrentPatient is null)
+        {
+            userDialogService.ShowInformation("EEG 采集", "请先新增或选择患者，再开始 EEG 采集。");
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(RecordName))
         {
             RecordName = $"EEG_{DateTime.Now:yyyyMMdd_HHmmss}";

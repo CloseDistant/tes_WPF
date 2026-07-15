@@ -7,11 +7,11 @@
 public sealed class PatientViewModel : ObservableObject
 {
     private readonly IPatientService patientService;
-    private string patientCode = "未选择患者";
-    private string name = "-";
-    private string sex = "-";
-    private string age = "-";
-    private string symptom = "请新增或选择患者";
+    private string patientCode = string.Empty;
+    private string name = string.Empty;
+    private string sex = string.Empty;
+    private string age = string.Empty;
+    private string symptom = string.Empty;
 
     public PatientViewModel(IPatientService patientService)
     {
@@ -36,11 +36,11 @@ public sealed class PatientViewModel : ObservableObject
         var patient = patientService.CurrentPatient;
         if (patient is null)
         {
-            PatientCode = "未选择患者";
-            Name = "-";
-            Sex = "-";
-            Age = "-";
-            Symptom = "请新增或选择患者";
+            PatientCode = string.Empty;
+            Name = string.Empty;
+            Sex = string.Empty;
+            Age = string.Empty;
+            Symptom = string.Empty;
             return;
         }
 

@@ -8,6 +8,8 @@ internal sealed class AccountUserEntity
     public int RoleId { get; set; }
     public string PasswordHash { get; set; } = string.Empty;
     public string PasswordSalt { get; set; } = string.Empty;
+    public int FailedLoginAttempts { get; set; }
+    public long? LockoutEndUnixMs { get; set; }
     public bool MustChangePassword { get; set; }
     public bool IsActive { get; set; } = true;
     public long CreatedAtUnixMs { get; set; }
@@ -24,4 +26,3 @@ internal sealed class AccountAuditLogEntity
     public string? Message { get; set; }
     public long CreatedAtUnixMs { get; set; }
 }
-

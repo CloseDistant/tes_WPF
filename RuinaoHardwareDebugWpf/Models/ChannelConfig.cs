@@ -18,8 +18,9 @@ public sealed class ChannelConfig : ObservableObject
     private string rampDownS = string.Empty;
     private string durationS = string.Empty;
     private string intervalS = string.Empty;
+    private string singleDurationS = "60";
     private string frequencyHz = string.Empty;
-    private string polarity = string.Empty;
+    private string polarity = "不掉转";
     private string stimulationMode = "间隔";
     private string remainingTime = "00:00:00";
     private Brush accentBrush = Brushes.White;
@@ -46,12 +47,63 @@ public sealed class ChannelConfig : ObservableObject
     public string DurationS { get => durationS; set => SetProperty(ref durationS, value); }
 
     /// <summary>间隔时间，单位秒。仅在间隔模式下有意义。</summary>
-    public string IntervalS { get => intervalS; set => SetProperty(ref intervalS, value); }
+    public string IntervalS
+    {
+        get => intervalS;
+        set
+        {
+            if (SetProperty(ref intervalS, value))
+            {
+                OnPropertyChanged(nameof(IntervalDisplay));
+            }
+        }
+    }
+
+    /// <summary>间隔模式下每次刺激持续时间，单位秒。</summary>
+    public string SingleDurationS
+    {
+        get => singleDurationS;
+        set
+        {
+            if (SetProperty(ref singleDurationS, value))
+            {
+                OnPropertyChanged(nameof(SingleDurationDisplay));
+            }
+        }
+    }
+
+    /// <summary>连续模式显示“/”，间隔模式显示并编辑真实间隔时间。</summary>
+    public string IntervalDisplay
+    {
+        get => IsContinuousMode ? "/" : IntervalS;
+        set
+        {
+            if (!IsContinuousMode)
+            {
+                IntervalS = value;
+            }
+        }
+    }
+
+    /// <summary>连续模式显示“/”，间隔模式显示并编辑真实单次时长。</summary>
+    public string SingleDurationDisplay
+    {
+        get => IsContinuousMode ? "/" : SingleDurationS;
+        set
+        {
+            if (!IsContinuousMode)
+            {
+                SingleDurationS = value;
+            }
+        }
+    }
+
+    public bool AreIntervalFieldsEnabled => !IsContinuousMode;
 
     /// <summary>载波频率，单位 Hz。</summary>
     public string FrequencyHz { get => frequencyHz; set => SetProperty(ref frequencyHz, value); }
 
-    /// <summary>极性，例如 "+" 或 "-"。</summary>
+    /// <summary>刺激期间是否调转极性："不掉转" 或 "调转"。</summary>
     public string Polarity { get => polarity; set => SetProperty(ref polarity, value); }
 
     /// <summary>
@@ -67,6 +119,9 @@ public sealed class ChannelConfig : ObservableObject
             {
                 OnPropertyChanged(nameof(IsIntervalMode));
                 OnPropertyChanged(nameof(IsContinuousMode));
+                OnPropertyChanged(nameof(AreIntervalFieldsEnabled));
+                OnPropertyChanged(nameof(IntervalDisplay));
+                OnPropertyChanged(nameof(SingleDurationDisplay));
             }
         }
     }
