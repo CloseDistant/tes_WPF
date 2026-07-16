@@ -1,3 +1,6 @@
 <Solution>
-  <Project Path="RuinaoHardwareDebugWpf/RuinaoHardwareDebugWpf.csproj" />
+  <Project Path="RuinaoSoftwareWpf/RuinaoSoftwareWpf.csproj" />
+  <Project Path="RuinaoHardwareEngineer/RuinaoHardwareEngineer.csproj" />
+  <Project Path="RuinaoTesHardware/RuinaoTesHardware.csproj" />
+  <Project Path="RuinaoTesProtocol/RuinaoTesProtocol.csproj" />
 </Solution>

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>RuinaoHardwareEngineer</AssemblyName>
+    <RootNamespace>RuinaoHardwareEngineer</RootNamespace>
+    <AssemblyTitle>睿脑tES硬件工程师工具</AssemblyTitle>
+    <Product>睿脑tES硬件工程师工具</Product>
+    <Version>0.1.0</Version>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RuinaoTesHardware\RuinaoTesHardware.csproj" />
+    <ProjectReference Include="..\RuinaoTesProtocol\RuinaoTesProtocol.csproj" />
+  </ItemGroup>
+
+</Project>

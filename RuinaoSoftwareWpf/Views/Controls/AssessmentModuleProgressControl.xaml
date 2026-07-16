@@ -1,0 +1,29 @@
+<UserControl x:Class="RuinaoSoftwareWpf.Views.Controls.AssessmentModuleProgressControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ItemsControl ItemsSource="{Binding ModuleProgressItems}">
+        <ItemsControl.ItemTemplate>
+            <DataTemplate>
+                <Button Style="{DynamicResource ModuleProgressButton}"
+                        Background="{Binding BackgroundBrush}"
+                        BorderBrush="{Binding BorderBrush}"
+                        Command="{Binding DataContext.SwitchModuleCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="8" Height="8" CornerRadius="4" Background="{Binding DotBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding DisplayIndex, StringFormat={}{0}.}" Foreground="{Binding TitleBrush}" FontWeight="SemiBold" Margin="0,0,5,0" />
+                            <TextBlock Text="{Binding Name}" Foreground="{Binding TitleBrush}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </Grid>
+                </Button>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>

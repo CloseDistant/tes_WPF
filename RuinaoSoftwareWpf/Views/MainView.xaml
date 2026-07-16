@@ -1,0 +1,500 @@
+<UserControl x:Class="RuinaoSoftwareWpf.Views.MainView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="clr-namespace:RuinaoSoftwareWpf"
+             xmlns:views="clr-namespace:RuinaoSoftwareWpf.Views"
+             mc:Ignorable="d"
+             Background="#11141D">
+    <UserControl.Resources>
+        <DataTemplate DataType="{x:Type local:StimulationTypeSelectionViewModel}">
+            <views:StimulationTypeSelectionView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type local:DirectCurrentControlViewModel}">
+            <views:DirectCurrentControlView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type local:PrescriptionViewModel}">
+            <views:PrescriptionView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:TiControlViewModel}">
+            <views:TiControlView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:AssessmentCaptureViewModel}">
+            <views:AssessmentCaptureView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:EegSignalCaptureViewModel}">
+            <views:EegSignalCaptureView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:FemSimulationViewModel}">
+            <views:FemSimulationView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:MonitorViewModel}">
+            <views:MonitorView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:ConfigViewModel}">
+            <views:ConfigView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:DeviceViewModel}">
+            <views:DeviceView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:ReportViewModel}">
+            <views:ReportView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:PlaceholderPageViewModel}">
+            <views:PlaceholderPageView />
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="22" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#2A2B31" BorderBrush="#333640" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="240" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="12,0,0,0">
+                    <TextBlock Text="☼"
+                               Foreground="#D6A04C"
+                               FontSize="15"
+                               VerticalAlignment="Center"
+                               Margin="0,0,3,0" />
+                    <TextBlock Text="经颅直流电刺激上位机软件"
+                               Foreground="#F1F2F5"
+                               FontSize="14"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Margin="10,0" VerticalAlignment="Center">
+                        <ToggleButton x:Name="DeviceDropDownToggle"
+                                      Content="{Binding Localization.DeviceMenuText}"
+                                      Style="{StaticResource ToolbarDropDownButton}" />
+                        <Popup IsOpen="{Binding IsChecked, ElementName=DeviceDropDownToggle}"
+                               PlacementTarget="{Binding ElementName=DeviceDropDownToggle}"
+                               Placement="Bottom"
+                               StaysOpen="False">
+                            <Border Background="#1C202B"
+                                    BorderBrush="#303645"
+                                    BorderThickness="1"
+                                    MinWidth="150">
+                                <StackPanel>
+                                    <Button Content="{Binding Localization.ConnectText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ConnectCommand}" />
+                                    <Button Content="{Binding Localization.DisconnectText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding DisconnectCommand}" Visibility="Collapsed" />
+                                    <Border Height="1" Background="#303645" Margin="0,4" Visibility="Collapsed" />
+                                    <Button Content="{Binding Localization.HandshakeText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding HandshakeCommand}" Visibility="Collapsed" />
+                                    <Button Content="{Binding Localization.ReadProductModelText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ReadProductModelCommand}" Visibility="Collapsed" />
+                                    <Button Content="{Binding Localization.ReadBoardModelText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ReadBoardModelCommand}" Visibility="Collapsed" />
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal"
+                                Margin="10,0"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding SimulationMenuVisibility}">
+                        <ToggleButton x:Name="SimulationDropDownToggle"
+                                      Content="{Binding Localization.SimulationMenuText}"
+                                      Style="{StaticResource ToolbarDropDownButton}" />
+                        <Popup IsOpen="{Binding IsChecked, ElementName=SimulationDropDownToggle}"
+                               PlacementTarget="{Binding ElementName=SimulationDropDownToggle}"
+                               Placement="Bottom"
+                               StaysOpen="False">
+                            <Border Background="#1C202B" BorderBrush="#303645" BorderThickness="1" MinWidth="150">
+                                <StackPanel>
+                                    <Button Content="{Binding Localization.LoadModelText}" Style="{StaticResource ToolbarDropDownItem}" />
+                                    <Button Content="{Binding Localization.RunSimulationText}" Style="{StaticResource ToolbarDropDownItem}" />
+                                    <Button Content="{Binding Localization.SimulationResultText}" Style="{StaticResource ToolbarDropDownItem}" />
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="10,0" VerticalAlignment="Center">
+                        <ToggleButton x:Name="ToolsDropDownToggle"
+                                      Content="{Binding Localization.ToolsMenuText}"
+                                      Style="{StaticResource ToolbarDropDownButton}" />
+                        <Popup IsOpen="{Binding IsChecked, ElementName=ToolsDropDownToggle}"
+                               PlacementTarget="{Binding ElementName=ToolsDropDownToggle}"
+                               Placement="Bottom"
+                               StaysOpen="False">
+                            <Border Background="#1C202B"
+                                    BorderBrush="#303645"
+                                    BorderThickness="1"
+                                    MinWidth="150">
+                                <Button Content="{Binding Localization.ImpedanceCheckText}"
+                                        Style="{StaticResource ToolbarDropDownItem}"
+                                        Command="{Binding CheckImpedanceCommand}" />
+                            </Border>
+                        </Popup>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="10,0" VerticalAlignment="Center">
+                        <Button Content="{Binding AccountMenuHeader}"
+                                Foreground="{Binding AccountMenuForeground}"
+                                Style="{StaticResource ToolbarButton}"
+                                Command="{Binding LoginCommand}"
+                                Visibility="{Binding LoginMenuVisibility}" />
+                        <ToggleButton x:Name="AccountDropDownToggle"
+                                      Content="{Binding AccountMenuHeader}"
+                                      Foreground="{Binding AccountMenuForeground}"
+                                      Style="{StaticResource ToolbarDropDownButton}"
+                                      Visibility="{Binding LoggedInMenuVisibility}" />
+                        <Popup IsOpen="{Binding IsChecked, ElementName=AccountDropDownToggle}"
+                               PlacementTarget="{Binding ElementName=AccountDropDownToggle}"
+                               Placement="Bottom"
+                               StaysOpen="False">
+                            <Border Background="#1C202B" BorderBrush="#303645" BorderThickness="1" MinWidth="150">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding CurrentUserSummary}"
+                                               Visibility="{Binding LoggedInMenuVisibility}"
+                                               Foreground="{StaticResource SubText}"
+                                               FontSize="12"
+                                               Padding="14,8" />
+                                    <Button Content="注册账号"
+                                            Style="{StaticResource ToolbarDropDownItem}"
+                                            Command="{Binding RegisterAccountCommand}"
+                                            Visibility="{Binding AdminMenuVisibility}" />
+                                    <Button Content="账号列表"
+                                            Style="{StaticResource ToolbarDropDownItem}"
+                                            Command="{Binding ViewAccountListCommand}"
+                                            Visibility="{Binding AdminMenuVisibility}" />
+                                    <Button Content="切换账号"
+                                            Style="{StaticResource ToolbarDropDownItem}"
+                                            Command="{Binding SwitchAccountCommand}"
+                                            Visibility="{Binding LoggedInMenuVisibility}" />
+                                    <Button Content="{Binding Localization.LogoutText}"
+                                            Style="{StaticResource ToolbarDropDownItem}"
+                                            Command="{Binding LogoutCommand}"
+                                            Visibility="{Binding LoggedInMenuVisibility}" />
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="6,0,14,0" VerticalAlignment="Center">
+                        <ToggleButton x:Name="MoreDropDownToggle"
+                                      Content="..."
+                                      Style="{StaticResource ToolbarDropDownButton}" />
+                        <Popup IsOpen="{Binding IsChecked, ElementName=MoreDropDownToggle}"
+                               PlacementTarget="{Binding ElementName=MoreDropDownToggle}"
+                               Placement="Bottom"
+                               StaysOpen="False">
+                            <Border Background="#1C202B" BorderBrush="#303645" BorderThickness="1" MinWidth="150">
+                                <StackPanel>
+                                    <Button Content="{Binding Localization.ExitApplicationText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ExitCommand}" />
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="{Binding SidebarColumnWidth}" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0"
+                    Background="#151923"
+                    BorderBrush="#242A36"
+                    BorderThickness="0,0,1,0"
+                    Visibility="{Binding SidebarVisibility}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="150" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Margin="16,22">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="34" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding Patient.PatientCode}"
+                                       FontWeight="SemiBold"
+                                       FontSize="15"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <ToggleButton x:Name="PatientDropDownToggle"
+                                          Grid.Column="1"
+                                          Content="..."
+                                          Width="28"
+                                          Height="22"
+                                          Background="#272C38"
+                                          Foreground="{StaticResource Text}"
+                                          BorderBrush="#3A4050"
+                                          BorderThickness="1"
+                                          FontWeight="SemiBold"
+                                          Cursor="Hand"
+                                          Visibility="{Binding PatientMenuVisibility}" />
+                            <Popup IsOpen="{Binding IsChecked, ElementName=PatientDropDownToggle}"
+                                   PlacementTarget="{Binding ElementName=PatientDropDownToggle}"
+                                   Placement="Bottom"
+                                   StaysOpen="False">
+                                <Border Background="#1C202B"
+                                        BorderBrush="#303645"
+                                        BorderThickness="1"
+                                        MinWidth="150">
+                                    <StackPanel>
+                                        <Button Content="编辑患者信息"
+                                                Style="{StaticResource ToolbarDropDownItem}"
+                                                Command="{Binding EditPatientCommand}" />
+                                        <Button Content="切换患者"
+                                                Style="{StaticResource ToolbarDropDownItem}"
+                                                Command="{Binding SwitchPatientCommand}" />
+                                        <Button Content="新增患者"
+                                                Style="{StaticResource ToolbarDropDownItem}"
+                                                Command="{Binding CreatePatientCommand}" />
+                                    </StackPanel>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <Grid Margin="0,16,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="70" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="26" />
+                                <RowDefinition Height="26" />
+                                <RowDefinition Height="26" />
+                            </Grid.RowDefinitions>
+                        <TextBlock Text="{Binding Localization.NameLabel}" Foreground="{StaticResource SubText}" />
+                            <TextBlock Grid.Column="1" Text="{Binding Patient.Name}" />
+                            <TextBlock Grid.Row="1" Text="{Binding Localization.SexLabel}" Foreground="{StaticResource SubText}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Patient.Sex}" />
+                            <TextBlock Grid.Row="2" Text="{Binding Localization.AgeLabel}" Foreground="{StaticResource SubText}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Patient.Age}" />
+                        </Grid>
+                        <TextBlock Text="{Binding Patient.Symptom}" Foreground="{StaticResource SubText}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Margin="0,18,0,0">
+                        <Border BorderBrush="#252B38"
+                                BorderThickness="0,0,0,1"
+                                Padding="0,0,0,8"
+                                Margin="0,0,0,12">
+                            <DockPanel LastChildFill="True">
+                                <Border DockPanel.Dock="Left"
+                                        Width="3"
+                                        Height="16"
+                                        CornerRadius="2"
+                                        Background="{StaticResource Gold}"
+                                        Margin="0,1,10,0" />
+                                <TextBlock Text="{Binding Localization.NavigationText}"
+                                           Foreground="#D8E0EC"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+                            </DockPanel>
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding Navigation.Items}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type local:NavItem}">
+                                    <Border Cursor="Hand">
+                                        <Border.InputBindings>
+                                            <MouseBinding Gesture="LeftClick"
+                                                          Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                          CommandParameter="{Binding Page}" />
+                                        </Border.InputBindings>
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="BorderBrush" Value="{StaticResource Gold}" />
+                                                <Setter Property="BorderThickness" Value="0" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                        <Setter Property="BorderThickness" Value="3,0,0,0" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding Text}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource NavText}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                            <Setter Property="Foreground" Value="{StaticResource Gold}" />
+                                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+
+            <ContentControl Grid.Column="1"
+                            Content="{Binding CurrentPageViewModel}" />
+
+            <Button Grid.Column="1"
+                    Width="22"
+                    Height="56"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Margin="{Binding SidebarToggleMargin}"
+                    Panel.ZIndex="20"
+                    Background="#252A34"
+                    BorderBrush="#3A4050"
+                    BorderThickness="1"
+                    Content="{Binding SidebarToggleGlyph}"
+                    Command="{Binding ToggleSidebarCommand}"
+                    Cursor="Hand"
+                    Foreground="#D7DEE9"
+                    FontSize="14"
+                    FontWeight="SemiBold"
+                    ToolTip="{Binding SidebarToggleToolTip}">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border Margin="1"
+                                    Background="#151923"
+                                    CornerRadius="12"
+                                    Opacity="0.45" />
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="11">
+                                <Grid>
+                                    <Rectangle Width="1"
+                                               HorizontalAlignment="Center"
+                                               Fill="#303645"
+                                               Opacity="0.65" />
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center" />
+                                </Grid>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#303643" />
+                                <Setter Property="Foreground" Value="{StaticResource Text}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="{StaticResource Gold}" />
+                                <Setter Property="Foreground" Value="{StaticResource Bg}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </Grid>
+
+        <Border Grid.Row="1"
+                Width="440"
+                Height="68"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Margin="0,18,0,0"
+                Padding="0"
+                Panel.ZIndex="100"
+                Background="#202632"
+                BorderBrush="#3A4353"
+                BorderThickness="1"
+                CornerRadius="5"
+                Visibility="{Binding Toast.Visibility}">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000"
+                                  BlurRadius="14"
+                                  ShadowDepth="3"
+                                  Opacity="0.34" />
+            </Border.Effect>
+            <Border.RenderTransform>
+                <TranslateTransform Y="0" />
+            </Border.RenderTransform>
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Opacity" Value="0" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Toast.Visibility}" Value="Visible">
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                         From="0"
+                                                         To="1"
+                                                         Duration="0:0:0.16" />
+                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                         From="-8"
+                                                         To="0"
+                                                         Duration="0:0:0.16" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="3" />
+                    <ColumnDefinition Width="52" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Background="{Binding Toast.Accent}"
+                        CornerRadius="4,0,0,4" />
+                <Border Grid.Column="1"
+                        Width="26"
+                        Height="26"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="#151A23"
+                        BorderBrush="{Binding Toast.Accent}"
+                        BorderThickness="1"
+                        CornerRadius="13">
+                    <TextBlock Text="{Binding Toast.Icon}"
+                               Foreground="{Binding Toast.Accent}"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Grid.Column="2"
+                            Margin="2,11,18,10"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Toast.Title}"
+                               Foreground="#F1F4F8"
+                               FontSize="13"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Toast.Message}"
+                               Foreground="#AEB8C8"
+                               FontSize="12"
+                               Margin="0,3,0,0"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="2" Background="#0D1017" BorderBrush="#252A35" BorderThickness="0,1,0,0">
+            <TextBlock Text="{Binding ShellState.FooterStatus}"
+                       Foreground="{StaticResource SubText}"
+                       VerticalAlignment="Center"
+                       Margin="8,0" />
+        </Border>
+    </Grid>
+</UserControl>
+

@@ -1,0 +1,152 @@
+<UserControl x:Class="RuinaoSoftwareWpf.Views.ReportView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="#11141D"
+             Loaded="UserControl_Loaded">
+    <UserControl.Resources>
+        <Style x:Key="RecordGridHeader" TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#202633"/>
+            <Setter Property="Foreground" Value="#C7D0DF"/>
+            <Setter Property="BorderBrush" Value="#313846"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
+        <Style x:Key="RecordGridCell" TargetType="DataGridCell">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#E1E6EF"/>
+            <Setter Property="BorderBrush" Value="#292F3B"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="RecordGridRow" TargetType="DataGridRow">
+            <Setter Property="Background" Value="#1C212B"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Style.Triggers>
+                <Trigger Property="AlternationIndex" Value="1">
+                    <Setter Property="Background" Value="#1F242F"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#272D39"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#303745"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="RecordButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#FFB52E"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent"
+                                Padding="{TemplateBinding Padding}">
+                            <TextBlock Text="{TemplateBinding Content}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       FontWeight="{TemplateBinding FontWeight}"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="#FFD36A"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Foreground" Value="#E0951D"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+    <Border Margin="16"
+            Background="#181D27"
+            BorderBrush="#303746"
+            BorderThickness="1"
+            CornerRadius="5">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="58"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Border BorderBrush="#303746" BorderThickness="0,0,0,1" Padding="18,0">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="刺激记录"
+                               Foreground="#F0F3F8"
+                               FontSize="17"
+                               FontWeight="SemiBold"/>
+                    <TextBlock Text="治疗参数与处方记录"
+                               Margin="0,4,0,0"
+                               Foreground="#7F8BA0"
+                               FontSize="12"/>
+                </StackPanel>
+            </Border>
+            <DataGrid Grid.Row="1"
+                  ItemsSource="{Binding Records}"
+                  SelectedItem="{Binding SelectedRecord}"
+                  AutoGenerateColumns="False"
+                  HeadersVisibility="Column"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  CanUserReorderColumns="False"
+                  CanUserResizeRows="False"
+                  IsReadOnly="True"
+                  GridLinesVisibility="None"
+                  AlternationCount="2"
+                  RowHeight="38"
+                  ColumnHeaderHeight="42"
+                  Background="#181D27"
+                  BorderThickness="0"
+                  Foreground="#E1E6EF"
+                  ColumnHeaderStyle="{StaticResource RecordGridHeader}"
+                  CellStyle="{StaticResource RecordGridCell}"
+                  RowStyle="{StaticResource RecordGridRow}">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="序号" Binding="{Binding RowNumber}" Width="70"/>
+                <DataGridTextColumn Header="患者" Binding="{Binding PatientDisplay}" Width="1.05*"/>
+                <DataGridTextColumn Header="刺激方式" Binding="{Binding StimulationType}" Width="1.15*"/>
+                <DataGridTextColumn Header="治疗日期" Binding="{Binding TreatmentDate}" Width="160"/>
+                <DataGridTextColumn Header="处方" Binding="{Binding PrescriptionName}" Width="1.05*"/>
+                <DataGridTextColumn Header="不良反应记录" Binding="{Binding AdverseReactionRecord}" Width="1.2*"/>
+                <DataGridTemplateColumn Header="处方记录" Width="120">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Content="导出"
+                                    Style="{StaticResource RecordButton}"
+                                    Command="{Binding DataContext.ExportCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="复用参数" Width="140">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Content="复用参数"
+                                    Style="{StaticResource RecordButton}"
+                                    Command="{Binding DataContext.ReuseCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+        </Grid>
+    </Border>
+</UserControl>
