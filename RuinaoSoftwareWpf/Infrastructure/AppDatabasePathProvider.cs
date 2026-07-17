@@ -16,8 +16,13 @@ internal static class AppDatabasePathProvider
                 return Path.Combine(Path.GetFullPath(configuredDirectory), DatabaseFileName);
             }
 
-            var root = FindWorkspaceRoot() ?? AppContext.BaseDirectory;
-            return Path.Combine(root, "data", DatabaseFileName);
+            var documentsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            if (string.IsNullOrWhiteSpace(documentsDirectory))
+            {
+                throw new InvalidOperationException("无法获取当前 Windows 用户的文档目录。");
+            }
+
+            return Path.Combine(documentsDirectory, "ruinao", "data", DatabaseFileName);
         }
     }
 
@@ -25,20 +30,4 @@ internal static class AppDatabasePathProvider
         Path.GetDirectoryName(MainDatabasePath)!,
         "security",
         "patient.key");
-
-    private static string? FindWorkspaceRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "Ruinao.slnx")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        return null;
-    }
 }

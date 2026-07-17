@@ -29,6 +29,10 @@ public sealed partial class RuinaoTesProtocolBridge
     private readonly BackplaneClient backplaneClient;
     private readonly ILoggingService logger;
     private static readonly TimeSpan InitialLinkStabilizationDelay = TimeSpan.FromMilliseconds(500);
+    private static readonly BackplaneConnectionOptions ProbeHandshakeOptions = new(
+        ProtocolVersion: 0x01,
+        Timeout: TimeSpan.FromMilliseconds(500),
+        HandshakeAckRequired: false);
     private static readonly BackplaneConnectionOptions BackplaneOptions = new(
         ProtocolVersion: 0x01,
         Timeout: TimeSpan.FromSeconds(2),
@@ -64,6 +68,25 @@ public sealed partial class RuinaoTesProtocolBridge
             await Task.Delay(InitialLinkStabilizationDelay, cancellationToken);
         }
 
+        // 第一帧只用于消耗可能被硬件忽略的首次序列号（现场常见为seq=1）。
+        // 无论预热帧成功还是超时，均不作为联机依据；下一帧才是正式联机握手。
+        try
+        {
+            var probe = await backplaneClient.HandshakeAsync(ProbeHandshakeOptions, cancellationToken);
+            logger.Hardware(
+                $"[PROBE_OK] 预热握手已完成但不作为联机依据：seq={probe.RequestSequence} "
+                + $"ackSeq={probe.ResponseAckSequence} 耗时={probe.Elapsed.TotalMilliseconds:F1}ms");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.Warning($"[PROBE_IGNORED] 预热握手未成功，按设计忽略并继续正式握手：{exception.Message}");
+        }
+
+        logger.Hardware("[CONNECT_HANDSHAKE] 开始发送正式联机握手；只有本帧成功才进入联机状态并启动心跳");
         return await backplaneClient.HandshakeAsync(BackplaneOptions, cancellationToken);
     }
 
@@ -80,7 +103,13 @@ public sealed partial class RuinaoTesProtocolBridge
     /// </summary>
     public async Task<BackplaneHandshakeResult> HandshakeAsync(CancellationToken cancellationToken = default)
     {
-        _ = await EnsureUsbLinkOpenAsync(cancellationToken);
+        var newlyOpened = await EnsureUsbLinkOpenAsync(cancellationToken);
+        if (newlyOpened)
+        {
+            logger.Hardware("USB接收循环已就绪，等待500ms后发送单次握手检测帧");
+            await Task.Delay(InitialLinkStabilizationDelay, cancellationToken);
+        }
+
         return await backplaneClient.HandshakeAsync(BackplaneOptions, cancellationToken);
     }
 

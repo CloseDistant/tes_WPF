@@ -105,20 +105,39 @@ public sealed class HardwareService : IHardwareService
     }
 
     /// <summary>
-    /// 手动握手检测：发送一次握手帧，常用于测试通信是否正常。
+    /// 手动握手检测：只发送一次握手帧，用于诊断通信是否正常。
+    /// 离线状态下即使握手成功，也不会改变为联机状态、不会启动心跳；检测完成后立即释放临时USB链路。
     /// </summary>
     public async Task<HardwareOperationResult> HandshakeAsync(CancellationToken cancellationToken = default)
     {
-        if (!IsConnected)
+        if (IsConnected)
         {
-            return await ConnectAsync(cancellationToken);
+            var onlineHandshake = await RunDeviceOperationAsync(HandshakeOnProtocolBridgeAsync, cancellationToken);
+            logger.Hardware(
+                $"联机状态握手检测成功：ackSeq={onlineHandshake.ResponseAckSequence}，耗时={onlineHandshake.Elapsed.TotalMilliseconds:F1}ms");
+            return Result(
+                $"设备：已联机 | 握手成功 | ACK：{onlineHandshake.ResponseAckSequence}",
+                FormatHandshakeFeedback("握手检测成功（保持联机）", onlineHandshake));
         }
 
-        var handshake = await RunDeviceOperationAsync(HandshakeOnProtocolBridgeAsync, cancellationToken);
-        logger.Hardware($"真实握手成功：ackSeq={handshake.ResponseAckSequence}，耗时={handshake.Elapsed.TotalMilliseconds:F1}ms");
-        return Result(
-            $"设备：握手成功 | ACK：{handshake.ResponseAckSequence} | 耗时：{handshake.Elapsed.TotalMilliseconds:F1}ms",
-            FormatHandshakeFeedback("握手检测成功", handshake));
+        try
+        {
+            // 离线诊断直接调用单次握手入口，不执行正式联机专用的“预热帧 + 正式帧”流程。
+            // 这里不设置IsConnected，也不调用StartHeartbeat，避免把诊断动作误当成正式联机。
+            var offlineHandshake = await RunDeviceOperationAsync(HandshakeOnProtocolBridgeAsync, cancellationToken);
+            logger.Hardware(
+                $"离线握手检测成功但不进入联机状态：ackSeq={offlineHandshake.ResponseAckSequence}，"
+                + $"耗时={offlineHandshake.Elapsed.TotalMilliseconds:F1}ms");
+            return Result(
+                $"设备：未联机 | 单次握手成功 | ACK：{offlineHandshake.ResponseAckSequence}",
+                FormatHandshakeFeedback("握手检测成功（未进入联机状态）", offlineHandshake));
+        }
+        finally
+        {
+            // 无论离线握手成功、超时还是被取消，都关闭本次诊断使用的临时链路。
+            IsConnected = false;
+            await CloseProtocolLinkQuietlyAsync();
+        }
     }
 
     /// <summary>

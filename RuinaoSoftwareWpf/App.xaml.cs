@@ -17,6 +17,8 @@ namespace RuinaoSoftwareWpf;
 /// </summary>
 public partial class App : Application
 {
+    private bool systemSleepInhibitionActive;
+
     private ILoggingService Logger => AppComposition.Services.GetRequiredService<ILoggingService>();
 
     /// <summary>
@@ -31,6 +33,8 @@ public partial class App : Application
             $"启动环境：Assembly={assemblyName.Name}; Version={assemblyName.Version}; " +
             $"Runtime={RuntimeInformation.FrameworkDescription}; OS={RuntimeInformation.OSDescription}; " +
             $"ProcessPath={Environment.ProcessPath ?? "未知"}");
+
+        systemSleepInhibitionActive = SystemSleepInhibitor.TryEnable();
 
         // 捕获 UI 线程未处理异常（比如按钮点击里抛出的异常没 try-catch）。
         DispatcherUnhandledException += (_, args) =>
@@ -91,6 +95,12 @@ public partial class App : Application
     /// </summary>
     protected override void OnExit(ExitEventArgs e)
     {
+        if (systemSleepInhibitionActive)
+        {
+            SystemSleepInhibitor.Disable();
+            systemSleepInhibitionActive = false;
+        }
+
         Logger.Info($"软件退出，ExitCode={e.ApplicationExitCode}");
         base.OnExit(e);
     }
