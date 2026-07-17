@@ -19,7 +19,7 @@ public partial class MainWindow : Window
 
         client = new BackplaneClient(
             new WindowsUsbBackplaneDiscovery(),
-            new LibUsbKBackplaneTransport());
+            new UsbTestCompatibleBackplaneTransport());
         client.Log += Client_Log;
         client.StateChanged += Client_StateChanged;
 
@@ -101,12 +101,12 @@ public partial class MainWindow : Window
         {
             if (!byte.TryParse(versionText[2..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out protocolVersion))
             {
-                throw new FormatException("版本字段必须是0x00到0xFF，例如0x13。");
+                throw new FormatException("版本字段必须是0x00到0xFF，例如usbtest使用的0x01。");
             }
         }
         else if (!byte.TryParse(versionText, NumberStyles.Integer, CultureInfo.InvariantCulture, out protocolVersion))
         {
-            throw new FormatException("版本字段必须是0x00到0xFF，例如0x13。");
+            throw new FormatException("版本字段必须是0x00到0xFF，例如usbtest使用的0x01。");
         }
 
         if (!int.TryParse(TimeoutTextBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var timeoutMs)

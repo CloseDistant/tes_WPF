@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private bool closeAfterShutdown;
     private bool shutdownInProgress;
     private bool shutdownRequested;
+    private readonly CancellationTokenSource automaticConnectionCts = new();
 
     internal bool IsShutdownRequested => shutdownRequested || shutdownInProgress || closeAfterShutdown;
 
@@ -38,6 +39,7 @@ public partial class MainWindow : Window
         DataContext = viewModel;
         viewModel.CloseRequested += OnCloseRequested;
         RegisterAuthenticationEvents();
+        ContentRendered += OnFirstContentRendered;
         Closing += OnClosing;
         CompositionTarget.Rendering += OnRendering;
         Closed += (_, _) =>
@@ -45,8 +47,23 @@ public partial class MainWindow : Window
             CompositionTarget.Rendering -= OnRendering;
             viewModel.CloseRequested -= OnCloseRequested;
             UnregisterAuthenticationEvents();
+            automaticConnectionCts.Dispose();
         };
         logger.Info("主窗口创建完成");
+    }
+
+    private async void OnFirstContentRendered(object? sender, EventArgs e)
+    {
+        ContentRendered -= OnFirstContentRendered;
+        try
+        {
+            // 此时登录界面已经完成首帧显示；仅当工作站启动设置已开启时才在后台自动联机。
+            await viewModel.TryAutomaticConnectionOnceAsync(automaticConnectionCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // 软件关闭时取消自动联机属于正常流程。
+        }
     }
 
     private void OnRendering(object? sender, EventArgs e)
@@ -77,6 +94,7 @@ public partial class MainWindow : Window
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
         shutdownRequested = true;
+        automaticConnectionCts.Cancel();
         MainContent.CloseTransientPopups();
 
         if (closeAfterShutdown)

@@ -30,6 +30,9 @@ public interface ILoggingService
     /// <summary>记录硬件 TX 原始帧。Release 默认过滤，主要用于 Debug 联调。</summary>
     void HardwareTx(string command, byte[] frame);
 
+    /// <summary>记录硬件 RX 原始帧。Release 默认过滤，主要用于 Debug 联调。</summary>
+    void HardwareRx(string source, byte[] frame);
+
     /// <summary>记录硬件联调阶段的决策说明。Release 默认过滤，避免正式日志过于冗长。</summary>
     void HardwareDecision(string message);
 }

@@ -22,5 +22,7 @@ public sealed class AppLoggingService : ILoggingService
 
     public void HardwareTx(string command, byte[] frame) => DebugLog.WriteHardwareTx(command, frame);
 
+    public void HardwareRx(string source, byte[] frame) => DebugLog.WriteHardwareRx(source, frame);
+
     public void HardwareDecision(string message) => DebugLog.WriteHardwareDecision(message);
 }

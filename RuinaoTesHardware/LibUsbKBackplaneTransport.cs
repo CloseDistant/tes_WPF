@@ -8,7 +8,7 @@ namespace RuinaoTesHardware;
 /// 通过libusbK.dll访问已绑定libusbK.sys的tES设备。
 /// 按VID/PID打开设备，并自动选择第一个Bulk OUT和Bulk IN端点。
 /// </summary>
-public sealed class LibUsbKBackplaneTransport : IBackplaneTransport
+public sealed class LibUsbKBackplaneTransport : IBackplaneTransport, IBackplaneTransferDiagnostics
 {
     // 保证同一个USB句柄同一时间只进行一次“写请求+读回复”，避免两条命令的回复互相串帧。
     private readonly SemaphoreSlim exchangeGate = new(1, 1);
@@ -16,8 +16,15 @@ public sealed class LibUsbKBackplaneTransport : IBackplaneTransport
     private byte bulkInPipe;
     private byte bulkOutPipe;
     private uint timeoutMilliseconds;
+    private byte[]? lastWrittenFrame;
 
     public bool IsOpen => usbHandle != IntPtr.Zero;
+
+    // 返回副本，避免上层修改内部保存的原始发送帧。
+    public byte[]? LastWrittenFrame => lastWrittenFrame?.ToArray();
+
+    public event EventHandler<UsbWriteCompletedEventArgs>? WriteCompleted;
+    public event EventHandler<UsbFrameReceivedEventArgs>? FrameReceived;
 
     public async Task OpenAsync(
         UsbBackplaneDevice device,
@@ -192,6 +199,13 @@ public sealed class LibUsbKBackplaneTransport : IBackplaneTransport
             throw new BackplaneConnectionException($"USB写入不完整：expected={request.Length}, actual={written}。");
         }
 
+        // 只有UsbK_WritePipe返回成功且实际写入长度完全一致，才记录为TX_OK。
+        // 保存byte[]副本，之后即使读取回复超时，工程师仍能看到硬件端点实际接收了哪一帧。
+        lastWrittenFrame = request.ToArray();
+        WriteCompleted?.Invoke(
+            this,
+            new UsbWriteCompletedEventArgs(DateTimeOffset.Now, lastWrittenFrame.ToArray(), checked((int)written)));
+
         using var response = new MemoryStream();
         var buffer = new byte[4096];
         int? expectedLength = null;
@@ -233,6 +247,18 @@ public sealed class LibUsbKBackplaneTransport : IBackplaneTransport
         if (bytes.Length != expectedLength)
         {
             throw new BackplaneConnectionException($"一次USB读取包含额外数据：expected={expectedLength}, actual={bytes.Length}。");
+        }
+
+        if (TesV13ProtocolCodec.TryParseFrame(bytes, out var frame, out _) && frame is not null)
+        {
+            FrameReceived?.Invoke(
+                this,
+                new UsbFrameReceivedEventArgs(
+                    DateTimeOffset.Now,
+                    bytes.ToArray(),
+                    frame.SendSequence,
+                    frame.AckSequence,
+                    true));
         }
 
         return bytes;

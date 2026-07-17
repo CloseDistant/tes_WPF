@@ -6,7 +6,26 @@ namespace RuinaoSoftwareWpf;
 /// - 操作后设备是否还连着（IsConnected）
 /// - 底部状态栏该显示什么文字（FooterStatus）
 /// </summary>
-public sealed record HardwareOperationResult(bool IsConnected, string FooterStatus);
+public sealed record HardwareOperationResult(
+    bool IsConnected,
+    string FooterStatus,
+    string? UserMessage = null);
+
+public enum HardwareConnectionChangeReason
+{
+    ConnectionAttemptStarted,
+    Connected,
+    ConnectionFailed,
+    HeartbeatLost,
+    Disconnected,
+    Shutdown,
+}
+
+public sealed record HardwareConnectionChangedEventArgs(
+    bool IsConnected,
+    bool IsConnecting,
+    HardwareConnectionChangeReason Reason,
+    string Message);
 
 /// <summary>
 /// 硬件业务服务接口。
@@ -16,10 +35,15 @@ public sealed record HardwareOperationResult(bool IsConnected, string FooterStat
 /// </summary>
 public interface IHardwareService
 {
+    event EventHandler<HardwareConnectionChangedEventArgs>? ConnectionChanged;
+
     /// <summary>
     /// 当前是否认为设备已连接。
     /// </summary>
     bool IsConnected { get; }
+
+    /// <summary>自动或手动联机正在执行时为true，用于禁止重复点击联机。</summary>
+    bool IsConnecting { get; }
 
     /// <summary>
     /// 联机：建立与设备的通讯，并启动心跳检测。

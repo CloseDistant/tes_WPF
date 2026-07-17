@@ -7,7 +7,7 @@ namespace RuinaoSoftwareWpf;
 public sealed class ShellStateViewModel : ObservableObject
 {
     private readonly LocalizationViewModel localization;
-    private bool isDeviceConnected = true;
+    private bool isDeviceConnected;
     private string footerStatus = "设备：协议库就绪 | 模式：TI | 刺激：空闲";
 
     public ShellStateViewModel(LocalizationViewModel localization)

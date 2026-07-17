@@ -1,11 +1,12 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using RuinaoTesHardware;
 using RuinaoTesProtocol;
 
 namespace RuinaoSoftwareWpf;
 
 /// <summary>
-/// 瑞脑 tES 协议 DLL 的 WPF 桥接实现。
+/// 睿脑 tES 共用硬件 DLL 的 WPF 桥接实现。
 ///
 /// 设计依据：
 /// - 《tES 医疗设备控制系统 - 软件开发执行文档》要求 WPF 业务层通过 HAL/协议管理层访问硬件。
@@ -13,59 +14,112 @@ namespace RuinaoSoftwareWpf;
 ///   并通过握手、ACK、请求、回复和寄存器读写完成交互。
 ///
 /// 当前职责：
-/// - 作为 WPF 调用 RuinaoTesProtocol.dll 的集中入口。
+/// - 作为 WPF 调用 RuinaoTesHardware.dll 与 RuinaoTesProtocol.dll 的集中入口。
 /// - 上层 HardwareService 只表达“联机、握手、启动刺激、采集阻抗”等业务动作。
 /// - 背板/业务板地址、命令码、寄存器地址、byte[] 封包、CRC 等细节由协议 DLL 和本 Bridge 统一处理。
 ///
 /// 注意：
-/// 当前 DLL 仍以 BuildXXX 方法生成协议帧，Bridge 会把生成的帧交给 IHardwareTransport。
-/// 后续如果硬件 DLL 直接提供 Connect/Start/Stop/Send 等真实发送方法，应优先在 Bridge 或 Transport 中替换。
+/// 联机和握手已经调用真实RuinaoTesHardware.dll；尚未完成V1.4迁移的其他业务命令暂保留原Transport入口。
 /// </summary>
 public sealed partial class RuinaoTesProtocolBridge
 {
     // 协议 DLL 入口。协议封包、寄存器命令等底层细节集中在 DLL 和 Bridge 内部。
     private readonly TesProtocolApi protocol = new();
     private readonly IHardwareTransport transport;
+    private readonly BackplaneClient backplaneClient;
     private readonly ILoggingService logger;
+    private static readonly TimeSpan InitialLinkStabilizationDelay = TimeSpan.FromMilliseconds(500);
+    private static readonly BackplaneConnectionOptions BackplaneOptions = new(
+        ProtocolVersion: 0x01,
+        Timeout: TimeSpan.FromSeconds(2),
+        HandshakeAckRequired: false);
 
     // 当前已下发参数的 TI 组。启动/暂停/急停需要知道目标通道。
     private TiGroup? currentGroup;
 
     /// <summary>
     /// 构造协议桥接层。
-    /// transport 决定协议帧最终如何发出去；当前默认是只写日志的 LogOnlyHardwareTransport。
+    /// BackplaneClient负责真实联机/握手；transport暂承接尚未迁移的业务指令。
     /// </summary>
-    public RuinaoTesProtocolBridge(IHardwareTransport transport, ILoggingService logger)
+    public RuinaoTesProtocolBridge(
+        IHardwareTransport transport,
+        BackplaneClient backplaneClient,
+        ILoggingService logger)
     {
         this.transport = transport;
+        this.backplaneClient = backplaneClient;
         this.logger = logger;
+        backplaneClient.Log += BackplaneClient_Log;
     }
 
     /// <summary>
-    /// 联机：当前协议 DLL 暂以握手帧表示联机请求。
+    /// 联机：发现04B4:00F1、打开libusbK链路并完成一次真实V1.4背板握手。
     /// </summary>
-    public async Task ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task<BackplaneHandshakeResult> ConnectAsync(CancellationToken cancellationToken = default)
     {
-        UseBackplane();
-        await HandshakeAsync(cancellationToken);
+        var newlyOpened = await EnsureUsbLinkOpenAsync(cancellationToken);
+        if (newlyOpened)
+        {
+            logger.Hardware("USB接收循环已就绪，等待500ms后发送首次握手帧");
+            await Task.Delay(InitialLinkStabilizationDelay, cancellationToken);
+        }
+
+        return await backplaneClient.HandshakeAsync(BackplaneOptions, cancellationToken);
     }
 
     /// <summary>
-    /// 断开：真实传输层未接入前，只记录软件侧断开意图。
+    /// 断开真实USB链路并释放libusbK句柄。
     /// </summary>
     public Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        logger.HardwareDecision("断开请求：当前仅断开软件侧状态，真实 USB/串口/HID/TCP 传输层尚未接入。");
-        return Task.CompletedTask;
+        return backplaneClient.DisconnectAsync(cancellationToken);
     }
 
     /// <summary>
     /// 发送握手帧。联机和心跳检测共用该动作。
     /// </summary>
-    public async Task HandshakeAsync(CancellationToken cancellationToken = default)
+    public async Task<BackplaneHandshakeResult> HandshakeAsync(CancellationToken cancellationToken = default)
     {
-        await transport.SendFrameAsync("HANDSHAKE", protocol.BuildHandshake(), cancellationToken);
+        _ = await EnsureUsbLinkOpenAsync(cancellationToken);
+        return await backplaneClient.HandshakeAsync(BackplaneOptions, cancellationToken);
+    }
+
+    /// <summary>
+    /// 只通过 Windows 设备枚举检查目标背板是否仍然存在、驱动是否可用。
+    /// 该方法不会发送协议帧，也不会重新打开 USB 端点，供心跳失败后的二次判定使用。
+    /// </summary>
+    public async Task<bool> IsBackplaneDeviceReadyAsync(CancellationToken cancellationToken = default)
+    {
+        var device = await backplaneClient.RefreshDeviceAsync(cancellationToken);
+        return device?.DriverReady == true;
+    }
+
+    private async Task<bool> EnsureUsbLinkOpenAsync(CancellationToken cancellationToken)
+    {
+        if (backplaneClient.State is BackplaneConnectionState.Disconnected or BackplaneConnectionState.Faulted)
+        {
+            await backplaneClient.ConnectAsync(BackplaneOptions, cancellationToken);
+            return true;
+        }
+
+        return false;
+    }
+
+    private void BackplaneClient_Log(object? sender, HardwareLogEntry entry)
+    {
+        if (entry.Bytes is { Length: > 0 } bytes)
+        {
+            if (entry.Category.StartsWith("TX", StringComparison.Ordinal))
+            {
+                logger.HardwareTx(entry.Category, bytes);
+            }
+            else
+            {
+                logger.HardwareRx(entry.Category, bytes);
+            }
+        }
+
+        logger.Hardware($"[{entry.Category}] {entry.Message}");
     }
 
     /// <summary>

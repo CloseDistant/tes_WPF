@@ -1,4 +1,5 @@
 using System.Windows.Controls;
+using System.Windows;
 
 namespace RuinaoSoftwareWpf.Views;
 
@@ -26,5 +27,13 @@ public partial class MainView : UserControl
         AccountDropDownToggle.IsChecked = false;
         MoreDropDownToggle.IsChecked = false;
         PatientDropDownToggle.IsChecked = false;
+    }
+
+    /// <summary>
+    /// 设备菜单命令开始执行后立即收起下拉菜单，避免异步Toast出现时被Popup遮挡。
+    /// </summary>
+    private void DeviceMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        DeviceDropDownToggle.IsChecked = false;
     }
 }

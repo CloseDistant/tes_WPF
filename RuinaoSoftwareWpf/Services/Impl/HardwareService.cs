@@ -1,5 +1,7 @@
 namespace RuinaoSoftwareWpf;
 
+using RuinaoTesHardware;
+
 /// <summary>
 /// 硬件业务服务的具体实现。
 ///
@@ -13,9 +15,6 @@ public sealed class HardwareService : IHardwareService
 {
     // 心跳周期：每 2 秒发送一次握手帧。
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(2);
-
-    // 连续心跳失败达到该次数后，认为设备离线。
-    private const int HeartbeatFailureLimit = 3;
 
     // 这里故意直接依赖具体 Bridge，而不是再套一层接口。
     // 这样在 Visual Studio 中可以从 HardwareService 直接“转到定义/查找引用”到 DLL 调用集中点。
@@ -31,7 +30,9 @@ public sealed class HardwareService : IHardwareService
     // 心跳相关的取消源和后台任务。
     private CancellationTokenSource? heartbeatCts;
     private Task? heartbeatTask;
-    private int heartbeatFailureCount;
+    private int connectionAttemptActive;
+
+    public event EventHandler<HardwareConnectionChangedEventArgs>? ConnectionChanged;
 
     public HardwareService(
         RuinaoTesProtocolBridge protocolBridge,
@@ -48,23 +49,59 @@ public sealed class HardwareService : IHardwareService
     }
 
     /// <summary>
-    /// 当前是否认为设备已连接。默认 true，连续心跳失败后会变成 false。
+    /// 当前是否已通过真实背板握手。只有收到并校验硬件回复后才会变成true。
     /// </summary>
-    public bool IsConnected { get; private set; } = true;
+    public bool IsConnected { get; private set; }
+
+    public bool IsConnecting => Volatile.Read(ref connectionAttemptActive) != 0;
 
     /// <summary>
     /// 联机：调用设备客户端连接，启动心跳，并返回界面状态。
     /// </summary>
     public async Task<HardwareOperationResult> ConnectAsync(CancellationToken cancellationToken = default)
     {
-        deviceStateMachine.MoveTo(DeviceConnectionState.Connecting, "Connect");
-        await RunDeviceOperationAsync(ConnectOnProtocolBridgeAsync, cancellationToken);
-        IsConnected = true;
-        deviceStateMachine.MoveTo(DeviceConnectionState.Connected, "ConnectSuccess");
-        StartHeartbeat();
-        auditLog.RecordUserAction("Connect device");
-        logger.Hardware("联机动作：已调用协议 API 生成握手帧");
-        return Result("设备：协议库联机 | 链路：心跳运行中 | 刺激：空闲");
+        if (IsConnected)
+        {
+            return Result("设备：已联机", "仪器已经处于联机状态。");
+        }
+
+        if (Interlocked.CompareExchange(ref connectionAttemptActive, 1, 0) != 0)
+        {
+            throw new InvalidOperationException("仪器联机正在进行，请勿重复操作。");
+        }
+
+        RaiseConnectionChanged(
+            HardwareConnectionChangeReason.ConnectionAttemptStarted,
+            "正在连接仪器。");
+        try
+        {
+            deviceStateMachine.MoveTo(DeviceConnectionState.Connecting, "Connect");
+            var handshake = await RunDeviceOperationAsync(ConnectOnProtocolBridgeAsync, cancellationToken);
+            IsConnected = true;
+            deviceStateMachine.MoveTo(DeviceConnectionState.Connected, "ConnectSuccess");
+            StartHeartbeat();
+            auditLog.RecordUserAction("Connect device");
+            logger.Hardware($"真实联机成功：ackSeq={handshake.ResponseAckSequence}，耗时={handshake.Elapsed.TotalMilliseconds:F1}ms");
+            return Result(
+                $"设备：已联机 | ACK：{handshake.ResponseAckSequence} | 耗时：{handshake.Elapsed.TotalMilliseconds:F1}ms",
+                FormatHandshakeFeedback("仪器联机成功", handshake));
+        }
+        catch
+        {
+            IsConnected = false;
+            await CloseProtocolLinkQuietlyAsync();
+            deviceStateMachine.MoveTo(DeviceConnectionState.Error, "ConnectFailed");
+            throw;
+        }
+        finally
+        {
+            Interlocked.Exchange(ref connectionAttemptActive, 0);
+            RaiseConnectionChanged(
+                IsConnected
+                    ? HardwareConnectionChangeReason.Connected
+                    : HardwareConnectionChangeReason.ConnectionFailed,
+                IsConnected ? "仪器已联机。" : "仪器未联机。");
+        }
     }
 
     /// <summary>
@@ -72,9 +109,16 @@ public sealed class HardwareService : IHardwareService
     /// </summary>
     public async Task<HardwareOperationResult> HandshakeAsync(CancellationToken cancellationToken = default)
     {
-        await RunDeviceOperationAsync(HandshakeOnProtocolBridgeAsync, cancellationToken);
-        logger.Hardware("握手检测：已调用协议 API 生成握手帧");
-        return Result("设备：握手检测 | 链路：已发送握手帧");
+        if (!IsConnected)
+        {
+            return await ConnectAsync(cancellationToken);
+        }
+
+        var handshake = await RunDeviceOperationAsync(HandshakeOnProtocolBridgeAsync, cancellationToken);
+        logger.Hardware($"真实握手成功：ackSeq={handshake.ResponseAckSequence}，耗时={handshake.Elapsed.TotalMilliseconds:F1}ms");
+        return Result(
+            $"设备：握手成功 | ACK：{handshake.ResponseAckSequence} | 耗时：{handshake.Elapsed.TotalMilliseconds:F1}ms",
+            FormatHandshakeFeedback("握手检测成功", handshake));
     }
 
     /// <summary>
@@ -86,6 +130,7 @@ public sealed class HardwareService : IHardwareService
         await RunDeviceOperationAsync(DisconnectOnProtocolBridgeAsync, cancellationToken);
         IsConnected = false;
         deviceStateMachine.MoveTo(DeviceConnectionState.Disconnected, "Disconnect");
+        RaiseConnectionChanged(HardwareConnectionChangeReason.Disconnected, "仪器未联机。");
         auditLog.RecordUserAction("Disconnect device");
         logger.Hardware("设备状态：已离线");
         return Result("设备：已断开 | 模型：未加载 | 刺激：空闲");
@@ -209,23 +254,28 @@ public sealed class HardwareService : IHardwareService
         if (!ReferenceEquals(completedTask, stopTask))
         {
             logger.Warning("软件退出：等待心跳停止超时，继续关闭程序");
-            return;
+        }
+        else
+        {
+            await stopTask;
         }
 
-        await stopTask;
+        await CloseProtocolLinkQuietlyAsync();
+        IsConnected = false;
+        RaiseConnectionChanged(HardwareConnectionChangeReason.Shutdown, "软件退出，仪器链路已释放。");
     }
 
     /// <summary>
     /// 协议 DLL 调用映射区。
     /// 这些方法故意集中保留在 HardwareService 内，方便从业务动作一路追到 RuinaoTesProtocolBridge。
     /// </summary>
-    private Task ConnectOnProtocolBridgeAsync(CancellationToken cancellationToken)
+    private Task<BackplaneHandshakeResult> ConnectOnProtocolBridgeAsync(CancellationToken cancellationToken)
     {
         return protocolBridge.ConnectAsync(cancellationToken);
     }
 
     /// <summary>调用 Bridge 生成/发送握手帧。</summary>
-    private Task HandshakeOnProtocolBridgeAsync(CancellationToken cancellationToken)
+    private Task<BackplaneHandshakeResult> HandshakeOnProtocolBridgeAsync(CancellationToken cancellationToken)
     {
         return protocolBridge.HandshakeAsync(cancellationToken);
     }
@@ -302,6 +352,22 @@ public sealed class HardwareService : IHardwareService
         }
     }
 
+    /// <summary>串行执行需要返回真实硬件结果的操作。</summary>
+    private async Task<T> RunDeviceOperationAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default)
+    {
+        await operationLock.WaitAsync(cancellationToken);
+        try
+        {
+            return await operation(cancellationToken);
+        }
+        finally
+        {
+            operationLock.Release();
+        }
+    }
+
     /// <summary>
     /// 启动后台心跳任务。
     /// 如果心跳已经在运行，则直接返回，避免重复启动。
@@ -313,7 +379,7 @@ public sealed class HardwareService : IHardwareService
             return;
         }
 
-        heartbeatFailureCount = 0;
+        heartbeatCts?.Dispose();
         heartbeatCts = new CancellationTokenSource();
         heartbeatTask = RunHeartbeatLoopAsync(heartbeatCts.Token);
         logger.Hardware("心跳检测：已启动，周期=2s，方式=握手帧");
@@ -348,15 +414,14 @@ public sealed class HardwareService : IHardwareService
         {
             cts.Dispose();
             heartbeatTask = null;
-            heartbeatFailureCount = 0;
         }
 
         logger.Hardware("心跳检测：已停止");
     }
 
     /// <summary>
-    /// 心跳循环：每隔 2 秒发送一次握手帧。
-    /// 失败次数达到阈值后，将设备标记为离线。
+    /// 心跳循环：每隔2秒发送一次真实握手。任意一次心跳失败即结束循环，
+    /// 释放失效链路并等待用户手动重新联机，不执行自动重连。
     /// </summary>
     private async Task RunHeartbeatLoopAsync(CancellationToken cancellationToken)
     {
@@ -366,9 +431,9 @@ public sealed class HardwareService : IHardwareService
         {
             try
             {
-                await RunDeviceOperationAsync(HandshakeOnProtocolBridgeAsync, cancellationToken);
-                heartbeatFailureCount = 0;
-                logger.Hardware("心跳检测：握手帧发送完成");
+                var handshake = await RunDeviceOperationAsync(HandshakeOnProtocolBridgeAsync, cancellationToken);
+                logger.Hardware(
+                    $"心跳检测成功：ackSeq={handshake.ResponseAckSequence}，耗时={handshake.Elapsed.TotalMilliseconds:F1}ms");
             }
             catch (OperationCanceledException)
             {
@@ -377,24 +442,74 @@ public sealed class HardwareService : IHardwareService
             }
             catch (Exception ex)
             {
-                heartbeatFailureCount++;
-                logger.Error($"心跳检测失败：连续失败次数={heartbeatFailureCount}", ex);
+                logger.Warning($"心跳握手失败，开始重新枚举目标USB设备：{ex.Message}");
 
-                if (heartbeatFailureCount >= HeartbeatFailureLimit)
+                bool deviceReady;
+                try
                 {
-                    IsConnected = false;
-                    deviceStateMachine.MoveTo(DeviceConnectionState.Error, "HeartbeatFailure");
-                    logger.Warning("心跳检测：连续失败达到阈值，设备已标记为离线");
+                    deviceReady = await RunDeviceOperationAsync(
+                        protocolBridge.IsBackplaneDeviceReadyAsync,
+                        cancellationToken);
                 }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception discoveryException)
+                {
+                    deviceReady = false;
+                    logger.Error("心跳失败后重新枚举USB设备时发生异常", discoveryException);
+                }
+
+                if (deviceReady)
+                {
+                    // USB仍在时不把一次迟到或超时回复直接判为拔线；下一周期继续发送握手。
+                    logger.Warning("目标USB设备04B4:00F1仍存在且驱动正常，保留联机状态，下一心跳周期继续检测");
+                    continue;
+                }
+
+                logger.Error("心跳握手失败且未发现可用的04B4:00F1，仪器判定断联，心跳结束", ex);
+                IsConnected = false;
+                deviceStateMachine.MoveTo(DeviceConnectionState.Error, "HeartbeatFailure");
+                await CloseProtocolLinkQuietlyAsync();
+                RaiseConnectionChanged(
+                    HardwareConnectionChangeReason.HeartbeatLost,
+                    $"仪器通信已断开：{ex.Message}");
+                return;
             }
         }
+    }
+
+    private async Task CloseProtocolLinkQuietlyAsync()
+    {
+        try
+        {
+            await protocolBridge.DisconnectAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            logger.Warning($"释放USB链路时发生异常：{exception.Message}");
+        }
+    }
+
+    private void RaiseConnectionChanged(HardwareConnectionChangeReason reason, string message)
+    {
+        ConnectionChanged?.Invoke(
+            this,
+            new HardwareConnectionChangedEventArgs(IsConnected, IsConnecting, reason, message));
     }
 
     /// <summary>
     /// 构造操作结果，统一设置底部状态栏文字。
     /// </summary>
-    private HardwareOperationResult Result(string footerStatus)
+    private HardwareOperationResult Result(string footerStatus, string? userMessage = null)
     {
-        return new HardwareOperationResult(IsConnected, footerStatus);
+        return new HardwareOperationResult(IsConnected, footerStatus, userMessage);
+    }
+
+    private static string FormatHandshakeFeedback(string title, BackplaneHandshakeResult handshake)
+    {
+        return $"{title}：命令=0x{handshake.ResponseCommand:X2}，ACK序列={handshake.ResponseAckSequence}，"
+            + $"硬件版本=0x{handshake.ResponseVersion:X2}，耗时={handshake.Elapsed.TotalMilliseconds:F1}ms。";
     }
 }

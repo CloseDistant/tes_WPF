@@ -14,14 +14,18 @@ public sealed class ConfigViewModel : ObservableObject
     private readonly LocalizationViewModel localization;
     private readonly ILoggingService logger;
     private readonly IDesktopShortcutService desktopShortcutService;
+    private readonly IStartupSettingsService startupSettingsService;
     private readonly IToastService toastService;
     private readonly AsyncRelayCommand saveNavigationCommand;
     private readonly AsyncRelayCommand saveStimulationTypesCommand;
+    private readonly AsyncRelayCommand saveStartupSettingsCommand;
     private bool stimulationSettingsRevealed;
     private int shiftPressCount;
     private DateTimeOffset? lastShiftPressAt;
     private string navigationStatus = string.Empty;
     private string stimulationStatus = string.Empty;
+    private string startupSettingsStatus = string.Empty;
+    private bool autoConnectOnStartup;
 
     public ConfigViewModel(
         IFeatureVisibilityService featureVisibilityService,
@@ -29,6 +33,7 @@ public sealed class ConfigViewModel : ObservableObject
         LocalizationViewModel localization,
         ILoggingService logger,
         IDesktopShortcutService desktopShortcutService,
+        IStartupSettingsService startupSettingsService,
         IToastService toastService)
     {
         this.featureVisibilityService = featureVisibilityService;
@@ -36,6 +41,7 @@ public sealed class ConfigViewModel : ObservableObject
         this.localization = localization;
         this.logger = logger;
         this.desktopShortcutService = desktopShortcutService;
+        this.startupSettingsService = startupSettingsService;
         this.toastService = toastService;
 
         NavigationOptions = new ObservableCollection<FeatureVisibilityOptionViewModel>(
@@ -51,12 +57,17 @@ public sealed class ConfigViewModel : ObservableObject
             SaveStimulationTypesAsync,
             () => IsAdmin && StimulationSettingsRevealed,
             exception => HandleSaveError(exception, isStimulation: true));
+        saveStartupSettingsCommand = new AsyncRelayCommand(
+            SaveStartupSettingsAsync,
+            onError: HandleStartupSettingsSaveError);
 
         SaveNavigationCommand = saveNavigationCommand;
         SaveStimulationTypesCommand = saveStimulationTypesCommand;
         RestoreNavigationCommand = new RelayCommand(_ => RestoreNavigationDefaults());
         RestoreStimulationTypesCommand = new RelayCommand(_ => RestoreStimulationDefaults());
         CreateDesktopShortcutCommand = new RelayCommand(_ => CreateDesktopShortcut());
+        SaveStartupSettingsCommand = saveStartupSettingsCommand;
+        RestoreStartupSettingsCommand = new RelayCommand(_ => RestoreStartupSettingsDefaults());
 
         accountService.CurrentUserChanged += (_, _) => OnAccountChanged();
         featureVisibilityService.VisibilityChanged += (_, _) => ApplyPersistedVisibility();
@@ -76,6 +87,10 @@ public sealed class ConfigViewModel : ObservableObject
     public ICommand RestoreStimulationTypesCommand { get; }
 
     public ICommand CreateDesktopShortcutCommand { get; }
+
+    public ICommand SaveStartupSettingsCommand { get; }
+
+    public ICommand RestoreStartupSettingsCommand { get; }
 
     public bool IsAdmin => accountService.CurrentUser?.RoleId == AccountRoles.Admin;
 
@@ -125,10 +140,24 @@ public sealed class ConfigViewModel : ObservableObject
         private set => SetProperty(ref stimulationStatus, value);
     }
 
+    public bool AutoConnectOnStartup
+    {
+        get => autoConnectOnStartup;
+        set => SetProperty(ref autoConnectOnStartup, value);
+    }
+
+    public string StartupSettingsStatus
+    {
+        get => startupSettingsStatus;
+        private set => SetProperty(ref startupSettingsStatus, value);
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await featureVisibilityService.InitializeAsync(cancellationToken);
+        await startupSettingsService.InitializeAsync(cancellationToken);
         ApplyPersistedVisibility();
+        AutoConnectOnStartup = startupSettingsService.AutoConnectOnStartup;
     }
 
     private void CreateDesktopShortcut()
@@ -149,6 +178,7 @@ public sealed class ConfigViewModel : ObservableObject
         HideStimulationSettings();
         NavigationStatus = string.Empty;
         StimulationStatus = string.Empty;
+        StartupSettingsStatus = string.Empty;
     }
 
     public void LeaveSettingsPage()
@@ -242,6 +272,14 @@ public sealed class ConfigViewModel : ObservableObject
         StimulationStatus = "电刺激类型显示设置已保存";
     }
 
+    private async Task SaveStartupSettingsAsync(CancellationToken cancellationToken)
+    {
+        await startupSettingsService.SaveAutoConnectOnStartupAsync(
+            AutoConnectOnStartup,
+            cancellationToken);
+        StartupSettingsStatus = "启动设置已保存，下次启动时生效";
+    }
+
     private void RestoreNavigationDefaults()
     {
         foreach (var option in NavigationOptions)
@@ -260,6 +298,12 @@ public sealed class ConfigViewModel : ObservableObject
         }
 
         StimulationStatus = "已恢复默认，点击保存后生效";
+    }
+
+    private void RestoreStartupSettingsDefaults()
+    {
+        AutoConnectOnStartup = false;
+        StartupSettingsStatus = "已恢复默认，点击保存后生效";
     }
 
     private void ApplyPersistedVisibility()
@@ -324,6 +368,12 @@ public sealed class ConfigViewModel : ObservableObject
         {
             NavigationStatus = exception.Message;
         }
+    }
+
+    private void HandleStartupSettingsSaveError(Exception exception)
+    {
+        logger.Error("保存启动设置失败", exception);
+        StartupSettingsStatus = exception.Message;
     }
 }
 

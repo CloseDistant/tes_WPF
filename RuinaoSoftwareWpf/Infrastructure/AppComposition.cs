@@ -1,6 +1,7 @@
 namespace RuinaoSoftwareWpf;
 
 using Microsoft.Extensions.DependencyInjection;
+using RuinaoTesHardware;
 
 /// <summary>
 /// 依赖注入（DI）容器配置中心。
@@ -48,9 +49,12 @@ public static class AppComposition
         services.AddSingleton<PatientDataProtector>(); // 患者敏感字段自动密钥加密
         services.AddSingleton<ILocalizationService, AppLocalizationService>(); // 多语言服务
         services.AddSingleton<ITiGroupFactory, DemoTiGroupFactory>();     // TI 刺激组工厂
-        services.AddSingleton<IHardwareLink, LogOnlyHardwareTransport>(); // 当前底层链路仅记录 TX，并返回模拟确认
-        services.AddSingleton<IHardwareTransport, ReliableHardwareTransport>(); // 命令关联、ACK/NAK、超时、重试和恢复
-        services.AddSingleton<RuinaoTesProtocolBridge>();                 // WPF 调协议 DLL 的桥接层，HardwareService 会直接引用
+        services.AddSingleton<IHardwareLink, LogOnlyHardwareTransport>(); // 尚未迁移到V1.4的业务命令暂保留日志链路
+        services.AddSingleton<IHardwareTransport, ReliableHardwareTransport>(); // 旧业务命令的命令关联、超时与重试
+        services.AddSingleton<IUsbBackplaneDiscovery, WindowsUsbBackplaneDiscovery>();
+        services.AddSingleton<IBackplaneTransport, UsbTestCompatibleBackplaneTransport>();
+        services.AddSingleton<BackplaneClient>();                         // 真实libusbK链路与V1.4应答匹配
+        services.AddSingleton<RuinaoTesProtocolBridge>();                 // UI只能经Bridge调用共用硬件DLL
         services.AddSingleton<IDeviceHal, ProtocolDeviceHal>();           // 硬件抽象层，内部同样指向协议 DLL Bridge
         services.AddSingleton<IAuditLogService, AuditLogService>();       // 审计日志服务
         services.AddSingleton<IDeviceStateMachine, DeviceStateMachine>(); // 设备状态机
@@ -75,6 +79,7 @@ public static class AppComposition
         services.AddSingleton<IUserDialogService, UserDialogService>(); // 统一确认弹窗服务
         services.AddSingleton<IAccountService, LocalAccountService>(); // 本地离线账号服务
         services.AddSingleton<IFeatureVisibilityService, LocalFeatureVisibilityService>(); // Admin 功能显示配置
+        services.AddSingleton<IStartupSettingsService, LocalStartupSettingsService>(); // 工作站级启动设置
         services.AddSingleton<IPatientService, LocalPatientService>(); // 本地患者服务
         services.AddSingleton<IStimulationRecordService, LocalStimulationRecordService>(); // 刺激记录服务
         services.AddSingleton<IEegSegmentFileWriter, EegSegmentFileWriter>(); // EEG 分段二进制写入

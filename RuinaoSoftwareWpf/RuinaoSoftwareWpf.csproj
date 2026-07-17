@@ -29,6 +29,15 @@
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
     <PackageReference Include="System.Management" Version="10.0.0" />
     <ProjectReference Include="..\RuinaoTesProtocol\RuinaoTesProtocol.csproj" />
+    <ProjectReference Include="..\RuinaoTesHardware\RuinaoTesHardware.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\RuinaoTesHardware\runtimes\win-x64\native\libusbK.dll">
+      <Link>libusbK.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

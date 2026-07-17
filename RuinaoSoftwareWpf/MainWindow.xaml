@@ -15,6 +15,118 @@
     <Grid>
         <views:MainView x:Name="MainContent" Visibility="Collapsed" />
         <views:LoginView x:Name="LoginContent" Visibility="Visible" />
+
+        <!-- 登录页和主界面共用的全局仪器联机状态。 -->
+        <Border Width="220"
+                Height="22"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                Panel.ZIndex="200"
+                Background="#0D1017">
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="9,0,0,0">
+                <Ellipse Width="8" Height="8" Margin="0,0,8,0">
+                    <Ellipse.Style>
+                        <Style TargetType="Ellipse">
+                            <Setter Property="Fill" Value="#FF626B" />
+                            <Setter Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#FF626B" BlurRadius="5" ShadowDepth="0" Opacity="0.35" />
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ShellState.IsDeviceConnected}" Value="True">
+                                    <Setter Property="Fill" Value="#56D981" />
+                                    <Setter Property="Effect">
+                                        <Setter.Value>
+                                            <DropShadowEffect Color="#56D981" BlurRadius="5" ShadowDepth="0" Opacity="0.35" />
+                                        </Setter.Value>
+                                    </Setter>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Ellipse.Style>
+                </Ellipse>
+                <TextBlock Text="{Binding ShellState.DeviceStatusText}"
+                           Foreground="#AEB8C8"
+                           FontSize="11"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
+        <!-- Toast提升到窗口全局层，自动联机发生在登录页时也能正常显示。 -->
+        <Border Width="540"
+                MinHeight="68"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Margin="0,58,0,0"
+                Panel.ZIndex="300"
+                Background="#202632"
+                BorderBrush="#3A4353"
+                BorderThickness="1"
+                CornerRadius="5"
+                Visibility="{Binding Toast.Visibility}">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000" BlurRadius="14" ShadowDepth="3" Opacity="0.34" />
+            </Border.Effect>
+            <Border.RenderTransform>
+                <TranslateTransform Y="0" />
+            </Border.RenderTransform>
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Opacity" Value="0" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Toast.Visibility}" Value="Visible">
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                         From="0" To="1" Duration="0:0:0.16" />
+                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                         From="-8" To="0" Duration="0:0:0.16" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="3" />
+                    <ColumnDefinition Width="52" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Background="{Binding Toast.Accent}" CornerRadius="4,0,0,4" />
+                <Border Grid.Column="1"
+                        Width="26" Height="26"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="#151A23"
+                        BorderBrush="{Binding Toast.Accent}"
+                        BorderThickness="1"
+                        CornerRadius="13">
+                    <TextBlock Text="{Binding Toast.Icon}"
+                               Foreground="{Binding Toast.Accent}"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Grid.Column="2" Margin="2,12,18,12" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Toast.Title}"
+                               Foreground="#F1F4F8"
+                               FontSize="13"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Toast.Message}"
+                               Foreground="#AEB8C8"
+                               FontSize="12"
+                               Margin="0,3,0,0"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </Window>
 

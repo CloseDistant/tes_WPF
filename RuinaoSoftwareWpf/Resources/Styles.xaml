@@ -300,6 +300,35 @@
             <Setter Property="FontSize" Value="12" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ItemBackground"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#292F3C" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#343C4B" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#171B24" />
+                    <Setter Property="Foreground" Value="#667181" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="ToggleButton" TargetType="Button">

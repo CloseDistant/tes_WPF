@@ -53,6 +53,19 @@
         <DataTemplate DataType="{x:Type local:PlaceholderPageViewModel}">
             <views:PlaceholderPageView />
         </DataTemplate>
+
+        <!-- 联机状态下的限制项：保留可读性，并用绿色状态徽标说明不可重复联机的原因。 -->
+        <Style x:Key="ConnectDropDownItem"
+               TargetType="Button"
+               BasedOn="{StaticResource ToolbarDropDownItem}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding ShellState.IsDeviceConnected}" Value="True">
+                    <Setter Property="Background" Value="#17251F" />
+                    <Setter Property="Foreground" Value="#7EA68D" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -96,14 +109,38 @@
                             <Border Background="#1C202B"
                                     BorderBrush="#303645"
                                     BorderThickness="1"
-                                    MinWidth="150">
+                                    MinWidth="168">
                                 <StackPanel>
-                                    <Button Content="{Binding Localization.ConnectText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ConnectCommand}" />
-                                    <Button Content="{Binding Localization.DisconnectText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding DisconnectCommand}" Visibility="Collapsed" />
+                                    <Button Style="{StaticResource ConnectDropDownItem}"
+                                            Command="{Binding ConnectCommand}"
+                                            Click="DeviceMenuItem_Click">
+                                        <Grid>
+                                            <TextBlock Text="{Binding Localization.ConnectText}"
+                                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                       VerticalAlignment="Center" />
+                                            <Border HorizontalAlignment="Right"
+                                                    Padding="7,2"
+                                                    Background="#203B2D"
+                                                    CornerRadius="8"
+                                                    Visibility="{Binding ShellState.IsDeviceConnected, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Ellipse Width="5" Height="5"
+                                                             Margin="0,0,5,0"
+                                                             Fill="#56D981"
+                                                             VerticalAlignment="Center" />
+                                                    <TextBlock Text="已联机"
+                                                               Foreground="#8FE0A9"
+                                                               FontSize="10"
+                                                               VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                    </Button>
+                                    <Button Content="{Binding Localization.DisconnectText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding DisconnectCommand}" Click="DeviceMenuItem_Click" Visibility="Collapsed" />
                                     <Border Height="1" Background="#303645" Margin="0,4" Visibility="Collapsed" />
-                                    <Button Content="{Binding Localization.HandshakeText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding HandshakeCommand}" Visibility="Collapsed" />
-                                    <Button Content="{Binding Localization.ReadProductModelText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ReadProductModelCommand}" Visibility="Collapsed" />
-                                    <Button Content="{Binding Localization.ReadBoardModelText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ReadBoardModelCommand}" Visibility="Collapsed" />
+                                    <Button Content="{Binding Localization.HandshakeText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding HandshakeCommand}" Click="DeviceMenuItem_Click" />
+                                    <Button Content="{Binding Localization.ReadProductModelText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ReadProductModelCommand}" Click="DeviceMenuItem_Click" Visibility="Collapsed" />
+                                    <Button Content="{Binding Localization.ReadBoardModelText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ReadBoardModelCommand}" Click="DeviceMenuItem_Click" Visibility="Collapsed" />
                                 </StackPanel>
                             </Border>
                         </Popup>
@@ -405,8 +442,8 @@
         </Grid>
 
         <Border Grid.Row="1"
-                Width="440"
-                Height="68"
+                Width="540"
+                MinHeight="68"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
                 Margin="0,18,0,0"
@@ -416,7 +453,7 @@
                 BorderBrush="#3A4353"
                 BorderThickness="1"
                 CornerRadius="5"
-                Visibility="{Binding Toast.Visibility}">
+                Visibility="Collapsed">
             <Border.Effect>
                 <DropShadowEffect Color="#000000"
                                   BlurRadius="14"
@@ -474,7 +511,7 @@
                                VerticalAlignment="Center" />
                 </Border>
                 <StackPanel Grid.Column="2"
-                            Margin="2,11,18,10"
+                            Margin="2,12,18,12"
                             VerticalAlignment="Center">
                     <TextBlock Text="{Binding Toast.Title}"
                                Foreground="#F1F4F8"
@@ -491,6 +528,7 @@
 
         <Border Grid.Row="2" Background="#0D1017" BorderBrush="#252A35" BorderThickness="0,1,0,0">
             <TextBlock Text="{Binding ShellState.FooterStatus}"
+                       Visibility="Collapsed"
                        Foreground="{StaticResource SubText}"
                        VerticalAlignment="Center"
                        Margin="8,0" />

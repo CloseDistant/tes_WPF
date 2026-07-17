@@ -22,9 +22,11 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private readonly IUserDialogService userDialogService;
     private readonly IAccountService accountService;
     private readonly IFeatureVisibilityService featureVisibilityService;
+    private readonly IStartupSettingsService startupSettingsService;
     private readonly IPatientService patientService;
     private readonly ISessionLifecycleCoordinator sessionLifecycleCoordinator;
     private readonly IToastService toastService;
+    private readonly AsyncRelayCommand connectCommand;
 
     private AppPage currentPage = AppPage.Control;
     private ObservableObject? currentPageViewModel;
@@ -32,6 +34,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private readonly SemaphoreSlim shutdownGate = new(1, 1);
     private bool shutdownCompleted;
     private Task initializationTask = Task.CompletedTask;
+    private int automaticConnectionAttempted;
 
     /// <summary>
     /// 构造函数由 DI 容器注入所需服务和子 ViewModel。
@@ -42,6 +45,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         IUserDialogService userDialogService,
         IAccountService accountService,
         IFeatureVisibilityService featureVisibilityService,
+        IStartupSettingsService startupSettingsService,
         IPatientService patientService,
         ISessionLifecycleCoordinator sessionLifecycleCoordinator,
         IToastService toastService,
@@ -67,6 +71,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         this.userDialogService = userDialogService;
         this.accountService = accountService;
         this.featureVisibilityService = featureVisibilityService;
+        this.startupSettingsService = startupSettingsService;
         this.patientService = patientService;
         this.sessionLifecycleCoordinator = sessionLifecycleCoordinator;
         this.toastService = toastService;
@@ -94,12 +99,14 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         AppendLog("PROTO DLL READY  RuinaoTesProtocol referenced");
 
         // 设备菜单操作复用统一 Toast；异步命令在收到结果前会自动禁用对应按钮。
-        ConnectCommand = new AsyncRelayCommand(
+        connectCommand = new AsyncRelayCommand(
             ConnectDeviceAsync,
+            canExecute: CanConnectDevice,
             onError: exception => HandleDeviceOperationError(
                 "联机失败",
                 "设备联机失败，请检查设备连接和通讯配置后重试。",
                 exception));
+        ConnectCommand = connectCommand;
         DisconnectCommand = new AsyncRelayCommand(
             DisconnectDeviceAsync,
             onError: exception => HandleDeviceOperationError(
@@ -160,6 +167,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         featureVisibilityService.VisibilityChanged += (_, _) => ApplyFeatureVisibility();
         accountService.CurrentUserChanged += (_, _) => NotifyAccountChanged();
         sessionLifecycleCoordinator.CurrentSessionChanged += (_, _) => NotifyUnifiedSessionChanged();
+        hardwareService.ConnectionChanged += HardwareService_ConnectionChanged;
         FemSimulation.Initialize(this);
 
         // 默认打开电刺激类型选择页。
@@ -526,6 +534,38 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     {
         ShellState.IsDeviceConnected = result.IsConnected;
         ShellState.FooterStatus = result.FooterStatus;
+        connectCommand.RaiseCanExecuteChanged();
+    }
+
+    private bool CanConnectDevice()
+    {
+        return !hardwareService.IsConnected && !hardwareService.IsConnecting;
+    }
+
+    private void HardwareService_ConnectionChanged(
+        object? sender,
+        HardwareConnectionChangedEventArgs entry)
+    {
+        void ApplyChange()
+        {
+            ShellState.IsDeviceConnected = entry.IsConnected;
+            connectCommand.RaiseCanExecuteChanged();
+
+            if (entry.Reason == HardwareConnectionChangeReason.HeartbeatLost)
+            {
+                toastService.ShowError("仪器已断联", entry.Message);
+            }
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            ApplyChange();
+        }
+        else
+        {
+            _ = dispatcher.InvokeAsync(ApplyChange);
+        }
     }
 
     private void HandleImpedanceRefreshError(Exception exception)
@@ -539,7 +579,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     {
         logger.Error(title, exception);
         ShellState.FooterStatus = $"{title}：{exception.Message}";
-        toastService.ShowError(title, message);
+        toastService.ShowError(title, $"{message}\n\n实际原因：{exception.Message}");
     }
 
     /// <summary>导航到指定页面。</summary>
@@ -773,18 +813,70 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     }
 
     // 这些方法被对应 Command 调用，再转给 IHardwareService。
+    /// <summary>
+    /// 登录界面首次显示后读取工作站启动设置；开关启用时只执行一次自动联机。
+    /// 失败后不重试、不启动心跳，保持“仪器未联机”并等待用户手动点击联机。
+    /// </summary>
+    public async Task TryAutomaticConnectionOnceAsync(CancellationToken cancellationToken = default)
+    {
+        if (Interlocked.Exchange(ref automaticConnectionAttempted, 1) != 0)
+        {
+            return;
+        }
+
+        await startupSettingsService.InitializeAsync(cancellationToken);
+        if (!startupSettingsService.AutoConnectOnStartup)
+        {
+            logger.Info("启动时自动联机已关闭，等待用户手动联机");
+            return;
+        }
+
+        if (hardwareService.IsConnected || hardwareService.IsConnecting)
+        {
+            logger.Info("仪器已联机或正在联机，跳过启动自动联机");
+            return;
+        }
+
+        ShellState.IsDeviceConnected = false;
+        connectCommand.RaiseCanExecuteChanged();
+        toastService.ShowInformation(
+            "正在执行一次自动握手，请稍候……",
+            "正在自动联机");
+        try
+        {
+            var result = await hardwareService.ConnectAsync(cancellationToken);
+            ApplyHardwareResult(result);
+            toastService.ShowSuccess(
+                "自动联机成功",
+                result.UserMessage ?? "仪器已返回有效握手反馈，心跳检测已启动。");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            ShellState.IsDeviceConnected = false;
+            connectCommand.RaiseCanExecuteChanged();
+            logger.Warning($"启动自动联机失败，本次不再自动重试：{exception.Message}");
+            toastService.ShowError(
+                "自动联机失败",
+                $"仪器未联机，本次不会自动重试；请检查设备后点击“联机”。\n\n实际原因：{exception.Message}");
+        }
+    }
+
     public async Task ConnectDeviceAsync(CancellationToken cancellationToken = default)
     {
         var result = await hardwareService.ConnectAsync(cancellationToken);
         ApplyHardwareResult(result);
-        toastService.ShowSuccess("联机成功", "设备已联机，通讯链路已建立。");
+        toastService.ShowSuccess("联机成功", result.UserMessage ?? "仪器已返回有效握手反馈，通讯链路已建立。");
     }
 
     public async Task HandshakeDeviceAsync(CancellationToken cancellationToken = default)
     {
         var result = await hardwareService.HandshakeAsync(cancellationToken);
         ApplyHardwareResult(result);
-        toastService.ShowSuccess("握手检测成功", "握手检测通过，设备通讯正常。");
+        toastService.ShowSuccess("握手检测成功", result.UserMessage ?? "已收到仪器的有效握手反馈。");
     }
 
     public async Task DisconnectDeviceAsync(CancellationToken cancellationToken = default)
