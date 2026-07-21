@@ -58,9 +58,14 @@ public sealed class StimulationEngine : IStimulationEngine
         }
 
         await safetyService.EnsureCanStartStimulationAsync(cancellationToken);
-        stimulationStateMachine.MoveTo(StimulationExecutionState.Running, "StartTiGroup");
         auditLog.RecordUserAction($"Start TI group {group.Title}");
-        return await hardwareService.StartGroupAsync(executionGroup, selectedChannelNames, parameterRecord, cancellationToken);
+        return await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Starting,
+            "StartTiGroupRequested",
+            StimulationExecutionState.Running,
+            "StartTiGroupConfirmed",
+            token => hardwareService.StartGroupAsync(executionGroup, selectedChannelNames, parameterRecord, token),
+            cancellationToken);
     }
 
     public async Task<HardwareOperationResult> StartDirectCurrentGroupAsync(
@@ -81,9 +86,14 @@ public sealed class StimulationEngine : IStimulationEngine
         }
 
         await safetyService.EnsureCanStartStimulationAsync(cancellationToken);
-        stimulationStateMachine.MoveTo(StimulationExecutionState.Running, "StartDirectCurrentGroup");
         auditLog.RecordUserAction($"Start tDCS group {group.Title}");
-        return await hardwareService.StartGroupAsync(executionGroup, selectedChannelNames, parameterRecord, cancellationToken);
+        return await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Starting,
+            "StartDirectCurrentGroupRequested",
+            StimulationExecutionState.Running,
+            "StartDirectCurrentGroupConfirmed",
+            token => hardwareService.StartGroupAsync(executionGroup, selectedChannelNames, parameterRecord, token),
+            cancellationToken);
     }
 
     public async Task<HardwareOperationResult> PauseTiGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default)
@@ -91,18 +101,28 @@ public sealed class StimulationEngine : IStimulationEngine
         authorizationService.RequireSignedIn();
         var executionGroup = (activeConfiguration ?? StimulationConfigurationSnapshot.Create(group)).ToMutableGroup();
         await RecordRequestIfSessionActiveAsync("pause_requested", executionGroup, selectedChannelNames, cancellationToken);
-        stimulationStateMachine.MoveTo(StimulationExecutionState.Paused, "PauseTiGroup");
         auditLog.RecordUserAction($"Pause TI group {group.Title}");
-        return await hardwareService.PauseGroupAsync(executionGroup, selectedChannelNames, cancellationToken);
+        return await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Stopping,
+            "PauseTiGroupRequested",
+            StimulationExecutionState.Paused,
+            "PauseTiGroupConfirmed",
+            token => hardwareService.PauseGroupAsync(executionGroup, selectedChannelNames, token),
+            cancellationToken);
     }
 
     public async Task<HardwareOperationResult> EmergencyStopTiGroupAsync(TiGroup group, string reason, CancellationToken cancellationToken = default)
     {
         var executionGroup = (activeConfiguration ?? StimulationConfigurationSnapshot.Create(group)).ToMutableGroup();
         await RecordRequestIfSessionActiveAsync("emergency_stop_requested", executionGroup, reason, cancellationToken);
-        stimulationStateMachine.MoveTo(StimulationExecutionState.EmergencyStopped, $"EmergencyStop:{reason}");
         auditLog.RecordUserAction($"Emergency stop TI group {group.Title}: {reason}");
-        var result = await hardwareService.EmergencyStopGroupAsync(executionGroup, reason, "TI", cancellationToken);
+        var result = await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Stopping,
+            $"EmergencyStopTiRequested:{reason}",
+            StimulationExecutionState.EmergencyStopped,
+            $"EmergencyStopTiConfirmed:{reason}",
+            token => hardwareService.EmergencyStopGroupAsync(executionGroup, reason, "TI", token),
+            cancellationToken);
         activeConfiguration = null;
         configurationSnapshots.Clear(SessionModuleCodes.Stimulation);
         return result;
@@ -115,9 +135,14 @@ public sealed class StimulationEngine : IStimulationEngine
     {
         var executionGroup = (activeConfiguration ?? StimulationConfigurationSnapshot.Create(group)).ToMutableGroup();
         await RecordRequestIfSessionActiveAsync("emergency_stop_requested", executionGroup, reason, cancellationToken);
-        stimulationStateMachine.MoveTo(StimulationExecutionState.EmergencyStopped, $"EmergencyStop:{reason}");
         auditLog.RecordUserAction($"Emergency stop tDCS group {group.Title}: {reason}");
-        var result = await hardwareService.EmergencyStopGroupAsync(executionGroup, reason, "tDCS", cancellationToken);
+        var result = await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Stopping,
+            $"EmergencyStopDirectCurrentRequested:{reason}",
+            StimulationExecutionState.EmergencyStopped,
+            $"EmergencyStopDirectCurrentConfirmed:{reason}",
+            token => hardwareService.EmergencyStopGroupAsync(executionGroup, reason, "tDCS", token),
+            cancellationToken);
         activeConfiguration = null;
         configurationSnapshots.Clear(SessionModuleCodes.Stimulation);
         return result;
@@ -130,16 +155,46 @@ public sealed class StimulationEngine : IStimulationEngine
         CancellationToken cancellationToken = default)
     {
         var executionGroup = StimulationConfigurationSnapshot.Create(group).ToMutableGroup();
-        await RecordRequestIfSessionActiveAsync("completed", executionGroup, selectedChannelNames, cancellationToken);
-        stimulationStateMachine.MoveTo(StimulationExecutionState.Completed, $"Complete:{selectedChannelNames}");
+        await RecordRequestIfSessionActiveAsync("complete_requested", executionGroup, selectedChannelNames, cancellationToken);
         auditLog.RecordUserAction($"Complete {stimulationType} group {group.Title}: {selectedChannelNames}");
-        var result = await hardwareService.CompleteGroupAsync(
-            executionGroup,
-            selectedChannelNames,
-            stimulationType,
+        var result = await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Stopping,
+            $"CompleteRequested:{selectedChannelNames}",
+            StimulationExecutionState.Completed,
+            $"CompleteConfirmed:{selectedChannelNames}",
+            token => hardwareService.CompleteGroupAsync(
+                executionGroup,
+                selectedChannelNames,
+                stimulationType,
+                token),
             cancellationToken);
+        await RecordRequestIfSessionActiveAsync("completed", executionGroup, selectedChannelNames, cancellationToken);
         configurationSnapshots.Clear(SessionModuleCodes.Stimulation);
         return result;
+    }
+
+    private async Task<HardwareOperationResult> ExecuteConfirmedTransitionAsync(
+        StimulationExecutionState pendingState,
+        string pendingTrigger,
+        StimulationExecutionState confirmedState,
+        string confirmedTrigger,
+        Func<CancellationToken, Task<HardwareOperationResult>> operation,
+        CancellationToken cancellationToken)
+    {
+        stimulationStateMachine.MoveTo(pendingState, pendingTrigger);
+        try
+        {
+            var result = await operation(cancellationToken);
+            stimulationStateMachine.MoveTo(confirmedState, confirmedTrigger);
+            return result;
+        }
+        catch (Exception exception)
+        {
+            stimulationStateMachine.MoveTo(
+                StimulationExecutionState.Faulted,
+                $"{pendingTrigger}Failed:{exception.GetType().Name}");
+            throw;
+        }
     }
 
     private Task RecordRequestIfSessionActiveAsync(

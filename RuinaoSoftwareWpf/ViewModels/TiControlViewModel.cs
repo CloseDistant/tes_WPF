@@ -13,6 +13,7 @@ public sealed class TiControlViewModel : ObservableObject
 {
     private readonly IStimulationEngine stimulationEngine;
     private readonly ILoggingService logger;
+    private readonly IToastService toastService;
     private readonly StimulationChannelCountdown countdown = new();
     private TiGroup? selectedGroup;
     private TiGroup? lastSelectedGroup;
@@ -26,10 +27,12 @@ public sealed class TiControlViewModel : ObservableObject
         IStimulationEngine stimulationEngine,
         ILoggingService logger,
         ITiGroupFactory tiGroupFactory,
-        LocalizationViewModel localization)
+        LocalizationViewModel localization,
+        IToastService toastService)
     {
         this.stimulationEngine = stimulationEngine;
         this.logger = logger;
+        this.toastService = toastService;
         countdown.Completed += channel => _ = CompleteChannelAsync(channel);
         Localization = localization;
         Groups = new ObservableCollection<TiGroup>(tiGroupFactory.CreateDemoGroups());
@@ -42,7 +45,7 @@ public sealed class TiControlViewModel : ObservableObject
             }
         });
 
-        StartCommand = CreateHardwareCommand(_ => StartSelectedGroupAsync());
+        StartCommand = CreateHardwareCommand(_ => StartSelectedGroupAsync(), HandleStartFailure);
         StartChannelCommand = new AsyncRelayCommand(
             async (parameter, _) =>
             {
@@ -51,7 +54,7 @@ public sealed class TiControlViewModel : ObservableObject
                     await StartChannelAsync(channel);
                 }
             },
-            onError: ex => logger.Error("TI 单通道启动失败", ex));
+            onError: HandleStartFailure);
         PauseCommand = CreateHardwareCommand(_ => PauseSelectedGroupAsync());
         EmergencyStopCommand = CreateHardwareCommand(_ => EmergencyStopSelectedGroupAsync());
         BackCommand = new RelayCommand(_ => BackRequested?.Invoke(this, EventArgs.Empty));
@@ -158,11 +161,19 @@ public sealed class TiControlViewModel : ObservableObject
         }
     }
 
-    private ICommand CreateHardwareCommand(Func<object?, Task> execute)
+    private ICommand CreateHardwareCommand(Func<object?, Task> execute, Action<Exception>? onError = null)
     {
         return new AsyncRelayCommand(
             async (parameter, _) => await execute(parameter),
-            onError: ex => logger.Error("TI 控制命令执行失败", ex));
+            onError: onError ?? (ex => logger.Error("TI 控制命令执行失败", ex)));
+    }
+
+    private void HandleStartFailure(Exception exception)
+    {
+        logger.Error("刺激启动失败", exception);
+        toastService.ShowError(
+            "刺激启动失败",
+            "刺激启动命令未完成，软件未进入运行状态。具体原因已记录到运行日志。");
     }
 
     private async Task StartSelectedGroupAsync()

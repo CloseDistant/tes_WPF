@@ -29,8 +29,11 @@ public sealed class SessionLifecycleCoordinator : ISessionLifecycleCoordinator
 
     public bool HasRunningModule => stimulationStateMachine.CurrentState is
             StimulationExecutionState.Armed or
+            StimulationExecutionState.Starting or
             StimulationExecutionState.Running or
-            StimulationExecutionState.Paused
+            StimulationExecutionState.Stopping or
+            StimulationExecutionState.Paused or
+            StimulationExecutionState.Faulted
         || eegRecordingService.IsRecording
         || captureMediaRecorder.IsRecording;
 

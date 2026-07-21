@@ -1,5 +1,6 @@
 namespace RuinaoSoftwareWpf.Migrations;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -20,88 +21,73 @@ internal sealed class PatientOwnershipAndOptionalStimulationPatient : Migration
             table: "patients",
             column: "owner_user_id");
 
-        migrationBuilder.Sql(
-            """
-            DROP INDEX IF EXISTS IX_stimulation_records_patient_code_event_time_unix_ms;
-            ALTER TABLE stimulation_records RENAME TO stimulation_records_before_patient_ownership;
-            CREATE TABLE stimulation_records (
-                id INTEGER NOT NULL CONSTRAINT PK_stimulation_records PRIMARY KEY AUTOINCREMENT,
-                operator_user_id INTEGER NULL,
-                patient_code TEXT NULL,
-                action TEXT NOT NULL,
-                group_title TEXT NOT NULL,
-                selected_channel_names TEXT NOT NULL,
-                status TEXT NOT NULL,
-                event_time_unix_ms INTEGER NOT NULL
-            );
-            INSERT INTO stimulation_records (
-                id,
-                patient_code,
-                action,
-                group_title,
-                selected_channel_names,
-                status,
-                event_time_unix_ms)
-            SELECT
-                id,
-                patient_code,
-                action,
-                group_title,
-                selected_channel_names,
-                status,
-                event_time_unix_ms
-            FROM stimulation_records_before_patient_ownership;
-            DROP TABLE stimulation_records_before_patient_ownership;
-            CREATE INDEX IX_stimulation_records_patient_code_event_time_unix_ms
-                ON stimulation_records (patient_code, event_time_unix_ms);
-            CREATE INDEX IX_stimulation_records_operator_user_id_event_time_unix_ms
-                ON stimulation_records (operator_user_id, event_time_unix_ms);
-            """);
+        migrationBuilder.AddColumn<long>(
+            name: "operator_user_id",
+            table: "stimulation_records",
+            type: "INTEGER",
+            nullable: true);
+
+        migrationBuilder.AlterColumn<string>(
+            name: "patient_code",
+            table: "stimulation_records",
+            type: "TEXT",
+            nullable: true,
+            oldClrType: typeof(string),
+            oldType: "TEXT");
+
+        migrationBuilder.CreateIndex(
+            name: "IX_stimulation_records_operator_user_id_event_time_unix_ms",
+            table: "stimulation_records",
+            columns: ["operator_user_id", "event_time_unix_ms"]);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropIndex(
-            name: "IX_patients_owner_user_id",
-            table: "patients");
-        migrationBuilder.DropColumn(
-            name: "owner_user_id",
-            table: "patients");
+        throw new NotSupportedException("正式数据库只支持向前迁移，不支持回退患者归属结构。");
+    }
 
-        migrationBuilder.Sql(
-            """
-            DROP INDEX IF EXISTS IX_stimulation_records_patient_code_event_time_unix_ms;
-            DROP INDEX IF EXISTS IX_stimulation_records_operator_user_id_event_time_unix_ms;
-            ALTER TABLE stimulation_records RENAME TO stimulation_records_with_optional_patient;
-            CREATE TABLE stimulation_records (
-                id INTEGER NOT NULL CONSTRAINT PK_stimulation_records PRIMARY KEY AUTOINCREMENT,
-                patient_code TEXT NOT NULL,
-                action TEXT NOT NULL,
-                group_title TEXT NOT NULL,
-                selected_channel_names TEXT NOT NULL,
-                status TEXT NOT NULL,
-                event_time_unix_ms INTEGER NOT NULL
-            );
-            INSERT INTO stimulation_records (
-                id,
-                patient_code,
-                action,
-                group_title,
-                selected_channel_names,
-                status,
-                event_time_unix_ms)
-            SELECT
-                id,
-                COALESCE(patient_code, ''),
-                action,
-                group_title,
-                selected_channel_names,
-                status,
-                event_time_unix_ms
-            FROM stimulation_records_with_optional_patient;
-            DROP TABLE stimulation_records_with_optional_patient;
-            CREATE INDEX IX_stimulation_records_patient_code_event_time_unix_ms
-                ON stimulation_records (patient_code, event_time_unix_ms);
-            """);
+    protected override void BuildTargetModel(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
+
+        var entity = modelBuilder.Entity<StimulationRecordEntity>();
+        entity.Ignore(item => item.StimulationType);
+        entity.Ignore(item => item.PrescriptionName);
+        entity.Ignore(item => item.AdverseReactionRecord);
+        entity.Ignore(item => item.ParameterSnapshotJson);
+        entity.ToTable("stimulation_records");
+        entity.HasKey(item => item.Id);
+        entity.HasIndex(item => new { item.PatientCode, item.EventTimeUnixMs });
+        entity.HasIndex(item => new { item.OperatorUserId, item.EventTimeUnixMs });
+        entity.Property(item => item.Id)
+            .HasColumnName("id")
+            .HasColumnType("INTEGER")
+            .ValueGeneratedOnAdd()
+            .HasAnnotation("Sqlite:Autoincrement", true);
+        entity.Property(item => item.OperatorUserId)
+            .HasColumnName("operator_user_id")
+            .HasColumnType("INTEGER");
+        entity.Property(item => item.PatientCode)
+            .HasColumnName("patient_code")
+            .HasColumnType("TEXT");
+        entity.Property(item => item.Action)
+            .HasColumnName("action")
+            .HasColumnType("TEXT")
+            .IsRequired();
+        entity.Property(item => item.GroupTitle)
+            .HasColumnName("group_title")
+            .HasColumnType("TEXT")
+            .IsRequired();
+        entity.Property(item => item.SelectedChannelNames)
+            .HasColumnName("selected_channel_names")
+            .HasColumnType("TEXT")
+            .IsRequired();
+        entity.Property(item => item.Status)
+            .HasColumnName("status")
+            .HasColumnType("TEXT")
+            .IsRequired();
+        entity.Property(item => item.EventTimeUnixMs)
+            .HasColumnName("event_time_unix_ms")
+            .HasColumnType("INTEGER");
     }
 }

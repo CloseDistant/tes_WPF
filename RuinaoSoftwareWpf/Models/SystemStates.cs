@@ -18,11 +18,13 @@ public enum StimulationExecutionState
 {
     Idle,
     Armed,
+    Starting,
     Running,
+    Stopping,
     Paused,
     Completed,
     EmergencyStopped,
-    Error
+    Faulted
 }
 
 /// <summary>

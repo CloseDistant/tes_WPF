@@ -70,7 +70,7 @@ public sealed class AppLocalizationService : ILocalizationService
         ["TemporalInterference"] = ("时间相干电刺激", "Temporal Interference Stimulation"),
         ["TranscranialDirectCurrent"] = ("经颅直流电刺激", "Transcranial Direct Current Stimulation"),
         ["ComingSoon"] = ("待开发", "Coming Soon"),
-        ["Back"] = ("← 返回", "← Back"),
+        ["Back"] = ("返回", "Back"),
         ["ModeTitle"] = ("模式：TI", "Mode: TI"),
         ["DirectCurrentModeTitle"] = ("模式：tDCS", "Mode: tDCS"),
         ["ChannelHint"] = ("选择一个 TI 组后，右侧只显示该组对应的一对通道信息", "Select one TI group; only its channel pair is shown on the right"),

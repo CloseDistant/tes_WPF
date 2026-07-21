@@ -64,10 +64,9 @@ internal sealed class AuditTrailService : IAuditTrailService, IAuditTrailStore
                 ApplyRestrictedDirectoryAcl(directory);
             }
 
-            await EncryptedSqliteDatabase.EnsureEncryptedAsync(
+            await EncryptedSqliteDatabase.PrepareEncryptedDatabaseAsync(
                     options.DatabasePath,
                     logger,
-                    CopyPlaintextAuditDatabaseAsync,
                     cancellationToken)
                 .ConfigureAwait(false);
             await EnsureCurrentSchemaAsync(cancellationToken).ConfigureAwait(false);
@@ -257,40 +256,6 @@ internal sealed class AuditTrailService : IAuditTrailService, IAuditTrailStore
         }
 
         await MigrateLegacySchemaAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task CopyPlaintextAuditDatabaseAsync(
-        string sourcePath,
-        string destinationPath,
-        CancellationToken cancellationToken)
-    {
-        await CreateCurrentSchemaAsync(destinationPath, cancellationToken).ConfigureAwait(false);
-        long lastSequenceNo = 0;
-        while (true)
-        {
-            List<AuditEventEntity> batch;
-            await using (var source = new AuditTrailDbContext(sourcePath, encrypted: false))
-            {
-                batch = await source.Events
-                    .AsNoTracking()
-                    .Where(item => item.SequenceNo > lastSequenceNo)
-                    .OrderBy(item => item.SequenceNo)
-                    .Take(MigrationBatchSize)
-                    .ToListAsync(cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            if (batch.Count == 0)
-            {
-                break;
-            }
-
-            await using (var target = new AuditTrailDbContext(destinationPath))
-            {
-                target.Events.AddRange(batch);
-                await target.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            }
-            lastSequenceNo = batch[^1].SequenceNo;
-        }
     }
 
     private async Task CreateCurrentSchemaAsync(string databasePath, CancellationToken cancellationToken)

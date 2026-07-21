@@ -66,6 +66,73 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+
+        <Style x:Key="PatientDropDownItem"
+               TargetType="Button"
+               BasedOn="{StaticResource ToolbarDropDownItem}">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="MinWidth" Value="186" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <Border x:Name="ItemBackground"
+                                    Background="{TemplateBinding Background}"
+                                    SnapsToDevicePixels="True" />
+                            <Border x:Name="StateRail"
+                                    Width="2"
+                                    HorizontalAlignment="Left"
+                                    Background="Transparent" />
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="24" />
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter VerticalAlignment="Center"
+                                                  HorizontalAlignment="Left"
+                                                  RecognizesAccessKey="True" />
+                                <Border x:Name="LockBadge"
+                                        Grid.Column="1"
+                                        Width="20"
+                                        Height="20"
+                                        Background="#27251F"
+                                        BorderBrush="#665234"
+                                        BorderThickness="1"
+                                        CornerRadius="3"
+                                        Visibility="Collapsed">
+                                    <TextBlock Text="&#xE72E;"
+                                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                               FontSize="10"
+                                               Foreground="#A98246"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Border>
+                            </Grid>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsEnabled" Value="True" />
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="ItemBackground" Property="Background" Value="#292F3C" />
+                            </MultiTrigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ItemBackground" Property="Background" Value="#343C4B" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ItemBackground" Property="Background" Value="#141821" />
+                                <Setter TargetName="StateRail" Property="Background" Value="#76572F" />
+                                <Setter TargetName="LockBadge" Property="Visibility" Value="Visible" />
+                                <Setter Property="Foreground" Value="#5E6979" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -301,13 +368,16 @@
                                         MinWidth="150">
                                     <StackPanel>
                                         <Button Content="编辑患者信息"
-                                                Style="{StaticResource ToolbarDropDownItem}"
+                                                Style="{StaticResource PatientDropDownItem}"
+                                                IsEnabled="{Binding IsPatientMenuEnabled}"
                                                 Command="{Binding EditPatientCommand}" />
                                         <Button Content="切换患者"
-                                                Style="{StaticResource ToolbarDropDownItem}"
+                                                Style="{StaticResource PatientDropDownItem}"
+                                                IsEnabled="{Binding IsPatientMenuEnabled}"
                                                 Command="{Binding SwitchPatientCommand}" />
                                         <Button Content="新增患者"
-                                                Style="{StaticResource ToolbarDropDownItem}"
+                                                Style="{StaticResource PatientDropDownItem}"
+                                                IsEnabled="{Binding IsPatientMenuEnabled}"
                                                 Command="{Binding CreatePatientCommand}" />
                                     </StackPanel>
                                 </Border>

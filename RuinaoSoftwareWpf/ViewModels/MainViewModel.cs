@@ -25,7 +25,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private readonly IStartupSettingsService startupSettingsService;
     private readonly ISoftwareActivationService softwareActivationService;
     private readonly IPatientService patientService;
+    private readonly IStimulationStateMachine stimulationStateMachine;
     private readonly ISessionLifecycleCoordinator sessionLifecycleCoordinator;
+    private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly IToastService toastService;
     private readonly AsyncRelayCommand connectCommand;
     private readonly AsyncRelayCommand openAuditTrailCommand;
@@ -50,7 +52,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         IStartupSettingsService startupSettingsService,
         ISoftwareActivationService softwareActivationService,
         IPatientService patientService,
+        IStimulationStateMachine stimulationStateMachine,
         ISessionLifecycleCoordinator sessionLifecycleCoordinator,
+        IDebugHardwareSimulationService debugHardwareSimulation,
         IToastService toastService,
         AuditTrailViewModel auditTrail,
         NavigationViewModel navigation,
@@ -78,7 +82,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         this.startupSettingsService = startupSettingsService;
         this.softwareActivationService = softwareActivationService;
         this.patientService = patientService;
+        this.stimulationStateMachine = stimulationStateMachine;
         this.sessionLifecycleCoordinator = sessionLifecycleCoordinator;
+        this.debugHardwareSimulation = debugHardwareSimulation;
         this.toastService = toastService;
         AuditTrail = auditTrail;
 
@@ -178,7 +184,23 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         featureVisibilityService.VisibilityChanged += (_, _) => ApplyFeatureVisibility();
         accountService.CurrentUserChanged += (_, _) => NotifyAccountChanged();
         sessionLifecycleCoordinator.CurrentSessionChanged += (_, _) => NotifyUnifiedSessionChanged();
+        stimulationStateMachine.StateChanged += (_, _) => NotifyPatientMenuAvailabilityChanged();
+        EegSignalCapture.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(EegSignalCaptureViewModel.IsRecording))
+            {
+                NotifyPatientMenuAvailabilityChanged();
+            }
+        };
+        AssessmentCapture.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(AssessmentCaptureViewModel.ShouldConfirmLeavingWorkbench))
+            {
+                NotifyPatientMenuAvailabilityChanged();
+            }
+        };
         hardwareService.ConnectionChanged += HardwareService_ConnectionChanged;
+        debugHardwareSimulation.ConnectionChanged += (_, _) => ApplyDebugHardwareSimulationState();
         FemSimulation.Initialize(this);
 
         // 默认打开电刺激类型选择页。
@@ -313,6 +335,11 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     public System.Windows.Visibility PatientMenuVisibility => CanManagePatients
         ? System.Windows.Visibility.Visible
         : System.Windows.Visibility.Collapsed;
+
+    public bool IsPatientMenuEnabled => CanManagePatients && !IsPatientOperationLocked;
+
+    private bool IsPatientOperationLocked =>
+        sessionLifecycleCoordinator.HasRunningModule || AssessmentCapture.IsActiveForSessionSecurity;
 
     public bool IsSidebarCollapsed
     {
@@ -555,7 +582,27 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
     private bool CanConnectDevice()
     {
-        return !hardwareService.IsConnected && !hardwareService.IsConnecting;
+        return !hardwareService.IsConnected
+            && !hardwareService.IsConnecting
+            && !debugHardwareSimulation.IsConnected;
+    }
+
+    private void ApplyDebugHardwareSimulationState()
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(ApplyDebugHardwareSimulationState);
+            return;
+        }
+
+        ShellState.IsDeviceConnected = debugHardwareSimulation.IsConnected || hardwareService.IsConnected;
+        if (debugHardwareSimulation.IsConnected)
+        {
+            ShellState.FooterStatus = "设备：DEBUG 模拟联机 | 不向真实仪器发送命令";
+        }
+
+        connectCommand.RaiseCanExecuteChanged();
     }
 
     private void HardwareService_ConnectionChanged(

@@ -12,28 +12,100 @@ public sealed class DatabaseEnvironmentCollection
 [Collection(DatabaseEnvironmentCollection.Name)]
 public sealed class AppDatabaseInitializerTests
 {
+    private const string InitialMigrationId = "202607100001_InitialSchema";
+
     [Fact]
-    public async Task EnsureInitializedAsync_MigratesLegacyRowsAcrossBatchBoundary()
+    public Task EnsureInitializedAsync_ReplacesHistoricalPlaintextDatabase() =>
+        RunInIsolatedDataDirectoryAsync(async (databasePath, cancellationToken) =>
+        {
+            await using (var legacy = new CaptureDbContext(databasePath, encrypted: false))
+            {
+                await legacy.Database.EnsureCreatedAsync(cancellationToken);
+                legacy.AppStates.Add(new AppStateEntity
+                {
+                    Key = "historical-plaintext",
+                    Value = "discarded",
+                    UpdatedAtUnixMs = 1
+                });
+                await legacy.SaveChangesAsync(cancellationToken);
+            }
+
+            var initializer = new AppDatabaseInitializer(new TestLoggingService());
+            await initializer.EnsureInitializedAsync(cancellationToken);
+
+            await using var current = new CaptureDbContext(databasePath);
+            Assert.Contains(InitialMigrationId, await current.Database.GetAppliedMigrationsAsync(cancellationToken));
+            Assert.False(await current.AppStates.AnyAsync(
+                item => item.Key == "historical-plaintext",
+                cancellationToken));
+        });
+
+    [Fact]
+    public Task EnsureInitializedAsync_ReplacesEncryptedDatabaseWithoutMigrationLineage() =>
+        RunInIsolatedDataDirectoryAsync(async (databasePath, cancellationToken) =>
+        {
+            await using (var unversioned = new CaptureDbContext(databasePath))
+            {
+                await unversioned.Database.EnsureCreatedAsync(cancellationToken);
+                unversioned.AppStates.Add(new AppStateEntity
+                {
+                    Key = "unversioned",
+                    Value = "discarded",
+                    UpdatedAtUnixMs = 1
+                });
+                await unversioned.SaveChangesAsync(cancellationToken);
+            }
+
+            var initializer = new AppDatabaseInitializer(new TestLoggingService());
+            await initializer.EnsureInitializedAsync(cancellationToken);
+
+            await using var current = new CaptureDbContext(databasePath);
+            Assert.Contains(InitialMigrationId, await current.Database.GetAppliedMigrationsAsync(cancellationToken));
+            Assert.False(await current.AppStates.AnyAsync(
+                item => item.Key == "unversioned",
+                cancellationToken));
+        });
+
+    [Fact]
+    public Task EnsureInitializedAsync_PreservesDatabaseFromCurrentMigrationLineage() =>
+        RunInIsolatedDataDirectoryAsync(async (databasePath, cancellationToken) =>
+        {
+            var initialSetup = new AppDatabaseInitializer(new TestLoggingService());
+            await initialSetup.EnsureInitializedAsync(cancellationToken);
+
+            await using (var existing = new CaptureDbContext(databasePath))
+            {
+                existing.AppStates.Add(new AppStateEntity
+                {
+                    Key = "current-lineage",
+                    Value = "preserved",
+                    UpdatedAtUnixMs = 1
+                });
+                await existing.SaveChangesAsync(cancellationToken);
+            }
+
+            var nextStartup = new AppDatabaseInitializer(new TestLoggingService());
+            await nextStartup.EnsureInitializedAsync(cancellationToken);
+
+            await using var current = new CaptureDbContext(databasePath);
+            Assert.Equal("preserved", await current.AppStates
+                .Where(item => item.Key == "current-lineage")
+                .Select(item => item.Value)
+                .SingleAsync(cancellationToken));
+            Assert.Empty(await current.Database.GetPendingMigrationsAsync(cancellationToken));
+        });
+
+    private static async Task RunInIsolatedDataDirectoryAsync(
+        Func<string, CancellationToken, Task> test)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var directory = Path.Combine(Path.GetTempPath(), $"ruinao-db-migration-{Guid.NewGuid():N}");
+        var directory = Path.Combine(Path.GetTempPath(), $"ruinao-db-initializer-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         var previousDirectory = Environment.GetEnvironmentVariable("RUINAO_DATA_DIRECTORY");
         Environment.SetEnvironmentVariable("RUINAO_DATA_DIRECTORY", directory);
         try
         {
-            var databasePath = Path.Combine(directory, "ruinao_app.db");
-            await CreateLegacyDatabaseAsync(databasePath, 501, cancellationToken);
-
-            var initializer = new AppDatabaseInitializer(new TestLoggingService());
-            await initializer.EnsureInitializedAsync(cancellationToken);
-
-            await using var context = new CaptureDbContext(databasePath);
-            Assert.Equal(501, await context.AppStates.CountAsync(cancellationToken));
-            Assert.Equal("value-500", await context.AppStates
-                .Where(item => item.Key == "legacy-500")
-                .Select(item => item.Value)
-                .SingleAsync(cancellationToken));
+            await test(Path.Combine(directory, "ruinao_app.db"), cancellationToken);
         }
         finally
         {
@@ -43,31 +115,6 @@ public sealed class AppDatabaseInitializerTests
             {
                 Directory.Delete(directory, recursive: true);
             }
-        }
-    }
-
-    private static async Task CreateLegacyDatabaseAsync(
-        string databasePath,
-        int rowCount,
-        CancellationToken cancellationToken)
-    {
-        await using var context = new CaptureDbContext(databasePath, encrypted: false);
-        await context.Database.EnsureCreatedAsync(cancellationToken);
-
-        const int batchSize = 100;
-        for (var offset = 0; offset < rowCount; offset += batchSize)
-        {
-            var count = Math.Min(batchSize, rowCount - offset);
-            var rows = Enumerable.Range(offset, count)
-                .Select(index => new AppStateEntity
-                {
-                    Key = $"legacy-{index}",
-                    Value = $"value-{index}",
-                    UpdatedAtUnixMs = index
-                });
-            await context.AppStates.AddRangeAsync(rows, cancellationToken);
-            await context.SaveChangesAsync(cancellationToken);
-            context.ChangeTracker.Clear();
         }
     }
 

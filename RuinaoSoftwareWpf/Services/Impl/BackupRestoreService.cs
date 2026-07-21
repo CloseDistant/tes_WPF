@@ -62,6 +62,7 @@ internal sealed class BackupRestoreService : IBackupRestoreService
 
                 var directory = Path.Combine(drive.RootDirectory.FullName, "ruinao");
                 Directory.CreateDirectory(directory);
+                CleanupPartialBackupFiles(directory);
                 return Task.FromResult(new BackupLocationInfo(
                     directory,
                     true,
@@ -115,6 +116,7 @@ internal sealed class BackupRestoreService : IBackupRestoreService
         ValidatePassword(password);
         var directory = Path.GetFullPath(directoryPath);
         Directory.CreateDirectory(directory);
+        CleanupPartialBackupFiles(directory);
         var available = new DriveInfo(Path.GetPathRoot(directory)!).AvailableFreeSpace;
         var estimated = EstimateBackupSize();
         var required = Math.Max(MinimumFreeBytes, estimated * 2);
@@ -153,10 +155,20 @@ internal sealed class BackupRestoreService : IBackupRestoreService
             progress?.Report(new BackupOperationProgress("加密封装", 58, "正在生成加密备份包"));
             var archive = CreateArchive(files);
             var destination = GetAvailableBackupPath(directory);
-            await WriteEncryptedPackageAsync(destination, archive, password, cancellationToken).ConfigureAwait(false);
+            var partial = destination + ".partial";
+            TryDeleteFile(partial);
+            try
+            {
+                await WriteEncryptedPackageAsync(partial, archive, password, cancellationToken).ConfigureAwait(false);
 
-            progress?.Report(new BackupOperationProgress("数据校验", 88, "正在复核备份包"));
-            await ValidatePackageAsync(destination, password, cancellationToken).ConfigureAwait(false);
+                progress?.Report(new BackupOperationProgress("数据校验", 88, "正在复核备份包"));
+                await ValidatePackageAsync(partial, password, cancellationToken).ConfigureAwait(false);
+                File.Move(partial, destination);
+            }
+            finally
+            {
+                TryDeleteFile(partial);
+            }
             var status = new BackupStatus(DateTimeOffset.Now, Path.GetFileName(destination));
             await SaveStatusAsync(status, cancellationToken).ConfigureAwait(false);
             await auditTrail.TryAppendAsync(
@@ -280,8 +292,11 @@ internal sealed class BackupRestoreService : IBackupRestoreService
     private void DemandMaintenanceIdle()
     {
         var stimulationActive = stimulationEngine.CurrentState is StimulationExecutionState.Armed
+            or StimulationExecutionState.Starting
             or StimulationExecutionState.Running
-            or StimulationExecutionState.Paused;
+            or StimulationExecutionState.Stopping
+            or StimulationExecutionState.Paused
+            or StimulationExecutionState.Faulted;
         if (stimulationActive || eegRecording.IsRecording || assessmentActivity.IsActiveForSessionSecurity)
         {
             throw new InvalidOperationException("当前存在采集或电刺激任务，请结束后再执行数据备份或恢复");
@@ -372,28 +387,37 @@ internal sealed class BackupRestoreService : IBackupRestoreService
         var key = Rfc2898DeriveBytes.Pbkdf2(password, salt, KdfIterations, HashAlgorithmName.SHA256, 32);
         var cipher = new byte[archive.Length];
         var tag = new byte[16];
-        using (var aes = new AesGcm(key, tag.Length))
+        try
         {
-            aes.Encrypt(nonce, archive, cipher, tag, Encoding.ASCII.GetBytes(Magic));
-        }
+            using (var aes = new AesGcm(key, tag.Length))
+            {
+                aes.Encrypt(nonce, archive, cipher, tag, Encoding.ASCII.GetBytes(Magic));
+            }
 
-        var header = JsonSerializer.SerializeToUtf8Bytes(new PackageHeader(
-            1,
-            KdfIterations,
-            Convert.ToBase64String(salt),
-            Convert.ToBase64String(nonce)));
-        var temporary = path + ".tmp";
-        await using (var stream = File.Create(temporary))
-        {
+            var header = JsonSerializer.SerializeToUtf8Bytes(new PackageHeader(
+                1,
+                KdfIterations,
+                Convert.ToBase64String(salt),
+                Convert.ToBase64String(nonce)));
+            await using var stream = new FileStream(
+                path,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                1024 * 1024,
+                useAsync: true);
             await stream.WriteAsync(Encoding.ASCII.GetBytes(Magic), cancellationToken).ConfigureAwait(false);
             await stream.WriteAsync(BitConverter.GetBytes(header.Length), cancellationToken).ConfigureAwait(false);
             await stream.WriteAsync(header, cancellationToken).ConfigureAwait(false);
             await stream.WriteAsync(cipher, cancellationToken).ConfigureAwait(false);
             await stream.WriteAsync(tag, cancellationToken).ConfigureAwait(false);
             await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            stream.Flush(flushToDisk: true);
         }
-        File.Move(temporary, path, true);
-        CryptographicOperations.ZeroMemory(key);
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+        }
     }
 
     private static async Task ValidatePackageAsync(string path, string password, CancellationToken cancellationToken)
@@ -594,6 +618,52 @@ internal sealed class BackupRestoreService : IBackupRestoreService
         catch
         {
             // 临时目录清理由下次维护处理，不覆盖主操作结果。
+        }
+    }
+
+    private void CleanupPartialBackupFiles(string directory)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return;
+        }
+
+        foreach (var path in Directory.EnumerateFiles(
+                     directory,
+                     $"*{Extension}.partial",
+                     SearchOption.TopDirectoryOnly))
+        {
+            try
+            {
+                using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                }
+                File.Delete(path);
+                logger.Info($"已清理未完成的数据备份：file={Path.GetFileName(path)}");
+            }
+            catch (IOException)
+            {
+                // A backup still in use is left untouched.
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                logger.Warning($"未完成备份清理失败：file={Path.GetFileName(path)}; reason={exception.Message}");
+            }
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // The next backup operation will retry cleanup.
         }
     }
 

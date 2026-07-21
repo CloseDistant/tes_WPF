@@ -23,6 +23,7 @@ public sealed class HardwareService : IHardwareService
     private readonly IDeviceStateMachine deviceStateMachine;
     private readonly IAuditLogService auditLog;
     private readonly IStimulationRecordService stimulationRecordService;
+    private readonly IDebugHardwareSimulationService debugHardwareSimulation;
 
     // 操作锁：保证同一时刻只有一个硬件命令在执行，避免并发下发导致协议混乱。
     private readonly SemaphoreSlim operationLock = new(1, 1);
@@ -31,6 +32,7 @@ public sealed class HardwareService : IHardwareService
     private CancellationTokenSource? heartbeatCts;
     private Task? heartbeatTask;
     private int connectionAttemptActive;
+    private int debugMockStimulationActive;
 
     public event EventHandler<HardwareConnectionChangedEventArgs>? ConnectionChanged;
 
@@ -39,13 +41,15 @@ public sealed class HardwareService : IHardwareService
         ILoggingService logger,
         IDeviceStateMachine deviceStateMachine,
         IAuditLogService auditLog,
-        IStimulationRecordService stimulationRecordService)
+        IStimulationRecordService stimulationRecordService,
+        IDebugHardwareSimulationService debugHardwareSimulation)
     {
         this.protocolBridge = protocolBridge;
         this.logger = logger;
         this.deviceStateMachine = deviceStateMachine;
         this.auditLog = auditLog;
         this.stimulationRecordService = stimulationRecordService;
+        this.debugHardwareSimulation = debugHardwareSimulation;
     }
 
     /// <summary>
@@ -198,7 +202,18 @@ public sealed class HardwareService : IHardwareService
         PrescriptionDefinition parameterRecord,
         CancellationToken cancellationToken = default)
     {
-        await RunDeviceOperationAsync(token => StartGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+        var useDebugMock = IsDebugMockStimulationActive || ShouldStartOfflineStimulationMock();
+        if (useDebugMock)
+        {
+            Interlocked.Exchange(ref debugMockStimulationActive, 1);
+            logger.Debug($"DEBUG 模拟启动刺激：mode={parameterRecord.StimulationType}, group={group.Title}, channels={selectedChannelNames}");
+        }
+        else
+        {
+            Interlocked.Exchange(ref debugMockStimulationActive, 0);
+            await RunDeviceOperationAsync(token => StartGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+        }
+
         await stimulationRecordService.RecordAsync(
             new StimulationRecordRequest(
                 "start",
@@ -210,8 +225,13 @@ public sealed class HardwareService : IHardwareService
                 ParameterSnapshotJson: StimulationRecordParameters.ToJson(parameterRecord)),
             cancellationToken);
 
-        logger.Hardware($"启动刺激：已生成 {group.Title} 通道启动帧，channels={selectedChannelNames}");
-        return Result($"设备：协议库 | 模式：{parameterRecord.StimulationType} | 刺激：运行中");
+        if (useDebugMock)
+        {
+            return DebugMockResult(parameterRecord.StimulationType, "运行中");
+        }
+
+        logger.Hardware($"启动刺激：硬件 ACK 已确认，group={group.Title}, channels={selectedChannelNames}");
+        return Result($"设备：已确认 | 模式：{parameterRecord.StimulationType} | 刺激：运行中");
     }
 
     /// <summary>
@@ -220,11 +240,22 @@ public sealed class HardwareService : IHardwareService
     /// </summary>
     public async Task<HardwareOperationResult> PauseGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default)
     {
-        await RunDeviceOperationAsync(token => PauseGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+        var useDebugMock = IsDebugMockStimulationActive;
+        if (!useDebugMock)
+        {
+            await RunDeviceOperationAsync(token => PauseGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+        }
+
         await stimulationRecordService.RecordAsync(new StimulationRecordRequest("pause", group.Title, selectedChannelNames, "paused", "TI"), cancellationToken);
 
-        logger.Hardware($"暂停/停止刺激：已生成 {group.Title} 通道停止帧，channels={selectedChannelNames}");
-        return Result("设备：协议库 | 模式：TI | 刺激：已暂停");
+        if (useDebugMock)
+        {
+            logger.Debug($"DEBUG 模拟暂停刺激：group={group.Title}, channels={selectedChannelNames}");
+            return DebugMockResult("TI", "已暂停");
+        }
+
+        logger.Hardware($"暂停/停止刺激：硬件 ACK 已确认，group={group.Title}, channels={selectedChannelNames}");
+        return Result("设备：已确认 | 模式：TI | 刺激：已暂停");
     }
 
     /// <summary>
@@ -237,11 +268,23 @@ public sealed class HardwareService : IHardwareService
         string stimulationType = "TI",
         CancellationToken cancellationToken = default)
     {
-        await RunDeviceOperationAsync(token => EmergencyStopGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+        var useDebugMock = IsDebugMockStimulationActive;
+        if (!useDebugMock)
+        {
+            await RunDeviceOperationAsync(token => EmergencyStopGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+        }
+
         await stimulationRecordService.RecordAsync(new StimulationRecordRequest("emergency_stop", group.Title, selectedChannelNames, "stopped", stimulationType), cancellationToken);
 
-        logger.Hardware($"紧急停止：已生成 {group.Title} 通道停止帧，channels={selectedChannelNames}");
-        return Result($"设备：协议库 | 模式：{stimulationType} | 刺激：已急停");
+        if (useDebugMock)
+        {
+            logger.Debug($"DEBUG 模拟急停刺激：mode={stimulationType}, group={group.Title}, channels={selectedChannelNames}");
+            Interlocked.Exchange(ref debugMockStimulationActive, 0);
+            return DebugMockResult(stimulationType, "已急停");
+        }
+
+        logger.Hardware($"紧急停止：硬件 ACK 已确认，group={group.Title}, channels={selectedChannelNames}");
+        return Result($"设备：已确认 | 模式：{stimulationType} | 刺激：已急停");
     }
 
     public async Task<HardwareOperationResult> CompleteGroupAsync(
@@ -250,7 +293,12 @@ public sealed class HardwareService : IHardwareService
         string stimulationType,
         CancellationToken cancellationToken = default)
     {
-        await RunDeviceOperationAsync(token => PauseGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+        var useDebugMock = IsDebugMockStimulationActive;
+        if (!useDebugMock)
+        {
+            await RunDeviceOperationAsync(token => PauseGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+        }
+
         await stimulationRecordService.RecordAsync(
             new StimulationRecordRequest(
                 "complete",
@@ -260,8 +308,15 @@ public sealed class HardwareService : IHardwareService
                 stimulationType),
             cancellationToken);
 
-        logger.Hardware($"刺激完成：已停止 {group.Title} 通道输出，channels={selectedChannelNames}");
-        return Result($"设备：协议库 | 模式：{stimulationType} | 刺激：已完成");
+        if (useDebugMock)
+        {
+            logger.Debug($"DEBUG 模拟完成刺激：mode={stimulationType}, group={group.Title}, channels={selectedChannelNames}");
+            Interlocked.Exchange(ref debugMockStimulationActive, 0);
+            return DebugMockResult(stimulationType, "已完成");
+        }
+
+        logger.Hardware($"刺激完成：停止命令 ACK 已确认，group={group.Title}, channels={selectedChannelNames}");
+        return Result($"设备：已确认 | 模式：{stimulationType} | 刺激：已完成");
     }
 
     /// <summary>
@@ -372,6 +427,25 @@ public sealed class HardwareService : IHardwareService
         {
             operationLock.Release();
         }
+    }
+
+    private bool IsDebugMockStimulationActive => Volatile.Read(ref debugMockStimulationActive) == 1;
+
+    private bool ShouldStartOfflineStimulationMock()
+    {
+#if DEBUG
+        return !IsConnected && debugHardwareSimulation.IsConnected;
+#else
+        return false;
+#endif
+    }
+
+    private static HardwareOperationResult DebugMockResult(string stimulationType, string status)
+    {
+        return new HardwareOperationResult(
+            true,
+            $"设备：未联机 | DEBUG 模拟：{stimulationType} | 刺激：{status}",
+            "当前为未连接仪器的 DEBUG 模拟运行，不会向硬件输出刺激。");
     }
 
     /// <summary>串行执行需要返回真实硬件结果的操作。</summary>

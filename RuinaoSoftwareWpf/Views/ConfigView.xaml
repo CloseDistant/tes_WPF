@@ -589,6 +589,63 @@
                                 Margin="10,0,0,0" />
                     </StackPanel>
                 </StackPanel>
+
+                <Border Height="1"
+                        Background="#3A3C45"
+                        Visibility="{Binding DebugSimulationVisibility}" />
+
+                <StackPanel Margin="24,24,24,28"
+                            Visibility="{Binding DebugSimulationVisibility}">
+                    <Grid Margin="0,0,0,14">
+                        <TextBlock Text="DEBUG 模拟联机"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center" />
+                        <Border HorizontalAlignment="Right"
+                                Padding="9,3"
+                                CornerRadius="3">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="#292D37" />
+                                    <Setter Property="BorderBrush" Value="#4B5362" />
+                                    <Setter Property="BorderThickness" Value="1" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsDebugSimulationConnected}" Value="True">
+                                            <Setter Property="Background" Value="#1D3529" />
+                                            <Setter Property="BorderBrush" Value="#397851" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Text="{Binding DebugSimulationStatus}"
+                                       FontSize="11">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#929DAF" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsDebugSimulationConnected}" Value="True">
+                                                <Setter Property="Foreground" Value="#78D995" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Border>
+                    </Grid>
+                    <TextBlock Text="仅模拟设备联机与电刺激控制，不向真实仪器发送命令。"
+                               Foreground="#929DAF"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,16" />
+                    <Button Content="启用模拟联机"
+                            Command="{Binding ConnectDebugSimulationCommand}"
+                            Style="{StaticResource SettingsActionButton}"
+                            Width="140"
+                            HorizontalAlignment="Right"
+                            Background="#8A642E"
+                            BorderBrush="#A77B3A"
+                            Foreground="#F2E7D5" />
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
     </Grid>

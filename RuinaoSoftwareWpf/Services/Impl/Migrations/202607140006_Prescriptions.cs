@@ -37,19 +37,65 @@ internal sealed class Prescriptions : Migration
             table: "prescriptions",
             column: "name");
 
-        // 该迁移为手工维护，使用明确 SQL，避免升级旧库时 InsertData 依赖目标模型推断。
-        migrationBuilder.Sql(
-            """
-            INSERT OR IGNORE INTO "prescriptions" (
-                "id", "name", "indication", "stimulation_type", "current_milliamp",
-                "delivery_mode", "total_duration_minutes", "interval_minutes",
-                "session_duration_minutes", "course", "ramp_up_seconds", "ramp_down_seconds",
-                "evidence_grade", "is_builtin", "created_at_unix_ms", "updated_at_unix_ms")
-            VALUES (
-                'BUILTIN_TDCS_PROTOCOL1', 'protocol1', '默认直流电刺激', 'tDCS', 2.0,
-                '连续', 20, NULL, NULL, '10次；前3周5次/周，后7周3次/周', 30, 30,
-                '内置默认处方', 1, 0, 0);
-            """);
+        migrationBuilder.InsertData(
+            table: "prescriptions",
+            columns:
+            [
+                "id",
+                "name",
+                "indication",
+                "stimulation_type",
+                "current_milliamp",
+                "delivery_mode",
+                "total_duration_minutes",
+                "interval_minutes",
+                "session_duration_minutes",
+                "course",
+                "ramp_up_seconds",
+                "ramp_down_seconds",
+                "evidence_grade",
+                "is_builtin",
+                "created_at_unix_ms",
+                "updated_at_unix_ms"
+            ],
+            columnTypes:
+            [
+                "TEXT",
+                "TEXT",
+                "TEXT",
+                "TEXT",
+                "REAL",
+                "TEXT",
+                "INTEGER",
+                "INTEGER",
+                "INTEGER",
+                "TEXT",
+                "INTEGER",
+                "INTEGER",
+                "TEXT",
+                "INTEGER",
+                "INTEGER",
+                "INTEGER"
+            ],
+            values:
+            [
+                "BUILTIN_TDCS_PROTOCOL1",
+                "protocol1",
+                "默认直流电刺激",
+                "tDCS",
+                2.0,
+                "连续",
+                20,
+                null,
+                null,
+                "10次；前3周5次/周，后7周3次/周",
+                30,
+                30,
+                "内置默认处方",
+                true,
+                0L,
+                0L
+            ]);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder) =>

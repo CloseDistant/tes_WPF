@@ -162,6 +162,18 @@ public sealed partial class MainViewModel
         OnPropertyChanged(nameof(ActiveSessionVisibility));
     }
 
+    private void NotifyPatientMenuAvailabilityChanged()
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(NotifyPatientMenuAvailabilityChanged);
+            return;
+        }
+
+        OnPropertyChanged(nameof(IsPatientMenuEnabled));
+    }
+
     private async Task LoginAsync()
     {
         await ShowLoginDialogAsync();
@@ -305,6 +317,7 @@ public sealed partial class MainViewModel
         openAuditTrailCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(CanManagePatients));
         OnPropertyChanged(nameof(PatientMenuVisibility));
+        NotifyPatientMenuAvailabilityChanged();
     }
 
     private async Task<CurrentUserInfo?> ShowLoginDialogAsync()

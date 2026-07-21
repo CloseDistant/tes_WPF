@@ -62,13 +62,21 @@ public sealed class ReliableHardwareTransport : IHardwareTransport
                         $"硬件回复乱序或关联错误：expected={commandId}, actual={reply.CommandId}。");
                 }
 
-                if (reply.Acknowledgement is HardwareAcknowledgement.Ack or HardwareAcknowledgement.Simulated)
+                if (reply.Acknowledgement == HardwareAcknowledgement.Ack)
                 {
                     completedCommands.TryAdd(commandId, reply);
                     TrimCompletedCommands();
                     logger.Hardware(
                         $"命令完成：id={commandId}, seq={envelope.Sequence}, command={commandName}, ack={reply.Acknowledgement}, attempt={attempt}");
                     return;
+                }
+
+                if (reply.Acknowledgement == HardwareAcknowledgement.Simulated)
+                {
+                    throw new HardwareCommandException(
+                        commandId,
+                        commandName,
+                        new InvalidOperationException("模拟回复不属于有效硬件 ACK。"));
                 }
 
                 if (reply.Acknowledgement == HardwareAcknowledgement.Nak)

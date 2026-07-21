@@ -44,7 +44,8 @@ public sealed class DeviceStateMachine : StateMachineBase<DeviceConnectionState>
 
     public void MoveTo(DeviceConnectionState nextState, string trigger, string operatorId = "system")
     {
-        StateChanged?.Invoke(this, MoveCore(nextState, trigger, operatorId));
+        var transition = MoveCore(nextState, trigger, operatorId);
+        StateChanged?.Invoke(this, transition);
     }
 }
 
@@ -62,7 +63,8 @@ public sealed class StimulationStateMachine : StateMachineBase<StimulationExecut
 
     public void MoveTo(StimulationExecutionState nextState, string trigger, string operatorId = "system")
     {
-        StateChanged?.Invoke(this, MoveCore(nextState, trigger, operatorId));
+        var transition = MoveCore(nextState, trigger, operatorId);
+        StateChanged?.Invoke(this, transition);
     }
 }
 
@@ -80,6 +82,7 @@ public sealed class HeadModelStateMachine : StateMachineBase<HeadModelState>, IH
 
     public void MoveTo(HeadModelState nextState, string trigger, string operatorId = "system")
     {
-        StateChanged?.Invoke(this, MoveCore(nextState, trigger, operatorId));
+        var transition = MoveCore(nextState, trigger, operatorId);
+        StateChanged?.Invoke(this, transition);
     }
 }

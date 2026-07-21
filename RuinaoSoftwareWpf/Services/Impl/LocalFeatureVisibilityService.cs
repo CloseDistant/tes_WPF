@@ -7,6 +7,7 @@ public sealed class LocalFeatureVisibilityService : IFeatureVisibilityService
     private readonly IAppDatabaseInitializer databaseInitializer;
     private readonly IAccountService accountService;
     private readonly ILoggingService logger;
+    private readonly IAppDatabaseWriteCoordinator databaseWriteCoordinator;
     private readonly SemaphoreSlim initializeGate = new(1, 1);
     private readonly SemaphoreSlim writeGate = new(1, 1);
     private readonly object stateGate = new();
@@ -16,11 +17,13 @@ public sealed class LocalFeatureVisibilityService : IFeatureVisibilityService
     public LocalFeatureVisibilityService(
         IAppDatabaseInitializer databaseInitializer,
         IAccountService accountService,
-        ILoggingService logger)
+        ILoggingService logger,
+        IAppDatabaseWriteCoordinator databaseWriteCoordinator)
     {
         this.databaseInitializer = databaseInitializer;
         this.accountService = accountService;
         this.logger = logger;
+        this.databaseWriteCoordinator = databaseWriteCoordinator;
     }
 
     public event EventHandler? VisibilityChanged;
@@ -140,7 +143,10 @@ public sealed class LocalFeatureVisibilityService : IFeatureVisibilityService
                 entity.UpdatedAtUnixMs = now;
             }
 
-            await context.SaveChangesAsync(cancellationToken);
+            await databaseWriteCoordinator.ExecuteAsync(
+                AppDatabasePathProvider.MainDatabasePath,
+                () => context.SaveChangesAsync(cancellationToken),
+                cancellationToken);
             lock (stateGate)
             {
                 visibility.Clear();

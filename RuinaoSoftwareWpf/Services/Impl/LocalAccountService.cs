@@ -13,6 +13,7 @@ public sealed class LocalAccountService : IAccountService
 
     private readonly ILoggingService logger;
     private readonly IAppDatabaseInitializer databaseInitializer;
+    private readonly IAppDatabaseWriteCoordinator databaseWriteCoordinator;
     private readonly IAuditTrailService auditTrail;
     private readonly SemaphoreSlim databaseGate = new(1, 1);
     private readonly SemaphoreSlim loginGate = new(1, 1);
@@ -22,10 +23,12 @@ public sealed class LocalAccountService : IAccountService
     public LocalAccountService(
         ILoggingService logger,
         IAppDatabaseInitializer databaseInitializer,
+        IAppDatabaseWriteCoordinator databaseWriteCoordinator,
         IAuditTrailService auditTrail)
     {
         this.logger = logger;
         this.databaseInitializer = databaseInitializer;
+        this.databaseWriteCoordinator = databaseWriteCoordinator;
         this.auditTrail = auditTrail;
     }
 
@@ -71,7 +74,7 @@ public sealed class LocalAccountService : IAccountService
             if (state is not null)
             {
                 context.AppStates.Remove(state);
-                await context.SaveChangesAsync(cancellationToken);
+                await SaveChangesAsync(context, cancellationToken);
             }
 
             return;
@@ -93,7 +96,7 @@ public sealed class LocalAccountService : IAccountService
             state.UpdatedAtUnixMs = now;
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+        await SaveChangesAsync(context, cancellationToken);
     }
 
     public async Task<AccountLoginResult> LoginAsync(string loginName, string password, CancellationToken cancellationToken = default)
@@ -147,7 +150,7 @@ public sealed class LocalAccountService : IAccountService
                 user.FailedLoginAttempts++;
                 var message = BuildFailedLoginMessage(user, now);
                 user.UpdatedAtUnixMs = now.ToUnixTimeMilliseconds();
-                await context.SaveChangesAsync(cancellationToken);
+                await SaveChangesAsync(context, cancellationToken);
                 await WriteAuditAsync(null, user.Id, "login", "failed", message, cancellationToken);
                 return new AccountLoginResult(false, null, message);
             }
@@ -155,7 +158,7 @@ public sealed class LocalAccountService : IAccountService
             user.FailedLoginAttempts = 0;
             user.LockoutEndUnixMs = null;
             user.UpdatedAtUnixMs = now.ToUnixTimeMilliseconds();
-            await context.SaveChangesAsync(cancellationToken);
+            await SaveChangesAsync(context, cancellationToken);
 
             var info = ToCurrentUser(user);
             CurrentUser = info;
@@ -221,7 +224,7 @@ public sealed class LocalAccountService : IAccountService
                 user.FailedLoginAttempts++;
                 var message = BuildFailedPasswordVerificationMessage(user, now);
                 user.UpdatedAtUnixMs = now.ToUnixTimeMilliseconds();
-                await context.SaveChangesAsync(cancellationToken);
+                await SaveChangesAsync(context, cancellationToken);
                 await WriteAuditAsync(user.Id, user.Id, "session_unlock", "failed", message, cancellationToken);
                 return new AccountPasswordVerificationResult(false, user.LockoutEndUnixMs is not null, message);
             }
@@ -229,7 +232,7 @@ public sealed class LocalAccountService : IAccountService
             user.FailedLoginAttempts = 0;
             user.LockoutEndUnixMs = null;
             user.UpdatedAtUnixMs = now.ToUnixTimeMilliseconds();
-            await context.SaveChangesAsync(cancellationToken);
+            await SaveChangesAsync(context, cancellationToken);
             await WriteAuditAsync(user.Id, user.Id, "session_unlock", "success", "会话解锁成功", cancellationToken);
             return new AccountPasswordVerificationResult(true, false, "解锁成功");
         }
@@ -291,7 +294,7 @@ public sealed class LocalAccountService : IAccountService
         };
 
         context.Users.Add(user);
-        await context.SaveChangesAsync(cancellationToken);
+        await SaveChangesAsync(context, cancellationToken);
         await WriteAuditAsync(operatorUser.UserId, user.Id, "create_user", "success", $"创建账号：{user.LoginName}", cancellationToken);
         logger.Info($"创建账号：operator={operatorUser.UserId}, target={user.Id}, role={AccountRoles.GetName(user.RoleId)}");
         return ToCurrentUser(user);
@@ -411,7 +414,7 @@ public sealed class LocalAccountService : IAccountService
         user.MustChangePassword = false;
         user.UpdatedAtUnixMs = DateTimeOffset.Now.ToUnixTimeMilliseconds();
         context.Users.Update(user);
-        await context.SaveChangesAsync(cancellationToken);
+        await SaveChangesAsync(context, cancellationToken);
 
         await WriteAuditAsync(
             CurrentUser?.UserId,
@@ -472,7 +475,7 @@ public sealed class LocalAccountService : IAccountService
         user.LockoutEndUnixMs = null;
         user.MustChangePassword = true;
         user.UpdatedAtUnixMs = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-        await context.SaveChangesAsync(cancellationToken);
+        await SaveChangesAsync(context, cancellationToken);
 
         await WriteAuditAsync(
             operatorUser.UserId,
@@ -532,7 +535,7 @@ public sealed class LocalAccountService : IAccountService
         }
     }
 
-    private static async Task EnsureDefaultAdminAsync(AccountDbContext context, CancellationToken cancellationToken)
+    private async Task EnsureDefaultAdminAsync(AccountDbContext context, CancellationToken cancellationToken)
     {
         var hasAdmin = await context.Users.AnyAsync(item => item.RoleId == AccountRoles.Admin, cancellationToken);
         if (hasAdmin)
@@ -554,7 +557,15 @@ public sealed class LocalAccountService : IAccountService
             CreatedAtUnixMs = now,
             UpdatedAtUnixMs = now
         });
-        await context.SaveChangesAsync(cancellationToken);
+        await SaveChangesAsync(context, cancellationToken);
+    }
+
+    private Task<int> SaveChangesAsync(DbContext context, CancellationToken cancellationToken)
+    {
+        return databaseWriteCoordinator.ExecuteAsync(
+            GetDatabasePath(),
+            () => context.SaveChangesAsync(cancellationToken),
+            cancellationToken);
     }
 
     private async Task WriteAuditAsync(long? operatorUserId, long? targetUserId, string action, string result, string? message, CancellationToken cancellationToken)

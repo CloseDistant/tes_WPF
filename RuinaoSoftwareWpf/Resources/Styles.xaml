@@ -331,6 +331,73 @@
             </Style.Triggers>
         </Style>
 
+        <Style x:Key="BackNavigationButton" TargetType="Button">
+            <Setter Property="Background" Value="#1A1F2A" />
+            <Setter Property="Foreground" Value="#DDE2EA" />
+            <Setter Property="BorderBrush" Value="#3A4252" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="MinWidth" Value="82" />
+            <Setter Property="Padding" Value="10,0,12,0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3"
+                                SnapsToDevicePixels="True">
+                            <DockPanel Margin="{TemplateBinding Padding}">
+                                <Border x:Name="IconSurface"
+                                        DockPanel.Dock="Left"
+                                        Width="22"
+                                        Height="22"
+                                        Margin="0,0,8,0"
+                                        Background="#242B38"
+                                        BorderBrush="#414A5B"
+                                        BorderThickness="1"
+                                        CornerRadius="3">
+                                    <TextBlock Text="&#xE72B;"
+                                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                               FontSize="12"
+                                               Foreground="{TemplateBinding Foreground}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Border>
+                                <ContentPresenter VerticalAlignment="Center"
+                                                  HorizontalAlignment="Center"
+                                                  RecognizesAccessKey="True" />
+                            </DockPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#242A36" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#B78231" />
+                                <Setter TargetName="IconSurface" Property="Background" Value="#332A1E" />
+                                <Setter TargetName="IconSurface" Property="BorderBrush" Value="#B78231" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#302819" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#D59B3D" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#151923" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#2B3240" />
+                                <Setter TargetName="IconSurface" Property="Background" Value="#1B202B" />
+                                <Setter TargetName="IconSurface" Property="BorderBrush" Value="#2B3240" />
+                                <Setter Property="Foreground" Value="#596474" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="ToggleButton" TargetType="Button">
             <Setter Property="Background" Value="#272C38" />
             <Setter Property="Foreground" Value="{StaticResource Text}" />

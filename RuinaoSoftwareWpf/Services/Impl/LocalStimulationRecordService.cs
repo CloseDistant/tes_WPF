@@ -63,7 +63,6 @@ public sealed class LocalStimulationRecordService : IStimulationRecordService
             };
             context.StimulationRecords.Add(entity);
             await context.SaveChangesAsync(cancellationToken);
-            await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }, cancellationToken);
 

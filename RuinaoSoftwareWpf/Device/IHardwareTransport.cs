@@ -12,7 +12,8 @@ namespace RuinaoSoftwareWpf;
 public interface IHardwareTransport
 {
     /// <summary>
-    /// 发送一帧协议数据。
+    /// 发送一帧协议数据并等待与本次命令匹配的有效硬件 ACK。
+    /// 未确认、NAK、超时或链路中断均通过异常返回，调用方不得据此进入稳定运行状态。
     /// </summary>
     /// <param name="commandName">业务命令名称，用于日志定位。</param>
     /// <param name="frame">协议 DLL 生成的完整 byte[] 帧。</param>

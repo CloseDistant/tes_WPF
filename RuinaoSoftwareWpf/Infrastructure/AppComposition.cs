@@ -50,7 +50,7 @@ public static class AppComposition
         services.AddSingleton<IRuntimeTelemetryService, RuntimeTelemetryService>(); // CPU、内存、队列与写入延迟遥测
         services.AddSingleton<IRunConfigurationSnapshotService, RunConfigurationSnapshotService>(); // 运行参数不可变快照
         services.AddSingleton<IAppDatabaseInitializer, AppDatabaseInitializer>(); // EF Core 数据库迁移入口
-        services.AddSingleton<IAppDatabaseWriteCoordinator, AppDatabaseWriteCoordinator>(); // 三个实时模块关键事件全局单写者
+        services.AddSingleton<IAppDatabaseWriteCoordinator, AppDatabaseWriteCoordinator>(); // 运行期数据库按库串行写入协调器
         services.AddSingleton<PatientDataProtector>(); // 患者敏感字段自动密钥加密
         services.AddSingleton<IIntegrityCheckService, IntegrityCheckService>();
         services.AddSingleton<IBackupRestoreService, BackupRestoreService>();
@@ -58,6 +58,7 @@ public static class AppComposition
         services.AddSingleton<ITiGroupFactory, DemoTiGroupFactory>();     // TI 刺激组工厂
         services.AddSingleton<IHardwareLink, LogOnlyHardwareTransport>(); // 尚未迁移到V1.4的业务命令暂保留日志链路
         services.AddSingleton<IHardwareTransport, ReliableHardwareTransport>(); // 旧业务命令的命令关联、超时与重试
+        services.AddSingleton<IDebugHardwareSimulationService, DebugHardwareSimulationService>(); // DEBUG 显式模拟联机状态
         services.AddSingleton<IUsbBackplaneDiscovery, WindowsUsbBackplaneDiscovery>();
         services.AddSingleton<IBackplaneTransport, UsbTestCompatibleBackplaneTransport>();
         services.AddSingleton<BackplaneClient>();                         // 真实libusbK链路与V1.4应答匹配

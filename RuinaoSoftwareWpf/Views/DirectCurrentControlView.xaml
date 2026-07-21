@@ -28,13 +28,9 @@
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Button Content="{Binding Localization.BackText}"
                         Command="{Binding BackCommand}"
-                        Background="Transparent"
-                        Foreground="{StaticResource SubText}"
-                        BorderBrush="#303645"
-                        BorderThickness="1"
-                        Padding="10,5"
+                        Style="{StaticResource BackNavigationButton}"
                         Margin="0,0,16,0"
-                        Cursor="Hand" />
+                        ToolTip="返回电刺激模式选择" />
                 <StackPanel>
                     <TextBlock Text="{Binding Localization.DirectCurrentModeTitleText}"
                                Foreground="{StaticResource Gold}"

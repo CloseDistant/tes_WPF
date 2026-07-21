@@ -1,19 +1,17 @@
 namespace RuinaoSoftwareWpf;
 
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 
 public sealed class LocalPatientService : IPatientService
 {
-    private const int MaxRetryCount = 3;
     private readonly ILoggingService logger;
     private readonly IAppDatabaseInitializer databaseInitializer;
+    private readonly IAppDatabaseWriteCoordinator databaseWriteCoordinator;
     private readonly PatientDataProtector dataProtector;
     private readonly IAccountService accountService;
     private readonly IAuthorizationService authorizationService;
     private readonly SemaphoreSlim initializeGate = new(1, 1);
-    private readonly SemaphoreSlim writeGate = new(1, 1);
     private bool ready;
     private PatientRecord? currentPatient;
     private long? currentPatientOwnerUserId;
@@ -21,12 +19,14 @@ public sealed class LocalPatientService : IPatientService
     public LocalPatientService(
         ILoggingService logger,
         IAppDatabaseInitializer databaseInitializer,
+        IAppDatabaseWriteCoordinator databaseWriteCoordinator,
         PatientDataProtector dataProtector,
         IAccountService accountService,
         IAuthorizationService authorizationService)
     {
         this.logger = logger;
         this.databaseInitializer = databaseInitializer;
+        this.databaseWriteCoordinator = databaseWriteCoordinator;
         this.dataProtector = dataProtector;
         this.accountService = accountService;
         this.authorizationService = authorizationService;
@@ -358,35 +358,10 @@ public sealed class LocalPatientService : IPatientService
 
     private async Task<T> ExecuteWriteAsync<T>(Func<Task<T>> action, CancellationToken cancellationToken)
     {
-        await writeGate.WaitAsync(cancellationToken);
-        try
-        {
-            for (var attempt = 1; ; attempt++)
-            {
-                try
-                {
-                    return await action();
-                }
-                catch (Exception exception) when (IsRetryableSqliteException(exception) && attempt < MaxRetryCount)
-                {
-                    await Task.Delay(TimeSpan.FromMilliseconds(120 * attempt), cancellationToken);
-                }
-            }
-        }
-        finally
-        {
-            writeGate.Release();
-        }
-    }
-
-    private static bool IsRetryableSqliteException(Exception exception)
-    {
-        if (exception is DbUpdateException { InnerException: not null } updateException)
-        {
-            return IsRetryableSqliteException(updateException.InnerException!);
-        }
-
-        return exception is SqliteException { SqliteErrorCode: 5 or 6 };
+        return await databaseWriteCoordinator.ExecuteAsync(
+            AppDatabasePathProvider.MainDatabasePath,
+            action,
+            cancellationToken);
     }
 
     private PatientRecord ToRecord(PatientEntity entity)

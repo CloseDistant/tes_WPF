@@ -10,18 +10,21 @@ public sealed class PrescriptionService : IPrescriptionService
     private readonly IAuditTrailService auditTrail;
     private readonly IAccountService accountService;
     private readonly IAuthorizationService authorizationService;
+    private readonly IAppDatabaseWriteCoordinator databaseWriteCoordinator;
     private readonly SemaphoreSlim writeGate = new(1, 1);
 
     public PrescriptionService(
         IAppDatabaseInitializer databaseInitializer,
         IAuditTrailService auditTrail,
         IAccountService accountService,
-        IAuthorizationService authorizationService)
+        IAuthorizationService authorizationService,
+        IAppDatabaseWriteCoordinator databaseWriteCoordinator)
     {
         this.databaseInitializer = databaseInitializer;
         this.auditTrail = auditTrail;
         this.accountService = accountService;
         this.authorizationService = authorizationService;
+        this.databaseWriteCoordinator = databaseWriteCoordinator;
     }
 
     public async Task<PageResult<PrescriptionDefinition>> GetPrescriptionsPageAsync(
@@ -104,7 +107,7 @@ public sealed class PrescriptionService : IPrescriptionService
             entity.UpdatedAtUnixMs = now;
             try
             {
-                await context.SaveChangesAsync(cancellationToken);
+                await SaveChangesAsync(context, cancellationToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -182,7 +185,7 @@ public sealed class PrescriptionService : IPrescriptionService
                 UpdatedAtUnixMs = now
             };
             context.Prescriptions.Add(copy);
-            await context.SaveChangesAsync(cancellationToken);
+            await SaveChangesAsync(context, cancellationToken);
             await auditTrail.AppendAsync(
                 new AuditEventInput(
                     AuditEventCategory.PrescriptionManagement,
@@ -213,7 +216,7 @@ public sealed class PrescriptionService : IPrescriptionService
                 .FirstOrDefaultAsync(item => item.Id == prescriptionId, cancellationToken)
                 ?? throw new InvalidOperationException("找不到要删除的处方。");
             context.Prescriptions.Remove(entity);
-            await context.SaveChangesAsync(cancellationToken);
+            await SaveChangesAsync(context, cancellationToken);
             await auditTrail.AppendAsync(
                 new AuditEventInput(
                     AuditEventCategory.PrescriptionManagement,
@@ -245,6 +248,14 @@ public sealed class PrescriptionService : IPrescriptionService
         entity.RampDownSeconds,
         entity.EvidenceGrade,
         entity.IsBuiltin);
+
+    private Task<int> SaveChangesAsync(CaptureDbContext context, CancellationToken cancellationToken)
+    {
+        return databaseWriteCoordinator.ExecuteAsync(
+            AppDatabasePathProvider.MainDatabasePath,
+            () => context.SaveChangesAsync(cancellationToken),
+            cancellationToken);
+    }
 
     private static void Apply(PrescriptionEntity entity, PrescriptionDefinition prescription)
     {

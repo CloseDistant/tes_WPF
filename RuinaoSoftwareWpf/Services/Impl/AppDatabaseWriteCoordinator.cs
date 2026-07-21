@@ -4,14 +4,16 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using System.IO;
 using System.Diagnostics;
+using System.Collections.Concurrent;
 
 /// <summary>
-/// 串行执行低频关键数据库写入，避免电刺激、EEG、数字表型同时争用 SQLite 写锁。
+/// 按数据库路径串行执行运行期写入，避免不同业务模块同时争用同一个 SQLite 写锁。
 /// </summary>
 public sealed class AppDatabaseWriteCoordinator : IAppDatabaseWriteCoordinator
 {
     private const int MaxRetryCount = 3;
-    private readonly SemaphoreSlim writeGate = new(1, 1);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> writeGates =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly ILoggingService logger;
     private readonly IRuntimeTelemetryService telemetry;
 
@@ -38,6 +40,11 @@ public sealed class AppDatabaseWriteCoordinator : IAppDatabaseWriteCoordinator
         Func<Task<T>> operation,
         CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
+        ArgumentNullException.ThrowIfNull(operation);
+
+        var normalizedPath = Path.GetFullPath(databasePath);
+        var writeGate = writeGates.GetOrAdd(normalizedPath, static _ => new SemaphoreSlim(1, 1));
         await writeGate.WaitAsync(cancellationToken);
         var startedAt = Stopwatch.GetTimestamp();
         try
@@ -53,12 +60,12 @@ public sealed class AppDatabaseWriteCoordinator : IAppDatabaseWriteCoordinator
                     var delay = TimeSpan.FromMilliseconds(120 * attempt);
                     logger.Warning(
                         $"SQLite 关键事件写入被占用，{delay.TotalMilliseconds:0}ms 后重试，"
-                        + $"第 {attempt}/{MaxRetryCount - 1} 次。数据库：{Path.GetFileName(databasePath)}");
+                        + $"第 {attempt}/{MaxRetryCount - 1} 次。数据库：{Path.GetFileName(normalizedPath)}");
                     await Task.Delay(delay, cancellationToken);
                 }
                 catch (Exception exception)
                 {
-                    logger.Error($"SQLite 关键事件写入失败：{databasePath}", exception);
+                    logger.Error($"SQLite 数据库写入失败：{normalizedPath}", exception);
                     throw;
                 }
             }

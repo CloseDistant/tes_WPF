@@ -16,6 +16,8 @@ public sealed class ConfigViewModel : ObservableObject
     private readonly IDesktopShortcutService desktopShortcutService;
     private readonly IStartupSettingsService startupSettingsService;
     private readonly ISessionSecurityService sessionSecurityService;
+    private readonly IHardwareService hardwareService;
+    private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly IToastService toastService;
     private readonly AsyncRelayCommand saveNavigationCommand;
     private readonly AsyncRelayCommand saveStimulationTypesCommand;
@@ -24,6 +26,7 @@ public sealed class ConfigViewModel : ObservableObject
     private readonly AsyncRelayCommand saveSessionSecurityCommand;
     private readonly RelayCommand decreaseIdleTimeoutCommand;
     private readonly RelayCommand increaseIdleTimeoutCommand;
+    private readonly RelayCommand connectDebugSimulationCommand;
     private bool stimulationSettingsRevealed;
     private int shiftPressCount;
     private DateTimeOffset? lastShiftPressAt;
@@ -42,6 +45,8 @@ public sealed class ConfigViewModel : ObservableObject
         IDesktopShortcutService desktopShortcutService,
         IStartupSettingsService startupSettingsService,
         ISessionSecurityService sessionSecurityService,
+        IHardwareService hardwareService,
+        IDebugHardwareSimulationService debugHardwareSimulation,
         IToastService toastService)
     {
         this.featureVisibilityService = featureVisibilityService;
@@ -51,6 +56,8 @@ public sealed class ConfigViewModel : ObservableObject
         this.desktopShortcutService = desktopShortcutService;
         this.startupSettingsService = startupSettingsService;
         this.sessionSecurityService = sessionSecurityService;
+        this.hardwareService = hardwareService;
+        this.debugHardwareSimulation = debugHardwareSimulation;
         this.toastService = toastService;
 
         NavigationOptions = new ObservableCollection<FeatureVisibilityOptionViewModel>(
@@ -83,6 +90,9 @@ public sealed class ConfigViewModel : ObservableObject
         increaseIdleTimeoutCommand = new RelayCommand(
             _ => IdleTimeoutMinutes++,
             _ => IsAdmin && IdleTimeoutMinutes < ISessionSecurityService.MaximumIdleTimeoutMinutes);
+        connectDebugSimulationCommand = new RelayCommand(
+            _ => ConnectDebugSimulation(),
+            _ => CanConnectDebugSimulation());
 
         SaveNavigationCommand = saveNavigationCommand;
         SaveStimulationTypesCommand = saveStimulationTypesCommand;
@@ -95,10 +105,13 @@ public sealed class ConfigViewModel : ObservableObject
         RestoreSessionSecurityCommand = new RelayCommand(_ => RestoreSessionSecurityDefaults());
         DecreaseIdleTimeoutCommand = decreaseIdleTimeoutCommand;
         IncreaseIdleTimeoutCommand = increaseIdleTimeoutCommand;
+        ConnectDebugSimulationCommand = connectDebugSimulationCommand;
 
         accountService.CurrentUserChanged += (_, _) => OnAccountChanged();
         featureVisibilityService.VisibilityChanged += (_, _) => ApplyPersistedVisibility();
         localization.PropertyChanged += OnLocalizationChanged;
+        debugHardwareSimulation.ConnectionChanged += (_, _) => OnDebugSimulationChanged();
+        hardwareService.ConnectionChanged += (_, _) => connectDebugSimulationCommand.RaiseCanExecuteChanged();
     }
 
     public ObservableCollection<FeatureVisibilityOptionViewModel> NavigationOptions { get; }
@@ -127,6 +140,8 @@ public sealed class ConfigViewModel : ObservableObject
 
     public ICommand IncreaseIdleTimeoutCommand { get; }
 
+    public ICommand ConnectDebugSimulationCommand { get; }
+
     public bool IsAdmin => accountService.CurrentUser?.RoleId == AccountRoles.Admin;
 
     public Visibility NavigationSettingsVisibility => IsAdmin && StimulationSettingsRevealed
@@ -154,7 +169,9 @@ public sealed class ConfigViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(NavigationSettingsVisibility));
                 OnPropertyChanged(nameof(StimulationSettingsVisibility));
+                OnPropertyChanged(nameof(DebugSimulationVisibility));
                 saveStimulationTypesCommand.RaiseCanExecuteChanged();
+                connectDebugSimulationCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -162,6 +179,16 @@ public sealed class ConfigViewModel : ObservableObject
     public Visibility StimulationSettingsVisibility => IsAdmin && StimulationSettingsRevealed
         ? Visibility.Visible
         : Visibility.Collapsed;
+
+    public Visibility DebugSimulationVisibility => debugHardwareSimulation.IsAvailable
+        && IsAdmin
+        && StimulationSettingsRevealed
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public bool IsDebugSimulationConnected => debugHardwareSimulation.IsConnected;
+
+    public string DebugSimulationStatus => IsDebugSimulationConnected ? "已启用" : "未启用";
 
     public string NavigationStatus
     {
@@ -231,6 +258,36 @@ public sealed class ConfigViewModel : ObservableObject
 
         logger.Warning(result.Message);
         toastService.ShowError("快捷方式创建失败", result.Message);
+    }
+
+    private bool CanConnectDebugSimulation()
+    {
+        return debugHardwareSimulation.IsAvailable
+            && IsAdmin
+            && StimulationSettingsRevealed
+            && !debugHardwareSimulation.IsConnected
+            && !hardwareService.IsConnected
+            && !hardwareService.IsConnecting;
+    }
+
+    private void ConnectDebugSimulation()
+    {
+        var result = debugHardwareSimulation.Connect(hardwareService.IsConnected);
+        if (result.Succeeded)
+        {
+            logger.Debug("DEBUG 模拟联机由管理员手动启用");
+            toastService.ShowSuccess("模拟联机已启用", "电刺激将使用 DEBUG 模拟，不会向真实仪器发送命令。");
+            return;
+        }
+
+        toastService.Show(ToastKind.Warning, "无法启用模拟联机", result.Message);
+    }
+
+    private void OnDebugSimulationChanged()
+    {
+        OnPropertyChanged(nameof(IsDebugSimulationConnected));
+        OnPropertyChanged(nameof(DebugSimulationStatus));
+        connectDebugSimulationCommand.RaiseCanExecuteChanged();
     }
 
     public void EnterSettingsPage()
@@ -420,6 +477,7 @@ public sealed class ConfigViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAdmin));
         OnPropertyChanged(nameof(NavigationSettingsVisibility));
         OnPropertyChanged(nameof(StimulationSettingsVisibility));
+        OnPropertyChanged(nameof(DebugSimulationVisibility));
         saveNavigationCommand.RaiseCanExecuteChanged();
         saveStimulationTypesCommand.RaiseCanExecuteChanged();
         saveStartupSettingsCommand.RaiseCanExecuteChanged();
@@ -427,6 +485,7 @@ public sealed class ConfigViewModel : ObservableObject
         saveSessionSecurityCommand.RaiseCanExecuteChanged();
         decreaseIdleTimeoutCommand.RaiseCanExecuteChanged();
         increaseIdleTimeoutCommand.RaiseCanExecuteChanged();
+        connectDebugSimulationCommand.RaiseCanExecuteChanged();
     }
 
     private void HideStimulationSettings()

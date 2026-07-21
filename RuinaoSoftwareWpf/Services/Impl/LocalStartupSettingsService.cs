@@ -10,6 +10,7 @@ public sealed class LocalStartupSettingsService : IStartupSettingsService
     private readonly IAccountService accountService;
     private readonly IAuthorizationService authorizationService;
     private readonly ILoggingService logger;
+    private readonly IAppDatabaseWriteCoordinator databaseWriteCoordinator;
     private readonly SemaphoreSlim initializeGate = new(1, 1);
     private readonly SemaphoreSlim writeGate = new(1, 1);
     private volatile bool initialized;
@@ -19,12 +20,14 @@ public sealed class LocalStartupSettingsService : IStartupSettingsService
         IAppDatabaseInitializer databaseInitializer,
         IAccountService accountService,
         IAuthorizationService authorizationService,
-        ILoggingService logger)
+        ILoggingService logger,
+        IAppDatabaseWriteCoordinator databaseWriteCoordinator)
     {
         this.databaseInitializer = databaseInitializer;
         this.accountService = accountService;
         this.authorizationService = authorizationService;
         this.logger = logger;
+        this.databaseWriteCoordinator = databaseWriteCoordinator;
     }
 
     public bool AutoConnectOnStartup => autoConnectOnStartup;
@@ -88,7 +91,10 @@ public sealed class LocalStartupSettingsService : IStartupSettingsService
 
             state.Value = enabled.ToString();
             state.UpdatedAtUnixMs = now;
-            await context.SaveChangesAsync(cancellationToken);
+            await databaseWriteCoordinator.ExecuteAsync(
+                AppDatabasePathProvider.MainDatabasePath,
+                () => context.SaveChangesAsync(cancellationToken),
+                cancellationToken);
             autoConnectOnStartup = enabled;
 
             await accountService.RecordAuditAsync(

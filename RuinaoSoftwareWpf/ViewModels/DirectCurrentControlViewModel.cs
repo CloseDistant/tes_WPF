@@ -10,16 +10,19 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
 {
     private readonly IStimulationEngine stimulationEngine;
     private readonly ILoggingService logger;
+    private readonly IToastService toastService;
     private readonly StimulationChannelCountdown countdown = new();
     private string appliedPrescriptionName = "手动设置";
 
     public DirectCurrentControlViewModel(
         IStimulationEngine stimulationEngine,
         ILoggingService logger,
-        LocalizationViewModel localization)
+        LocalizationViewModel localization,
+        IToastService toastService)
     {
         this.stimulationEngine = stimulationEngine;
         this.logger = logger;
+        this.toastService = toastService;
         countdown.Completed += channel => _ = CompleteChannelAsync(channel);
         Localization = localization;
 
@@ -32,7 +35,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         ];
 
         BackCommand = new RelayCommand(_ => BackRequested?.Invoke(this, EventArgs.Empty));
-        SynchronizedStartCommand = CreateHardwareCommand(_ => StartSynchronizedAsync());
+        SynchronizedStartCommand = CreateHardwareCommand(_ => StartSynchronizedAsync(), HandleStartFailure);
         StartChannelCommand = new AsyncRelayCommand(
             async (parameter, _) =>
             {
@@ -41,7 +44,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
                     await StartChannelAsync(channel);
                 }
             },
-            onError: ex => logger.Error("tDCS 单通道启动失败", ex));
+            onError: HandleStartFailure);
         EmergencyStopCommand = CreateHardwareCommand(_ => EmergencyStopAsync());
     }
 
@@ -109,11 +112,19 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         };
     }
 
-    private ICommand CreateHardwareCommand(Func<object?, Task> execute)
+    private ICommand CreateHardwareCommand(Func<object?, Task> execute, Action<Exception>? onError = null)
     {
         return new AsyncRelayCommand(
             async (parameter, _) => await execute(parameter),
-            onError: ex => logger.Error("tDCS 控制命令执行失败", ex));
+            onError: onError ?? (ex => logger.Error("tDCS 控制命令执行失败", ex)));
+    }
+
+    private void HandleStartFailure(Exception exception)
+    {
+        logger.Error("刺激启动失败", exception);
+        toastService.ShowError(
+            "刺激启动失败",
+            "刺激启动命令未完成，软件未进入运行状态。具体原因已记录到运行日志。");
     }
 
     private async Task StartSynchronizedAsync()

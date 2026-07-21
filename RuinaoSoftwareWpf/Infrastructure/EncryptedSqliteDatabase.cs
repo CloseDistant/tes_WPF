@@ -53,10 +53,9 @@ internal static class EncryptedSqliteDatabase
         return $"{fileUri}?cipher={CipherName}&legacy={CipherLegacyVersion}{keyParameter}";
     }
 
-    public static async Task EnsureEncryptedAsync(
+    public static async Task PrepareEncryptedDatabaseAsync(
         string databasePath,
         ILoggingService logger,
-        Func<string, string, CancellationToken, Task> copyPlaintextDatabase,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
@@ -76,37 +75,18 @@ internal static class EncryptedSqliteDatabase
             return;
         }
 
-        var temporaryPath = $"{fullPath}.{Guid.NewGuid():N}.encrypting";
-        var rollbackPath = $"{fullPath}.{Guid.NewGuid():N}.plaintext-rollback";
-        try
-        {
-            logger.Info($"检测到明文SQLite数据库，开始整库加密：file={Path.GetFileName(fullPath)}");
-            await copyPlaintextDatabase(fullPath, temporaryPath, cancellationToken).ConfigureAwait(false);
-            SqliteConnection.ClearAllPools();
-            await VerifyCanOpenAsync(temporaryPath, cancellationToken).ConfigureAwait(false);
+        logger.Warning($"检测到历史未加密数据库，将删除并创建当前加密数据库：file={Path.GetFileName(fullPath)}");
+        DeleteDatabaseFiles(fullPath);
+        CleanupAbandonedEncryptionFiles(fullPath, logger);
+    }
 
-            SqliteConnection.ClearAllPools();
-            File.Replace(temporaryPath, fullPath, rollbackPath, ignoreMetadataErrors: true);
-            try
-            {
-                await VerifyCanOpenAsync(fullPath, cancellationToken).ConfigureAwait(false);
-                File.Delete(rollbackPath);
-            }
-            catch
-            {
-                SqliteConnection.ClearAllPools();
-                File.Replace(rollbackPath, fullPath, null, ignoreMetadataErrors: true);
-                throw;
-            }
-
-            logger.Info($"SQLite数据库整库加密完成：file={Path.GetFileName(fullPath)}");
-            CleanupAbandonedEncryptionFiles(fullPath, logger);
-        }
-        finally
-        {
-            TryDelete(temporaryPath);
-            TryDelete(rollbackPath);
-        }
+    public static void DeleteDatabaseFiles(string databasePath)
+    {
+        var fullPath = Path.GetFullPath(databasePath);
+        SqliteConnection.ClearAllPools();
+        DeleteIfExists(fullPath);
+        DeleteIfExists(fullPath + "-wal");
+        DeleteIfExists(fullPath + "-shm");
     }
 
     public static async Task VerifyCanOpenAsync(
@@ -159,18 +139,11 @@ internal static class EncryptedSqliteDatabase
         }
     }
 
-    private static void TryDelete(string path)
+    private static void DeleteIfExists(string path)
     {
-        try
+        if (File.Exists(path))
         {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch
-        {
-            // A later maintenance run can remove an abandoned temporary file.
+            File.Delete(path);
         }
     }
 }

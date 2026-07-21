@@ -7,7 +7,7 @@ using Xunit;
 public sealed class EncryptedSqliteDatabaseTests
 {
     [Fact]
-    public async Task EnsureEncryptedAsync_ConvertsPlaintextDatabaseAndPreservesRows()
+    public async Task PrepareEncryptedDatabaseAsync_RemovesHistoricalPlaintextDatabase()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var directory = Path.Combine(Path.GetTempPath(), $"ruinao-encryption-{Guid.NewGuid():N}");
@@ -23,15 +23,15 @@ public sealed class EncryptedSqliteDatabaseTests
             }
             Assert.True(HasPlaintextSqliteHeader(databasePath));
 
-            await EncryptedSqliteDatabase.EnsureEncryptedAsync(
+            await EncryptedSqliteDatabase.PrepareEncryptedDatabaseAsync(
                 databasePath,
                 new NullLoggingService(),
-                CopyPlaintextProbeDatabaseAsync,
                 cancellationToken);
-            Assert.False(HasPlaintextSqliteHeader(databasePath));
+            Assert.False(File.Exists(databasePath));
 
             await using var encrypted = new ProbeDbContext(databasePath, encrypted: true);
-            Assert.Equal("preserved", (await encrypted.Items.SingleAsync(cancellationToken)).Name);
+            await encrypted.Database.EnsureCreatedAsync(cancellationToken);
+            Assert.Empty(await encrypted.Items.ToListAsync(cancellationToken));
         }
         finally
         {
@@ -41,7 +41,7 @@ public sealed class EncryptedSqliteDatabaseTests
     }
 
     [Fact]
-    public async Task EnsureEncryptedAsync_RemovesAbandonedEncryptionFileOnly()
+    public async Task PrepareEncryptedDatabaseAsync_RemovesAbandonedEncryptionFileOnly()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var directory = Path.Combine(Path.GetTempPath(), $"ruinao-encryption-cleanup-{Guid.NewGuid():N}");
@@ -59,10 +59,9 @@ public sealed class EncryptedSqliteDatabaseTests
             await File.WriteAllTextAsync(abandonedPath, "temporary", cancellationToken);
             await File.WriteAllTextAsync(backupPath, "preserve", cancellationToken);
 
-            await EncryptedSqliteDatabase.EnsureEncryptedAsync(
+            await EncryptedSqliteDatabase.PrepareEncryptedDatabaseAsync(
                 databasePath,
                 new NullLoggingService(),
-                (_, _, _) => throw new InvalidOperationException("Encrypted databases must not be copied."),
                 cancellationToken);
 
             Assert.False(File.Exists(abandonedPath));
@@ -106,27 +105,39 @@ public sealed class EncryptedSqliteDatabaseTests
         }
     }
 
+    [Fact]
+    public async Task PrepareEncryptedDatabaseAsync_DoesNotDeleteUnreadableDatabase()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var directory = Path.Combine(Path.GetTempPath(), $"ruinao-unreadable-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var databasePath = Path.Combine(directory, "business.db");
+        var originalContent = "not-a-database"u8.ToArray();
+        try
+        {
+            await File.WriteAllBytesAsync(databasePath, originalContent, cancellationToken);
+
+            await Assert.ThrowsAnyAsync<Exception>(() =>
+                EncryptedSqliteDatabase.PrepareEncryptedDatabaseAsync(
+                    databasePath,
+                    new NullLoggingService(),
+                    cancellationToken));
+
+            Assert.True(File.Exists(databasePath));
+            Assert.Equal(originalContent, await File.ReadAllBytesAsync(databasePath, cancellationToken));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static bool HasPlaintextSqliteHeader(string path)
     {
         Span<byte> header = stackalloc byte[16];
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         return stream.Read(header) == header.Length && header.SequenceEqual("SQLite format 3\0"u8);
-    }
-
-    private static async Task CopyPlaintextProbeDatabaseAsync(
-        string sourcePath,
-        string destinationPath,
-        CancellationToken cancellationToken)
-    {
-        List<ProbeEntity> items;
-        await using (var source = new ProbeDbContext(sourcePath, encrypted: false))
-        {
-            items = await source.Items.AsNoTracking().ToListAsync(cancellationToken);
-        }
-        await using var destination = new ProbeDbContext(destinationPath, encrypted: true);
-        await destination.Database.EnsureCreatedAsync(cancellationToken);
-        destination.Items.AddRange(items);
-        await destination.SaveChangesAsync(cancellationToken);
     }
 
     private sealed class ProbeDbContext : DbContext
