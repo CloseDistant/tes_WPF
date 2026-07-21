@@ -13,6 +13,8 @@ public partial class MainWindow
         Loaded += OnAuthenticationLoaded;
         LoginContent.LoginRequested += OnLoginRequested;
         LoginContent.ExitRequested += OnCloseRequested;
+        ActivationContent.ActivationRequested += OnActivationRequested;
+        ActivationContent.ExitRequested += OnCloseRequested;
         accountService.CurrentUserChanged += OnCurrentUserChanged;
     }
 
@@ -21,27 +23,110 @@ public partial class MainWindow
         Loaded -= OnAuthenticationLoaded;
         LoginContent.LoginRequested -= OnLoginRequested;
         LoginContent.ExitRequested -= OnCloseRequested;
+        ActivationContent.ActivationRequested -= OnActivationRequested;
+        ActivationContent.ExitRequested -= OnCloseRequested;
         accountService.CurrentUserChanged -= OnCurrentUserChanged;
     }
 
     private async void OnAuthenticationLoaded(object sender, RoutedEventArgs e)
     {
         using var timeout = new CancellationTokenSource(AuthenticationTimeout);
+        LoginContent.IsEnabled = false;
         try
         {
-            await accountService.InitializeAsync(timeout.Token);
-            await ShowLoginContentAsync();
+            await TryInitializeAuditTrailAsync(timeout.Token);
+            await softwareActivationService.InitializeAsync(timeout.Token);
+            if (!softwareActivationService.IsActivated)
+            {
+                ActivationContent.ResetMessage();
+                ActivationContent.Visibility = Visibility.Visible;
+                ActivationContent.FocusActivationCode();
+                return;
+            }
+
+            await CompleteLoginInitializationAsync(timeout.Token);
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested)
         {
             logger.Warning("登录页初始化超时");
-            LoginContent.ShowMessage("初始化超时，请重试登录；如仍失败请查看运行日志。", true);
+            ShowInitializationFailure("初始化超时，请重试；如仍失败请查看运行日志。");
         }
         catch (Exception exception)
         {
             logger.Error("登录页初始化失败", exception);
-            LoginContent.ShowMessage($"初始化失败：{exception.Message}", true);
+            ShowInitializationFailure($"初始化失败：{exception.Message}");
         }
+    }
+
+    private async Task TryInitializeAuditTrailAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await auditTrail.InitializeAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.Error("安全审计初始化失败，软件以降级模式继续运行", exception);
+        }
+    }
+
+    private async void OnActivationRequested(object? sender, SoftwareActivationRequestedEventArgs e)
+    {
+        using var timeout = new CancellationTokenSource(AuthenticationTimeout);
+        ActivationContent.SetBusy(true);
+        try
+        {
+            var result = await softwareActivationService.ActivateAsync(e.ActivationCode, timeout.Token);
+            ActivationContent.ClearActivationCode();
+            if (!result.Succeeded)
+            {
+                ActivationContent.ShowMessage(result.Message, true);
+                ActivationContent.FocusActivationCode();
+                return;
+            }
+
+            ActivationContent.ShowMessage(result.Message, false);
+            await CompleteLoginInitializationAsync(timeout.Token);
+            _ = viewModel.TryAutomaticConnectionOnceAsync(automaticConnectionCts.Token);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+            ActivationContent.ShowMessage("激活操作超时，请重试", true);
+        }
+        catch (Exception exception)
+        {
+            logger.Error("软件激活失败", exception);
+            ActivationContent.ShowMessage("激活失败，请重试", true);
+        }
+        finally
+        {
+            ActivationContent.SetBusy(false);
+        }
+    }
+
+    private async Task CompleteLoginInitializationAsync(CancellationToken cancellationToken)
+    {
+        await accountService.InitializeAsync(cancellationToken);
+        ActivationContent.Visibility = Visibility.Collapsed;
+        LoginContent.IsEnabled = true;
+        await ShowLoginContentAsync();
+    }
+
+    private void ShowInitializationFailure(string message)
+    {
+        if (softwareActivationService.IsActivated)
+        {
+            LoginContent.IsEnabled = true;
+            LoginContent.ShowMessage(message, true);
+            return;
+        }
+
+        ActivationContent.Visibility = Visibility.Visible;
+        ActivationContent.ShowMessage(message, true);
     }
 
     private async void OnLoginRequested(object? sender, LoginRequestedEventArgs e)
@@ -121,7 +206,8 @@ public partial class MainWindow
 
     private void OnCurrentUserChanged(object? sender, EventArgs e)
     {
-        if (accountService.CurrentUser is not null
+        if (IsShutdownRequested
+            || accountService.CurrentUser is not null
             || LoginContent.Visibility == Visibility.Visible)
         {
             return;
@@ -147,6 +233,7 @@ public partial class MainWindow
     {
         MainContent.Visibility = Visibility.Collapsed;
         LoginContent.Visibility = Visibility.Visible;
+        ActivationContent.Visibility = Visibility.Collapsed;
         LoginContent.ClearPassword();
 
         var rememberedLoginName = await accountService.GetRememberedLoginNameAsync();
@@ -158,6 +245,7 @@ public partial class MainWindow
     {
         LoginContent.Visibility = Visibility.Collapsed;
         MainContent.Visibility = Visibility.Visible;
+        sessionSecurityService.NotifyUserActivity();
         logger.Info($"进入主界面：userId={accountService.CurrentUser?.UserId}");
     }
 

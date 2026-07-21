@@ -10,32 +10,45 @@ using RuinaoSoftwareWpf.Views.Dialogs;
 
 public sealed class PrescriptionViewModel : ObservableObject
 {
+    private const int PageSize = 30;
     private readonly IPrescriptionService prescriptionService;
     private readonly IUserDialogService dialogService;
     private readonly IFeatureVisibilityService featureVisibilityService;
     private readonly IAccountService accountService;
+    private readonly IAuthorizationService authorizationService;
+    private readonly IAuditTrailService auditTrail;
+    private readonly IAuditLogService auditLog;
     private PrescriptionDefinition? selectedPrescription;
     private bool initialized;
+    private int nextOffset;
+    private bool hasMore = true;
+    private bool isLoading;
 
     public PrescriptionViewModel(
         IPrescriptionService prescriptionService,
         IUserDialogService dialogService,
         IFeatureVisibilityService featureVisibilityService,
-        IAccountService accountService)
+        IAccountService accountService,
+        IAuthorizationService authorizationService,
+        IAuditTrailService auditTrail,
+        IAuditLogService auditLog)
     {
         this.prescriptionService = prescriptionService;
         this.dialogService = dialogService;
         this.featureVisibilityService = featureVisibilityService;
         this.accountService = accountService;
-        AddCommand = new AsyncRelayCommand(AddAsync);
-        EditCommand = new AsyncRelayCommand(EditAsync);
+        this.authorizationService = authorizationService;
+        this.auditTrail = auditTrail;
+        this.auditLog = auditLog;
+        AddCommand = new AsyncRelayCommand(AddAsync, onError: ex => ShowOperationError("新建处方", ex));
+        EditCommand = new AsyncRelayCommand(EditAsync, onError: ex => ShowOperationError("编辑处方", ex));
         CopyCommand = new AsyncRelayCommand(CopyAsync, onError: ex =>
-            dialogService.ShowError("复制处方", $"复制失败：{ex.Message}"));
+            ShowOperationError("复制处方", ex));
         DeleteCommand = new AsyncRelayCommand(DeleteAsync, _ => IsAdmin, ex =>
-            dialogService.ShowError("删除处方", $"删除失败：{ex.Message}"));
+            ShowOperationError("删除处方", ex));
         UseCommand = new RelayCommand(_ => UseSelected(), _ => SelectedPrescription is not null);
         ExportCommand = new AsyncRelayCommand(ExportAsync, () => SelectedPrescription is not null,
-            ex => dialogService.ShowError("导出处方", $"导出失败：{ex.Message}"));
+            ex => ShowOperationError("导出处方", ex));
         accountService.CurrentUserChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(IsAdmin));
@@ -50,7 +63,7 @@ public sealed class PrescriptionViewModel : ObservableObject
     public ICommand DeleteCommand { get; }
     public ICommand UseCommand { get; }
     public ICommand ExportCommand { get; }
-    public bool IsAdmin => accountService.IsCurrentUserAdmin();
+    public bool IsAdmin => authorizationService.HasPermission(AppPermission.DeletePrescription);
 
     public PrescriptionDefinition? SelectedPrescription
     {
@@ -68,8 +81,8 @@ public sealed class PrescriptionViewModel : ObservableObject
     public async Task InitializeAsync()
     {
         if (initialized) return;
-        initialized = true;
         await ReloadAsync();
+        initialized = true;
     }
 
     private async Task AddAsync(CancellationToken cancellationToken)
@@ -125,6 +138,7 @@ public sealed class PrescriptionViewModel : ObservableObject
 
     private void UseSelected()
     {
+        authorizationService.RequireSignedIn();
         if (SelectedPrescription is not { } prescription) return;
         var featureKey = FeatureCatalog.StimulationTypes
             .FirstOrDefault(item => item.ShortName == prescription.StimulationType)?.Key;
@@ -133,11 +147,13 @@ public sealed class PrescriptionViewModel : ObservableObject
             dialogService.ShowInformation("使用处方", $"{prescription.StimulationType} 刺激功能当前已隐藏，无法使用该处方。");
             return;
         }
+        auditLog.RecordUserAction("Use prescription");
         UseRequested?.Invoke(this, prescription);
     }
 
     private async Task ExportAsync(CancellationToken cancellationToken)
     {
+        authorizationService.RequireSignedIn();
         if (SelectedPrescription is not { } prescription) return;
         var dialog = new SaveFileDialog
         {
@@ -151,16 +167,55 @@ public sealed class PrescriptionViewModel : ObservableObject
 
         var csv = BuildCsv(prescription);
         await File.WriteAllTextAsync(dialog.FileName, csv, new UTF8Encoding(true), cancellationToken);
+        await auditTrail.AppendAsync(
+            new AuditEventInput(
+                AuditEventCategory.DataExport,
+                "EXPORT_PRESCRIPTION_CSV",
+                AuditActor.From(accountService.CurrentUser),
+                "Prescription",
+                prescription.Id,
+                AuditEventResult.Success,
+                Reason: $"file={Path.GetFileName(dialog.FileName)}"),
+            cancellationToken);
         dialogService.ShowInformation("导出处方", $"处方已保存到：\n{dialog.FileName}");
     }
 
     private async Task ReloadAsync(string? selectedId = null, CancellationToken cancellationToken = default)
     {
         selectedId ??= SelectedPrescription?.Id;
-        var items = await prescriptionService.GetPrescriptionsAsync(cancellationToken);
         Prescriptions.Clear();
-        foreach (var item in items) Prescriptions.Add(item);
+        nextOffset = 0;
+        hasMore = true;
+        await LoadMoreAsync(cancellationToken);
         SelectedPrescription = Prescriptions.FirstOrDefault(item => item.Id == selectedId) ?? Prescriptions.FirstOrDefault();
+    }
+
+    public async Task LoadMoreAsync(CancellationToken cancellationToken = default)
+    {
+        if (isLoading || !hasMore)
+        {
+            return;
+        }
+
+        isLoading = true;
+        try
+        {
+            var page = await prescriptionService.GetPrescriptionsPageAsync(
+                new PageRequest(nextOffset, PageSize),
+                cancellationToken);
+            foreach (var item in page.Items)
+            {
+                Prescriptions.Add(item);
+            }
+
+            nextOffset += page.Items.Count;
+            hasMore = page.HasMore;
+            SelectedPrescription ??= Prescriptions.FirstOrDefault();
+        }
+        finally
+        {
+            isLoading = false;
+        }
     }
 
     internal static string BuildCsv(PrescriptionDefinition prescription)
@@ -179,6 +234,12 @@ public sealed class PrescriptionViewModel : ObservableObject
     }
 
     private static string Escape(string value) => $"\"{value.Replace("\"", "\"\"")}\"";
+
+    private void ShowOperationError(string title, Exception exception)
+    {
+        dialogService.ShowError(title, $"操作失败：{exception.Message}");
+    }
+
     private static string SanitizeFileName(string value)
     {
         foreach (var invalid in Path.GetInvalidFileNameChars()) value = value.Replace(invalid, '_');

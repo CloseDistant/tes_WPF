@@ -82,10 +82,11 @@
                     <Button Content="＋" Width="32" Height="30" HorizontalAlignment="Right" VerticalAlignment="Center"
                             Command="{Binding AddCommand}" Style="{StaticResource IconButton}" FontSize="18" ToolTip="新增处方"/>
                 </Grid>
-                <ListBox Grid.Row="1" ItemsSource="{Binding Prescriptions}" SelectedItem="{Binding SelectedPrescription}"
+                <ListBox x:Name="PrescriptionList" Grid.Row="1" ItemsSource="{Binding Prescriptions}" SelectedItem="{Binding SelectedPrescription}"
                          Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Stretch"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.ScrollChanged="PrescriptionList_ScrollChanged">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0,2"/>

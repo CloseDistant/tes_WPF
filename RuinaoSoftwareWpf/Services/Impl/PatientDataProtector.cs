@@ -96,6 +96,33 @@ public sealed class PatientDataProtector
 
     public static bool IsLegacyCiphertext(string? value) => value?.StartsWith(LegacyPrefix, StringComparison.Ordinal) == true;
 
+    internal static void ValidateKeyFile(byte[] content)
+    {
+        try
+        {
+            var json = content.AsSpan();
+            var preamble = Encoding.UTF8.GetPreamble();
+            if (json.StartsWith(preamble))
+            {
+                json = json[preamble.Length..];
+            }
+
+            var document = JsonSerializer.Deserialize<PatientKeyDocument>(json)
+                ?? throw new InvalidDataException("患者数据密钥备份格式无效");
+            var loadedKey = Convert.FromBase64String(document.Key);
+            var checksum = Convert.ToHexString(SHA256.HashData(loadedKey));
+            if (document.Version != 1 || loadedKey.Length != KeySize
+                || !string.Equals(checksum, document.Checksum, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException("患者数据密钥备份校验失败");
+            }
+        }
+        catch (Exception exception) when (exception is JsonException or FormatException)
+        {
+            throw new InvalidDataException("患者数据密钥备份格式无效", exception);
+        }
+    }
+
     private string UnprotectCurrent(string value)
     {
         var activeKey = key ?? throw new InvalidOperationException("患者数据密钥尚未初始化。");
@@ -140,7 +167,10 @@ public sealed class PatientDataProtector
             Convert.ToBase64String(generatedKey),
             Convert.ToHexString(SHA256.HashData(generatedKey)));
         var temporaryPath = path + ".tmp";
-        File.WriteAllText(temporaryPath, JsonSerializer.Serialize(document), Encoding.UTF8);
+        File.WriteAllText(
+            temporaryPath,
+            JsonSerializer.Serialize(document),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         File.Move(temporaryPath, path, true);
     }
 

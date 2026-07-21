@@ -90,7 +90,9 @@ public interface IPatientService
 
     Task<PatientRecord> UpdatePatientAsync(PatientSaveRequest request, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<PatientRecord>> GetPatientsAsync(CancellationToken cancellationToken = default);
+    Task<PageResult<PatientRecord>> GetPatientsPageAsync(
+        PageRequest request,
+        CancellationToken cancellationToken = default);
 
     Task<PatientRecord> SwitchCurrentPatientAsync(string patientCode, CancellationToken cancellationToken = default);
 
@@ -102,7 +104,9 @@ public interface IStimulationRecordService
 {
     Task RecordAsync(StimulationRecordRequest request, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<StimulationTreatmentRecord>> GetTreatmentRecordsAsync(CancellationToken cancellationToken = default);
+    Task<PageResult<StimulationTreatmentRecord>> GetTreatmentRecordsPageAsync(
+        PageRequest request,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>

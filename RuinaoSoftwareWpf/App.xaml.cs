@@ -26,7 +26,19 @@ public partial class App : Application
     /// </summary>
     protected override void OnStartup(StartupEventArgs e)
     {
+        if (!BackupRestoreRecoveryGuard.TryRecoverPending(out var recoveryMessage))
+        {
+            MessageBox.Show(
+                "检测到未完成的数据恢复，且自动回滚失败。为保护数据，软件将停止启动，请联系维护人员。",
+                "数据恢复异常",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown(-9);
+            return;
+        }
+
         Logger.Info("软件启动");
+        if (!string.IsNullOrWhiteSpace(recoveryMessage)) Logger.Warning(recoveryMessage);
         Logger.Info($"日志文件：{Logger.CurrentLogPath}");
         var assemblyName = typeof(App).Assembly.GetName();
         Logger.Info(

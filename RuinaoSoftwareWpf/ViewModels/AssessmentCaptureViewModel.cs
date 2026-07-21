@@ -14,7 +14,7 @@ using System.Windows.Threading;
 /// 负责采集模块流程状态、中央显示区状态、按钮显隐、模块进度和录制状态展示。
 /// 摄像头预览、音视频录制和数据库写入分别由 View 与服务层处理。
 /// </summary>
-public sealed partial class AssessmentCaptureViewModel : ObservableObject
+public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAssessmentActivityState
 {
 
     private readonly ILocalizationService localization;
@@ -366,6 +366,8 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject
     public bool IsExecutingCaptureTask => currentStep == CaptureWorkbenchStep.ModuleExecution && !IsCompletionStage && !IsFormModule;
 
     public bool IsQuestionnaireInProgress => IsQuestionnaireStage;
+
+    public bool IsActiveForSessionSecurity => ShouldConfirmLeavingWorkbench || CaptureMediaRecorder.IsRecording;
 
     public bool ShouldConfirmLeavingWorkbench => IsDemoPlaying || IsExecutingCaptureTask || IsQuestionnaireInProgress;
 

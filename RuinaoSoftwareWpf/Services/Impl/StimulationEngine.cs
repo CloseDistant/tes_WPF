@@ -15,6 +15,7 @@ public sealed class StimulationEngine : IStimulationEngine
     private readonly IUnifiedSessionService unifiedSessionService;
     private readonly IRunConfigurationSnapshotService configurationSnapshots;
     private readonly IPatientService patientService;
+    private readonly IAuthorizationService authorizationService;
     private StimulationConfigurationSnapshot? activeConfiguration;
 
     public StimulationEngine(
@@ -24,7 +25,8 @@ public sealed class StimulationEngine : IStimulationEngine
         IAuditLogService auditLog,
         IUnifiedSessionService unifiedSessionService,
         IRunConfigurationSnapshotService configurationSnapshots,
-        IPatientService patientService)
+        IPatientService patientService,
+        IAuthorizationService authorizationService)
     {
         this.hardwareService = hardwareService;
         this.safetyService = safetyService;
@@ -33,6 +35,7 @@ public sealed class StimulationEngine : IStimulationEngine
         this.unifiedSessionService = unifiedSessionService;
         this.configurationSnapshots = configurationSnapshots;
         this.patientService = patientService;
+        this.authorizationService = authorizationService;
     }
 
     public StimulationExecutionState CurrentState => stimulationStateMachine.CurrentState;
@@ -43,6 +46,7 @@ public sealed class StimulationEngine : IStimulationEngine
         string prescriptionName,
         CancellationToken cancellationToken = default)
     {
+        authorizationService.RequireSignedIn();
         activeConfiguration = StimulationConfigurationSnapshot.Create(group);
         var parameterRecord = StimulationRecordParameters.CreateTiPrescription(group, prescriptionName);
         var executionGroup = activeConfiguration.ToMutableGroup();
@@ -65,6 +69,7 @@ public sealed class StimulationEngine : IStimulationEngine
         string prescriptionName,
         CancellationToken cancellationToken = default)
     {
+        authorizationService.RequireSignedIn();
         activeConfiguration = StimulationConfigurationSnapshot.Create(group);
         var parameterRecord = StimulationRecordParameters.CreateDirectCurrentPrescription(group, prescriptionName);
         var executionGroup = activeConfiguration.ToMutableGroup();
@@ -83,6 +88,7 @@ public sealed class StimulationEngine : IStimulationEngine
 
     public async Task<HardwareOperationResult> PauseTiGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default)
     {
+        authorizationService.RequireSignedIn();
         var executionGroup = (activeConfiguration ?? StimulationConfigurationSnapshot.Create(group)).ToMutableGroup();
         await RecordRequestIfSessionActiveAsync("pause_requested", executionGroup, selectedChannelNames, cancellationToken);
         stimulationStateMachine.MoveTo(StimulationExecutionState.Paused, "PauseTiGroup");

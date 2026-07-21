@@ -23,10 +23,12 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private readonly IAccountService accountService;
     private readonly IFeatureVisibilityService featureVisibilityService;
     private readonly IStartupSettingsService startupSettingsService;
+    private readonly ISoftwareActivationService softwareActivationService;
     private readonly IPatientService patientService;
     private readonly ISessionLifecycleCoordinator sessionLifecycleCoordinator;
     private readonly IToastService toastService;
     private readonly AsyncRelayCommand connectCommand;
+    private readonly AsyncRelayCommand openAuditTrailCommand;
 
     private AppPage currentPage = AppPage.Control;
     private ObservableObject? currentPageViewModel;
@@ -46,9 +48,11 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         IAccountService accountService,
         IFeatureVisibilityService featureVisibilityService,
         IStartupSettingsService startupSettingsService,
+        ISoftwareActivationService softwareActivationService,
         IPatientService patientService,
         ISessionLifecycleCoordinator sessionLifecycleCoordinator,
         IToastService toastService,
+        AuditTrailViewModel auditTrail,
         NavigationViewModel navigation,
         LocalizationViewModel localization,
         PatientViewModel patient,
@@ -72,9 +76,11 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         this.accountService = accountService;
         this.featureVisibilityService = featureVisibilityService;
         this.startupSettingsService = startupSettingsService;
+        this.softwareActivationService = softwareActivationService;
         this.patientService = patientService;
         this.sessionLifecycleCoordinator = sessionLifecycleCoordinator;
         this.toastService = toastService;
+        AuditTrail = auditTrail;
 
         Navigation = navigation;
         Localization = localization;
@@ -124,6 +130,11 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         CheckImpedanceCommand = new AsyncRelayCommand(
             CheckImpedanceAsync,
             onError: HandleImpedanceRefreshError);
+        openAuditTrailCommand = new AsyncRelayCommand(
+            OpenAuditTrailAsync,
+            () => IsLoggedIn,
+            exception => HandleDeviceOperationError("安全审计打开失败", "无法打开安全审计，请稍后重试。", exception));
+        OpenAuditTrailCommand = openAuditTrailCommand;
 
         ExitCommand = CreateHardwareCommand(async _ =>
         {
@@ -225,6 +236,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     /// <summary>报告页面 ViewModel。</summary>
     public ReportViewModel Report { get; }
 
+    public AuditTrailViewModel AuditTrail { get; }
+
     /// <summary>未实现页面的占位 ViewModel。</summary>
     public PlaceholderPageViewModel PlaceholderPage { get; }
 
@@ -234,6 +247,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     public ICommand ReadProductModelCommand { get; }
     public ICommand ReadBoardModelCommand { get; }
     public ICommand CheckImpedanceCommand { get; }
+    public ICommand OpenAuditTrailCommand { get; }
     public ICommand ExitCommand { get; }
     public ICommand ToggleLanguageCommand { get; }
     public ICommand ToggleSidebarCommand { get; }
@@ -291,6 +305,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     public System.Windows.Visibility LoggedInMenuVisibility => IsLoggedIn ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
 
     public System.Windows.Visibility AdminMenuVisibility => IsAdminLoggedIn ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+    public System.Windows.Visibility AuditMenuVisibility => IsLoggedIn ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
 
     public bool CanManagePatients => accountService.CurrentUser?.RoleId is AccountRoles.Admin or AccountRoles.Doctor;
 
@@ -819,6 +835,13 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     /// </summary>
     public async Task TryAutomaticConnectionOnceAsync(CancellationToken cancellationToken = default)
     {
+        await softwareActivationService.InitializeAsync(cancellationToken);
+        if (!softwareActivationService.IsActivated)
+        {
+            logger.Info("软件尚未激活，跳过启动自动联机");
+            return;
+        }
+
         if (Interlocked.Exchange(ref automaticConnectionAttempted, 1) != 0)
         {
             return;

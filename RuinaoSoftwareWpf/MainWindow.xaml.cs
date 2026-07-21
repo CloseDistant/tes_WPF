@@ -21,6 +21,8 @@ public partial class MainWindow : Window
     private readonly ILoggingService logger = (ILoggingService)AppComposition.Services.GetService(typeof(ILoggingService))!;
     private readonly IRuntimeTelemetryService telemetry = (IRuntimeTelemetryService)AppComposition.Services.GetService(typeof(IRuntimeTelemetryService))!;
     private readonly IAccountService accountService = (IAccountService)AppComposition.Services.GetService(typeof(IAccountService))!;
+    private readonly IAuditTrailService auditTrail = (IAuditTrailService)AppComposition.Services.GetService(typeof(IAuditTrailService))!;
+    private readonly ISoftwareActivationService softwareActivationService = (ISoftwareActivationService)AppComposition.Services.GetService(typeof(ISoftwareActivationService))!;
     private long lastRenderTicks;
     private bool closeAfterShutdown;
     private bool shutdownInProgress;
@@ -38,7 +40,9 @@ public partial class MainWindow : Window
         // 把 ViewModel 设为窗口的数据上下文，XAML 里的绑定才能找到属性。
         DataContext = viewModel;
         viewModel.CloseRequested += OnCloseRequested;
+        auditTrail.WriteFailed += OnAuditTrailWriteFailed;
         RegisterAuthenticationEvents();
+        RegisterSessionSecurity();
         ContentRendered += OnFirstContentRendered;
         Closing += OnClosing;
         CompositionTarget.Rendering += OnRendering;
@@ -46,10 +50,18 @@ public partial class MainWindow : Window
         {
             CompositionTarget.Rendering -= OnRendering;
             viewModel.CloseRequested -= OnCloseRequested;
+            auditTrail.WriteFailed -= OnAuditTrailWriteFailed;
             UnregisterAuthenticationEvents();
+            UnregisterSessionSecurity();
             automaticConnectionCts.Dispose();
         };
         logger.Info("主窗口创建完成");
+    }
+
+    private void OnAuditTrailWriteFailed(object? sender, AuditTrailWriteFailedEventArgs e)
+    {
+        _ = Dispatcher.BeginInvoke(() =>
+            viewModel.Toast.ShowError("安全审计异常", e.UserMessage));
     }
 
     private async void OnFirstContentRendered(object? sender, EventArgs e)
@@ -57,7 +69,13 @@ public partial class MainWindow : Window
         ContentRendered -= OnFirstContentRendered;
         try
         {
-            // 此时登录界面已经完成首帧显示；仅当工作站启动设置已开启时才在后台自动联机。
+            // 未激活时不初始化硬件联机；激活成功后由认证流程重新触发一次检查。
+            await softwareActivationService.InitializeAsync(automaticConnectionCts.Token);
+            if (!softwareActivationService.IsActivated)
+            {
+                return;
+            }
+
             await viewModel.TryAutomaticConnectionOnceAsync(automaticConnectionCts.Token);
         }
         catch (OperationCanceledException)
@@ -93,6 +111,15 @@ public partial class MainWindow : Window
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
+        if (!IsShutdownRequested
+            && ActivationContent.Visibility == Visibility.Visible
+            && !softwareActivationService.IsActivated)
+        {
+            e.Cancel = true;
+            ActivationContent.ShowExitConfirmation();
+            return;
+        }
+
         shutdownRequested = true;
         automaticConnectionCts.Cancel();
         MainContent.CloseTransientPopups();
@@ -114,6 +141,7 @@ public partial class MainWindow : Window
         {
             logger.Info("主窗口正在执行统一关闭流程");
             await viewModel.ShutdownAsync();
+            await accountService.LogoutAsync();
         }
         catch (Exception exception)
         {

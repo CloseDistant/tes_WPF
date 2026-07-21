@@ -152,12 +152,26 @@
 
             <Grid Grid.Row="1" Margin="28,16,28,0">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="38" />
                     <RowDefinition Height="30" />
-                    <RowDefinition Height="252" />
+                    <RowDefinition Height="214" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+                <TextBox x:Name="SearchTextBox"
+                         Height="30"
+                         Margin="0,0,0,8"
+                         Padding="10,0"
+                         VerticalContentAlignment="Center"
+                         Background="#171C26"
+                         Foreground="{StaticResource Text}"
+                         CaretBrush="{StaticResource Text}"
+                         BorderBrush="{StaticResource Line}"
+                         BorderThickness="1"
+                         ToolTip="按患者姓名或编号搜索"
+                         TextChanged="SearchTextBox_TextChanged" />
+
+                <Border Grid.Row="1" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="120" />
@@ -173,10 +187,11 @@
                 </Border>
 
                 <ListBox x:Name="PatientList"
-                         Grid.Row="1"
+                         Grid.Row="2"
                          Background="Transparent"
                          BorderThickness="0"
                          ItemsSource="{Binding Items}"
+                         ScrollViewer.ScrollChanged="PatientList_ScrollChanged"
                          MouseDoubleClick="PatientList_MouseDoubleClick">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
@@ -200,7 +215,7 @@
                 </ListBox>
 
                 <TextBlock x:Name="ErrorText"
-                           Grid.Row="2"
+                           Grid.Row="3"
                            Foreground="{StaticResource Danger}"
                            Margin="0,8,0,0" />
             </Grid>

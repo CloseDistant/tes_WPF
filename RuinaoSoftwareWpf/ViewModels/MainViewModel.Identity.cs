@@ -97,14 +97,17 @@ public sealed partial class MainViewModel
             return;
         }
 
-        var patients = await patientService.GetPatientsAsync();
-        if (patients.Count == 0)
+        var firstPage = await patientService.GetPatientsPageAsync(new PageRequest(0, 30));
+        if (firstPage.Items.Count == 0)
         {
             toastService.ShowInformation("请先添加患者");
             return;
         }
 
-        var dialog = new PatientSwitchDialog(patients, patientService.CurrentPatient?.PatientCode)
+        var dialog = new PatientSwitchDialog(
+            patientService,
+            firstPage,
+            patientService.CurrentPatient?.PatientCode)
         {
             Owner = System.Windows.Application.Current?.MainWindow
         };
@@ -254,6 +257,23 @@ public sealed partial class MainViewModel
         return Task.CompletedTask;
     }
 
+    private Task OpenAuditTrailAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (accountService.CurrentUser is null)
+        {
+            ShellState.FooterStatus = "请先登录后再访问安全审计";
+            return Task.CompletedTask;
+        }
+
+        var dialog = new AuditTrailDialog(AuditTrail)
+        {
+            Owner = Application.Current?.MainWindow
+        };
+        dialog.ShowDialog();
+        return Task.CompletedTask;
+    }
+
     private async Task SwitchAccountAsync()
     {
         var previousUser = accountService.CurrentUser;
@@ -281,6 +301,8 @@ public sealed partial class MainViewModel
         OnPropertyChanged(nameof(LoginMenuVisibility));
         OnPropertyChanged(nameof(LoggedInMenuVisibility));
         OnPropertyChanged(nameof(AdminMenuVisibility));
+        OnPropertyChanged(nameof(AuditMenuVisibility));
+        openAuditTrailCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(CanManagePatients));
         OnPropertyChanged(nameof(PatientMenuVisibility));
     }

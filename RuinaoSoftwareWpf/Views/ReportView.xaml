@@ -75,6 +75,38 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="PagerButton" TargetType="Button">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="MinWidth" Value="82"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Background" Value="#202633"/>
+            <Setter Property="Foreground" Value="#DCE3EF"/>
+            <Setter Property="BorderBrush" Value="#3A4353"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="BorderBrush" Value="#5F78A6"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
     <Border Margin="16"
             Background="#181D27"
@@ -85,6 +117,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="58"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="52"/>
             </Grid.RowDefinitions>
             <Border BorderBrush="#303746" BorderThickness="0,0,0,1" Padding="18,0">
                 <StackPanel VerticalAlignment="Center">
@@ -98,7 +131,8 @@
                                FontSize="12"/>
                 </StackPanel>
             </Border>
-            <DataGrid Grid.Row="1"
+            <DataGrid x:Name="RecordGrid"
+                  Grid.Row="1"
                   ItemsSource="{Binding Records}"
                   SelectedItem="{Binding SelectedRecord}"
                   AutoGenerateColumns="False"
@@ -117,7 +151,9 @@
                   Foreground="#E1E6EF"
                   ColumnHeaderStyle="{StaticResource RecordGridHeader}"
                   CellStyle="{StaticResource RecordGridCell}"
-                  RowStyle="{StaticResource RecordGridRow}">
+                  RowStyle="{StaticResource RecordGridRow}"
+                  ScrollViewer.VerticalScrollBarVisibility="Visible"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="序号" Binding="{Binding RowNumber}" Width="70"/>
                 <DataGridTextColumn Header="患者" Binding="{Binding PatientDisplay}" Width="1.05*"/>
@@ -147,6 +183,31 @@
                 </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
+            <Border Grid.Row="2"
+                    BorderBrush="#303746"
+                    BorderThickness="0,1,0,0"
+                    Padding="18,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding PageStatusText}"
+                               Foreground="#A8B2C3"
+                               VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Button Content="上一页"
+                                Style="{StaticResource PagerButton}"
+                                Command="{Binding PreviousPageCommand}"/>
+                        <Button Content="下一页"
+                                Style="{StaticResource PagerButton}"
+                                Command="{Binding NextPageCommand}"
+                                Margin="10,0,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
     </Border>
 </UserControl>

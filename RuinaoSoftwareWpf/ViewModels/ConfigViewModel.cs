@@ -15,10 +15,15 @@ public sealed class ConfigViewModel : ObservableObject
     private readonly ILoggingService logger;
     private readonly IDesktopShortcutService desktopShortcutService;
     private readonly IStartupSettingsService startupSettingsService;
+    private readonly ISessionSecurityService sessionSecurityService;
     private readonly IToastService toastService;
     private readonly AsyncRelayCommand saveNavigationCommand;
     private readonly AsyncRelayCommand saveStimulationTypesCommand;
     private readonly AsyncRelayCommand saveStartupSettingsCommand;
+    private readonly RelayCommand restoreStartupSettingsCommand;
+    private readonly AsyncRelayCommand saveSessionSecurityCommand;
+    private readonly RelayCommand decreaseIdleTimeoutCommand;
+    private readonly RelayCommand increaseIdleTimeoutCommand;
     private bool stimulationSettingsRevealed;
     private int shiftPressCount;
     private DateTimeOffset? lastShiftPressAt;
@@ -26,6 +31,8 @@ public sealed class ConfigViewModel : ObservableObject
     private string stimulationStatus = string.Empty;
     private string startupSettingsStatus = string.Empty;
     private bool autoConnectOnStartup;
+    private int idleTimeoutMinutes = ISessionSecurityService.DefaultIdleTimeoutMinutes;
+    private string sessionSecurityStatus = string.Empty;
 
     public ConfigViewModel(
         IFeatureVisibilityService featureVisibilityService,
@@ -34,6 +41,7 @@ public sealed class ConfigViewModel : ObservableObject
         ILoggingService logger,
         IDesktopShortcutService desktopShortcutService,
         IStartupSettingsService startupSettingsService,
+        ISessionSecurityService sessionSecurityService,
         IToastService toastService)
     {
         this.featureVisibilityService = featureVisibilityService;
@@ -42,6 +50,7 @@ public sealed class ConfigViewModel : ObservableObject
         this.logger = logger;
         this.desktopShortcutService = desktopShortcutService;
         this.startupSettingsService = startupSettingsService;
+        this.sessionSecurityService = sessionSecurityService;
         this.toastService = toastService;
 
         NavigationOptions = new ObservableCollection<FeatureVisibilityOptionViewModel>(
@@ -59,7 +68,21 @@ public sealed class ConfigViewModel : ObservableObject
             exception => HandleSaveError(exception, isStimulation: true));
         saveStartupSettingsCommand = new AsyncRelayCommand(
             SaveStartupSettingsAsync,
+            () => IsAdmin,
             onError: HandleStartupSettingsSaveError);
+        restoreStartupSettingsCommand = new RelayCommand(
+            _ => RestoreStartupSettingsDefaults(),
+            _ => IsAdmin);
+        saveSessionSecurityCommand = new AsyncRelayCommand(
+            SaveSessionSecurityAsync,
+            () => IsAdmin,
+            HandleSessionSecuritySaveError);
+        decreaseIdleTimeoutCommand = new RelayCommand(
+            _ => IdleTimeoutMinutes--,
+            _ => IsAdmin && IdleTimeoutMinutes > ISessionSecurityService.MinimumIdleTimeoutMinutes);
+        increaseIdleTimeoutCommand = new RelayCommand(
+            _ => IdleTimeoutMinutes++,
+            _ => IsAdmin && IdleTimeoutMinutes < ISessionSecurityService.MaximumIdleTimeoutMinutes);
 
         SaveNavigationCommand = saveNavigationCommand;
         SaveStimulationTypesCommand = saveStimulationTypesCommand;
@@ -67,7 +90,11 @@ public sealed class ConfigViewModel : ObservableObject
         RestoreStimulationTypesCommand = new RelayCommand(_ => RestoreStimulationDefaults());
         CreateDesktopShortcutCommand = new RelayCommand(_ => CreateDesktopShortcut());
         SaveStartupSettingsCommand = saveStartupSettingsCommand;
-        RestoreStartupSettingsCommand = new RelayCommand(_ => RestoreStartupSettingsDefaults());
+        RestoreStartupSettingsCommand = restoreStartupSettingsCommand;
+        SaveSessionSecurityCommand = saveSessionSecurityCommand;
+        RestoreSessionSecurityCommand = new RelayCommand(_ => RestoreSessionSecurityDefaults());
+        DecreaseIdleTimeoutCommand = decreaseIdleTimeoutCommand;
+        IncreaseIdleTimeoutCommand = increaseIdleTimeoutCommand;
 
         accountService.CurrentUserChanged += (_, _) => OnAccountChanged();
         featureVisibilityService.VisibilityChanged += (_, _) => ApplyPersistedVisibility();
@@ -91,6 +118,14 @@ public sealed class ConfigViewModel : ObservableObject
     public ICommand SaveStartupSettingsCommand { get; }
 
     public ICommand RestoreStartupSettingsCommand { get; }
+
+    public ICommand SaveSessionSecurityCommand { get; }
+
+    public ICommand RestoreSessionSecurityCommand { get; }
+
+    public ICommand DecreaseIdleTimeoutCommand { get; }
+
+    public ICommand IncreaseIdleTimeoutCommand { get; }
 
     public bool IsAdmin => accountService.CurrentUser?.RoleId == AccountRoles.Admin;
 
@@ -152,12 +187,37 @@ public sealed class ConfigViewModel : ObservableObject
         private set => SetProperty(ref startupSettingsStatus, value);
     }
 
+    public int IdleTimeoutMinutes
+    {
+        get => idleTimeoutMinutes;
+        set
+        {
+            var normalized = Math.Clamp(
+                value,
+                ISessionSecurityService.MinimumIdleTimeoutMinutes,
+                ISessionSecurityService.MaximumIdleTimeoutMinutes);
+            if (SetProperty(ref idleTimeoutMinutes, normalized))
+            {
+                decreaseIdleTimeoutCommand.RaiseCanExecuteChanged();
+                increaseIdleTimeoutCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public string SessionSecurityStatus
+    {
+        get => sessionSecurityStatus;
+        private set => SetProperty(ref sessionSecurityStatus, value);
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await featureVisibilityService.InitializeAsync(cancellationToken);
         await startupSettingsService.InitializeAsync(cancellationToken);
+        await sessionSecurityService.InitializeAsync(cancellationToken);
         ApplyPersistedVisibility();
         AutoConnectOnStartup = startupSettingsService.AutoConnectOnStartup;
+        IdleTimeoutMinutes = sessionSecurityService.IdleTimeoutMinutes;
     }
 
     private void CreateDesktopShortcut()
@@ -179,6 +239,7 @@ public sealed class ConfigViewModel : ObservableObject
         NavigationStatus = string.Empty;
         StimulationStatus = string.Empty;
         StartupSettingsStatus = string.Empty;
+        SessionSecurityStatus = string.Empty;
     }
 
     public void LeaveSettingsPage()
@@ -280,6 +341,12 @@ public sealed class ConfigViewModel : ObservableObject
         StartupSettingsStatus = "启动设置已保存，下次启动时生效";
     }
 
+    private async Task SaveSessionSecurityAsync(CancellationToken cancellationToken)
+    {
+        await sessionSecurityService.SaveIdleTimeoutAsync(IdleTimeoutMinutes, cancellationToken);
+        SessionSecurityStatus = $"自动锁定时间已保存：{IdleTimeoutMinutes}分钟";
+    }
+
     private void RestoreNavigationDefaults()
     {
         foreach (var option in NavigationOptions)
@@ -304,6 +371,12 @@ public sealed class ConfigViewModel : ObservableObject
     {
         AutoConnectOnStartup = false;
         StartupSettingsStatus = "已恢复默认，点击保存后生效";
+    }
+
+    private void RestoreSessionSecurityDefaults()
+    {
+        IdleTimeoutMinutes = ISessionSecurityService.DefaultIdleTimeoutMinutes;
+        SessionSecurityStatus = "已恢复默认，点击保存后生效";
     }
 
     private void ApplyPersistedVisibility()
@@ -349,6 +422,11 @@ public sealed class ConfigViewModel : ObservableObject
         OnPropertyChanged(nameof(StimulationSettingsVisibility));
         saveNavigationCommand.RaiseCanExecuteChanged();
         saveStimulationTypesCommand.RaiseCanExecuteChanged();
+        saveStartupSettingsCommand.RaiseCanExecuteChanged();
+        restoreStartupSettingsCommand.RaiseCanExecuteChanged();
+        saveSessionSecurityCommand.RaiseCanExecuteChanged();
+        decreaseIdleTimeoutCommand.RaiseCanExecuteChanged();
+        increaseIdleTimeoutCommand.RaiseCanExecuteChanged();
     }
 
     private void HideStimulationSettings()
@@ -374,6 +452,12 @@ public sealed class ConfigViewModel : ObservableObject
     {
         logger.Error("保存启动设置失败", exception);
         StartupSettingsStatus = exception.Message;
+    }
+
+    private void HandleSessionSecuritySaveError(Exception exception)
+    {
+        logger.Error("保存会话安全设置失败", exception);
+        SessionSecurityStatus = exception.Message;
     }
 }
 

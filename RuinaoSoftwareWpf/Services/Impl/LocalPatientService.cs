@@ -11,6 +11,7 @@ public sealed class LocalPatientService : IPatientService
     private readonly IAppDatabaseInitializer databaseInitializer;
     private readonly PatientDataProtector dataProtector;
     private readonly IAccountService accountService;
+    private readonly IAuthorizationService authorizationService;
     private readonly SemaphoreSlim initializeGate = new(1, 1);
     private readonly SemaphoreSlim writeGate = new(1, 1);
     private bool ready;
@@ -21,12 +22,14 @@ public sealed class LocalPatientService : IPatientService
         ILoggingService logger,
         IAppDatabaseInitializer databaseInitializer,
         PatientDataProtector dataProtector,
-        IAccountService accountService)
+        IAccountService accountService,
+        IAuthorizationService authorizationService)
     {
         this.logger = logger;
         this.databaseInitializer = databaseInitializer;
         this.dataProtector = dataProtector;
         this.accountService = accountService;
+        this.authorizationService = authorizationService;
         this.accountService.CurrentUserChanged += (_, _) => ClearCurrentPatient();
     }
 
@@ -62,6 +65,7 @@ public sealed class LocalPatientService : IPatientService
             var entity = new PatientEntity
             {
                 OwnerUserId = owner.UserId,
+                UpdatedByUserId = owner.UserId,
                 PatientCode = patientCode,
                 Name = request.Name.Trim(),
                 Gender = request.Sex!.Value.ToStorageCode(),
@@ -123,6 +127,8 @@ public sealed class LocalPatientService : IPatientService
             entity.EmergencyContactName = Normalize(request.EmergencyContactName);
             entity.EmergencyContactPhoneEncrypted = dataProtector.Protect(request.EmergencyContactPhone);
             entity.HomeAddress = Normalize(request.HomeAddress);
+            // 临床信息仅在创建患者时记录；编辑界面不提供修改入口，更新时保留原值。
+            entity.UpdatedByUserId = owner.UserId;
             entity.UpdatedAtUnixMs = DateTimeOffset.Now.ToUnixTimeMilliseconds();
             await context.SaveChangesAsync(cancellationToken);
 
@@ -145,16 +151,38 @@ public sealed class LocalPatientService : IPatientService
         }, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<PatientRecord>> GetPatientsAsync(CancellationToken cancellationToken = default)
+    public async Task<PageResult<PatientRecord>> GetPatientsPageAsync(
+        PageRequest request,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
         await EnsureReadyAsync(cancellationToken);
         var owner = RequirePatientManager();
         await using var context = new CaptureDbContext(AppDatabasePathProvider.MainDatabasePath);
-        var entities = await context.Patients
-            .Where(item => item.OwnerUserId == owner.UserId)
+        var searchText = request.NormalizedSearchText;
+        var query = context.Patients
+            .AsNoTracking()
+            .Where(item => item.OwnerUserId == owner.UserId);
+        if (searchText.Length > 0)
+        {
+            query = query.Where(item =>
+                item.PatientCode.Contains(searchText) ||
+                (item.Name != null && item.Name.Contains(searchText)));
+        }
+
+        var entities = await query
             .OrderByDescending(item => item.UpdatedAtUnixMs)
+            .ThenByDescending(item => item.Id)
+            .Skip(request.SafeOffset)
+            .Take(request.SafePageSize + 1)
             .ToListAsync(cancellationToken);
-        return entities.Select(ToRecord).ToList();
+        var hasMore = entities.Count > request.SafePageSize;
+        if (hasMore)
+        {
+            entities.RemoveAt(entities.Count - 1);
+        }
+
+        return new PageResult<PatientRecord>(entities.Select(ToRecord).ToList(), hasMore);
     }
 
     public Task<PatientRecord> SwitchCurrentPatientAsync(string patientCode, CancellationToken cancellationToken = default)
@@ -214,14 +242,14 @@ public sealed class LocalPatientService : IPatientService
 
             await databaseInitializer.EnsureInitializedAsync(cancellationToken);
             await using var context = new CaptureDbContext(AppDatabasePathProvider.MainDatabasePath);
-            var encryptedValues = await context.Patients
-                .Select(item => new { item.IdCardEncrypted, item.PhoneEncrypted, item.EmergencyContactPhoneEncrypted })
-                .ToListAsync(cancellationToken);
-            dataProtector.Initialize(encryptedValues.Any(item =>
-                PatientDataProtector.IsCurrentCiphertext(item.IdCardEncrypted)
-                || PatientDataProtector.IsCurrentCiphertext(item.PhoneEncrypted)
-                || PatientDataProtector.IsCurrentCiphertext(item.EmergencyContactPhoneEncrypted)));
-            await MigrateLegacyCiphertextAsync(context, cancellationToken);
+            var currentCiphertextExists = await context.Patients.AnyAsync(item =>
+                (item.IdCardEncrypted != null && item.IdCardEncrypted.StartsWith("v2:"))
+                || (item.PhoneEncrypted != null && item.PhoneEncrypted.StartsWith("v2:"))
+                || (item.EmergencyContactPhoneEncrypted != null
+                    && item.EmergencyContactPhoneEncrypted.StartsWith("v2:")),
+                cancellationToken);
+            dataProtector.Initialize(currentCiphertextExists);
+            // 登录路径不执行旧密文全表迁移；v1 密文仍可按条读取，避免启动时扫描全部患者。
             ready = true;
         }
         finally
@@ -232,33 +260,56 @@ public sealed class LocalPatientService : IPatientService
 
     private async Task MigrateLegacyCiphertextAsync(CaptureDbContext context, CancellationToken cancellationToken)
     {
-        var entities = await context.Patients.ToListAsync(cancellationToken);
-        var changed = false;
-        foreach (var entity in entities)
+        const int batchSize = 200;
+        long lastId = 0;
+        var migratedCount = 0;
+        while (true)
         {
-            if (TryReprotectLegacy(entity.IdCardEncrypted, "IdCardNumber", out var idCard))
+            var entities = await context.Patients
+                .Where(item => item.Id > lastId)
+                .OrderBy(item => item.Id)
+                .Take(batchSize)
+                .ToListAsync(cancellationToken);
+            if (entities.Count == 0)
             {
-                entity.IdCardEncrypted = idCard;
-                changed = true;
+                break;
             }
 
-            if (TryReprotectLegacy(entity.PhoneEncrypted, "Phone", out var phone))
+            foreach (var entity in entities)
             {
-                entity.PhoneEncrypted = phone;
-                changed = true;
+                var changed = false;
+                if (TryReprotectLegacy(entity.IdCardEncrypted, "IdCardNumber", out var idCard))
+                {
+                    entity.IdCardEncrypted = idCard;
+                    changed = true;
+                }
+
+                if (TryReprotectLegacy(entity.PhoneEncrypted, "Phone", out var phone))
+                {
+                    entity.PhoneEncrypted = phone;
+                    changed = true;
+                }
+
+                if (TryReprotectLegacy(entity.EmergencyContactPhoneEncrypted, "EmergencyContactPhone", out var emergencyPhone))
+                {
+                    entity.EmergencyContactPhoneEncrypted = emergencyPhone;
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    migratedCount++;
+                }
             }
 
-            if (TryReprotectLegacy(entity.EmergencyContactPhoneEncrypted, "EmergencyContactPhone", out var emergencyPhone))
-            {
-                entity.EmergencyContactPhoneEncrypted = emergencyPhone;
-                changed = true;
-            }
+            await context.SaveChangesAsync(cancellationToken);
+            lastId = entities[^1].Id;
+            context.ChangeTracker.Clear();
         }
 
-        if (changed)
+        if (migratedCount > 0)
         {
-            await context.SaveChangesAsync(cancellationToken);
-            logger.Info("旧版患者敏感字段已迁移到自动密钥加密格式。");
+            logger.Info($"旧版患者敏感字段已分批迁移到自动密钥加密格式：patients={migratedCount}。");
         }
     }
 
@@ -282,18 +333,7 @@ public sealed class LocalPatientService : IPatientService
 
     private CurrentUserInfo RequirePatientManager()
     {
-        var user = accountService.CurrentUser;
-        if (user is null)
-        {
-            throw new InvalidOperationException("请先登录 Admin 或 Doctor 账号。");
-        }
-
-        if (user.RoleId is not (AccountRoles.Admin or AccountRoles.Doctor))
-        {
-            throw new InvalidOperationException("只有 Admin 或 Doctor 可以管理患者信息。");
-        }
-
-        return user;
+        return authorizationService.Demand(AppPermission.ManagePatients);
     }
 
     private void ClearCurrentPatient()

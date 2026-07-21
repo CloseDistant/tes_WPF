@@ -26,7 +26,7 @@ public sealed class AppLocalizationService : ILocalizationService
         ["ProtocolManager"] = ("处方", "Prescription"),
         ["TreatmentHistory"] = ("记录", "Records"),
         ["TreatmentHistoryTitle"] = ("治疗历史记录", "Treatment History"),
-        ["Settings"] = ("关于", "About"),
+        ["Settings"] = ("设置", "Settings"),
         ["Help"] = ("帮助", "Help"),
         ["PrescriptionMenu"] = ("处方", "Protocol"),
         ["DeviceMenu"] = ("设备", "Device"),

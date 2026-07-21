@@ -55,6 +55,7 @@ internal static class CaptureDbContextModelConfiguration
         entity.HasIndex(item => item.PatientCode).IsUnique();
         entity.HasIndex(item => item.OwnerUserId);
         entity.Property(item => item.OwnerUserId).HasColumnName("owner_user_id");
+        entity.Property(item => item.UpdatedByUserId).HasColumnName("updated_by_user_id");
         entity.Property(item => item.PatientCode).HasColumnName("patient_code");
         entity.Property(item => item.Name).HasColumnName("name");
         entity.Property(item => item.Gender).HasColumnName("gender");
@@ -110,6 +111,8 @@ internal static class CaptureDbContextModelConfiguration
         entity.Property(item => item.RampDownSeconds).HasColumnName("ramp_down_seconds");
         entity.Property(item => item.EvidenceGrade).HasColumnName("evidence_grade");
         entity.Property(item => item.IsBuiltin).HasColumnName("is_builtin");
+        entity.Property(item => item.CreatedByUserId).HasColumnName("created_by_user_id");
+        entity.Property(item => item.UpdatedByUserId).HasColumnName("updated_by_user_id");
         entity.Property(item => item.CreatedAtUnixMs).HasColumnName("created_at_unix_ms");
         entity.Property(item => item.UpdatedAtUnixMs).HasColumnName("updated_at_unix_ms");
     }

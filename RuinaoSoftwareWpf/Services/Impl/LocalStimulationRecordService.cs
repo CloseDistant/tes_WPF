@@ -11,24 +11,25 @@ public sealed class LocalStimulationRecordService : IStimulationRecordService
     private readonly IAppDatabaseInitializer databaseInitializer;
     private readonly IUnifiedSessionService unifiedSessionService;
     private readonly IAppDatabaseWriteCoordinator databaseWriteCoordinator;
-    private readonly IAccountService accountService;
+    private readonly IAuthorizationService authorizationService;
 
     public LocalStimulationRecordService(
         IPatientService patientService,
         IAppDatabaseInitializer databaseInitializer,
         IUnifiedSessionService unifiedSessionService,
         IAppDatabaseWriteCoordinator databaseWriteCoordinator,
-        IAccountService accountService)
+        IAuthorizationService authorizationService)
     {
         this.patientService = patientService;
         this.databaseInitializer = databaseInitializer;
         this.unifiedSessionService = unifiedSessionService;
         this.databaseWriteCoordinator = databaseWriteCoordinator;
-        this.accountService = accountService;
+        this.authorizationService = authorizationService;
     }
 
     public async Task RecordAsync(StimulationRecordRequest request, CancellationToken cancellationToken = default)
     {
+        var currentUser = authorizationService.RequireSignedIn();
         await databaseInitializer.EnsureInitializedAsync(cancellationToken);
         var patientCode = patientService.CurrentPatient?.PatientCode;
         UnifiedSessionContext? session = null;
@@ -43,9 +44,10 @@ public sealed class LocalStimulationRecordService : IStimulationRecordService
         await databaseWriteCoordinator.ExecuteAsync(databasePath, async () =>
         {
             await using var context = new CaptureDbContext(databasePath);
-            context.StimulationRecords.Add(new StimulationRecordEntity
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            var entity = new StimulationRecordEntity
             {
-                OperatorUserId = accountService.CurrentUser?.UserId,
+                OperatorUserId = currentUser.UserId,
                 PatientCode = patientCode,
                 Action = request.Action,
                 GroupTitle = request.GroupTitle,
@@ -58,8 +60,11 @@ public sealed class LocalStimulationRecordService : IStimulationRecordService
                     : request.AdverseReactionRecord,
                 ParameterSnapshotJson = request.ParameterSnapshotJson,
                 EventTimeUnixMs = eventTimeUnixMs
-            });
+            };
+            context.StimulationRecords.Add(entity);
             await context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }, cancellationToken);
 
         if (session is null)
@@ -83,29 +88,51 @@ public sealed class LocalStimulationRecordService : IStimulationRecordService
             cancellationToken: cancellationToken);
     }
 
-    public async Task<IReadOnlyList<StimulationTreatmentRecord>> GetTreatmentRecordsAsync(
+    public async Task<PageResult<StimulationTreatmentRecord>> GetTreatmentRecordsPageAsync(
+        PageRequest request,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
+        var currentUser = authorizationService.RequireSignedIn();
         await databaseInitializer.EnsureInitializedAsync(cancellationToken);
         await using var context = new CaptureDbContext(AppDatabasePathProvider.MainDatabasePath);
-        var records = await context.StimulationRecords
+        var query = context.StimulationRecords
             .AsNoTracking()
-            .Where(item => item.Action == "start")
+            .Where(item => item.Action == "start" && item.OperatorUserId == currentUser.UserId);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var records = await query
             .OrderByDescending(item => item.EventTimeUnixMs)
             .ThenByDescending(item => item.Id)
+            .Skip(request.SafeOffset)
+            .Take(request.SafePageSize + 1)
             .ToListAsync(cancellationToken);
+        var hasMore = records.Count > request.SafePageSize;
+        if (hasMore)
+        {
+            records.RemoveAt(records.Count - 1);
+        }
+        foreach (var record in records)
+        {
+        }
 
         var patientCodes = records
             .Select(item => item.PatientCode)
             .Where(item => !string.IsNullOrWhiteSpace(item))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        var patients = await context.Patients
+        var patientEntities = await context.Patients
             .AsNoTracking()
             .Where(item => patientCodes.Contains(item.PatientCode))
-            .ToDictionaryAsync(item => item.PatientCode, item => item.Name ?? item.PatientCode, cancellationToken);
+            .ToListAsync(cancellationToken);
+        foreach (var patient in patientEntities)
+        {
+        }
+        var patients = patientEntities.ToDictionary(
+            item => item.PatientCode,
+            item => item.Name ?? item.PatientCode,
+            StringComparer.Ordinal);
 
-        return records.Select(item =>
+        var items = records.Select(item =>
         {
             var parameterRecord = StimulationRecordParameters.FromJson(item.ParameterSnapshotJson)
                 ?? StimulationRecordParameters.CreateFallbackRecord(
@@ -124,6 +151,7 @@ public sealed class LocalStimulationRecordService : IStimulationRecordService
                 string.IsNullOrWhiteSpace(item.AdverseReactionRecord) ? DefaultAdverseReactionRecord : item.AdverseReactionRecord,
                 parameterRecord);
         }).ToArray();
+        return new PageResult<StimulationTreatmentRecord>(items, hasMore, totalCount);
     }
 
     private static string GetPatientDisplay(string? patientCode, IReadOnlyDictionary<string, string> patients)

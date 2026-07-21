@@ -13,15 +13,20 @@ public sealed class LocalAccountService : IAccountService
 
     private readonly ILoggingService logger;
     private readonly IAppDatabaseInitializer databaseInitializer;
+    private readonly IAuditTrailService auditTrail;
     private readonly SemaphoreSlim databaseGate = new(1, 1);
     private readonly SemaphoreSlim loginGate = new(1, 1);
     private bool initialized;
     private CurrentUserInfo? currentUser;
 
-    public LocalAccountService(ILoggingService logger, IAppDatabaseInitializer databaseInitializer)
+    public LocalAccountService(
+        ILoggingService logger,
+        IAppDatabaseInitializer databaseInitializer,
+        IAuditTrailService auditTrail)
     {
         this.logger = logger;
         this.databaseInitializer = databaseInitializer;
+        this.auditTrail = auditTrail;
     }
 
     public event EventHandler? CurrentUserChanged;
@@ -164,6 +169,76 @@ public sealed class LocalAccountService : IAccountService
         }
     }
 
+    public async Task<AccountPasswordVerificationResult> VerifyCurrentPasswordAsync(
+        string password,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken);
+
+        var currentUser = CurrentUser;
+        if (currentUser is null)
+        {
+            return new AccountPasswordVerificationResult(false, false, "当前没有已登录账号");
+        }
+
+        await loginGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var context = new AccountDbContext(GetDatabasePath());
+            var user = await context.Users.FirstOrDefaultAsync(
+                item => item.Id == currentUser.UserId && item.IsActive,
+                cancellationToken);
+            if (user is null)
+            {
+                await WriteAuditAsync(
+                    currentUser.UserId,
+                    currentUser.UserId,
+                    "session_unlock",
+                    "failed",
+                    "当前账号不存在或已停用",
+                    cancellationToken);
+                return new AccountPasswordVerificationResult(false, false, "当前账号不存在或已停用");
+            }
+
+            var now = DateTimeOffset.Now;
+            if (user.LockoutEndUnixMs is long lockoutEndUnixMs
+                && lockoutEndUnixMs > now.ToUnixTimeMilliseconds())
+            {
+                var message = FormatLockoutMessage(lockoutEndUnixMs, now);
+                await WriteAuditAsync(user.Id, user.Id, "session_unlock", "blocked", message, cancellationToken);
+                return new AccountPasswordVerificationResult(false, true, message);
+            }
+
+            if (user.LockoutEndUnixMs is not null)
+            {
+                user.FailedLoginAttempts = 0;
+                user.LockoutEndUnixMs = null;
+            }
+
+            if (string.IsNullOrEmpty(password)
+                || !PasswordHasher.VerifyPassword(password, user.PasswordHash, user.PasswordSalt))
+            {
+                user.FailedLoginAttempts++;
+                var message = BuildFailedPasswordVerificationMessage(user, now);
+                user.UpdatedAtUnixMs = now.ToUnixTimeMilliseconds();
+                await context.SaveChangesAsync(cancellationToken);
+                await WriteAuditAsync(user.Id, user.Id, "session_unlock", "failed", message, cancellationToken);
+                return new AccountPasswordVerificationResult(false, user.LockoutEndUnixMs is not null, message);
+            }
+
+            user.FailedLoginAttempts = 0;
+            user.LockoutEndUnixMs = null;
+            user.UpdatedAtUnixMs = now.ToUnixTimeMilliseconds();
+            await context.SaveChangesAsync(cancellationToken);
+            await WriteAuditAsync(user.Id, user.Id, "session_unlock", "success", "会话解锁成功", cancellationToken);
+            return new AccountPasswordVerificationResult(true, false, "解锁成功");
+        }
+        finally
+        {
+            loginGate.Release();
+        }
+    }
+
     public async Task LogoutAsync(CancellationToken cancellationToken = default)
     {
         await EnsureInitializedAsync(cancellationToken);
@@ -222,8 +297,11 @@ public sealed class LocalAccountService : IAccountService
         return ToCurrentUser(user);
     }
 
-    public async Task<IReadOnlyList<AccountListItemInfo>> GetAccountListAsync(CancellationToken cancellationToken = default)
+    public async Task<PageResult<AccountListItemInfo>> GetAccountListPageAsync(
+        PageRequest request,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
         await EnsureInitializedAsync(cancellationToken);
 
         var operatorUser = CurrentUser;
@@ -251,7 +329,14 @@ public sealed class LocalAccountService : IAccountService
                 item.RoleId,
                 item.IsActive,
                 item.CreatedAtUnixMs))
+            .Skip(request.SafeOffset)
+            .Take(request.SafePageSize + 1)
             .ToListAsync(cancellationToken);
+        var hasMore = users.Count > request.SafePageSize;
+        if (hasMore)
+        {
+            users.RemoveAt(users.Count - 1);
+        }
 
         await WriteAuditAsync(
             operatorUser.UserId,
@@ -261,7 +346,25 @@ public sealed class LocalAccountService : IAccountService
             $"查看账号列表，共 {users.Count} 个账号",
             cancellationToken);
 
-        return users;
+        return new PageResult<AccountListItemInfo>(users, hasMore);
+    }
+
+    public async Task<IReadOnlyList<string>> GetActiveLoginNamesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken);
+        if (!IsCurrentUserAdmin())
+        {
+            throw new UnauthorizedAccessException("只有Admin可以获取账号筛选列表");
+        }
+
+        await using var context = new AccountDbContext(GetDatabasePath());
+        return await context.Users
+            .AsNoTracking()
+            .Where(item => item.IsActive)
+            .OrderBy(item => item.LoginName)
+            .Select(item => item.LoginName)
+            .ToListAsync(cancellationToken);
     }
 
     public async Task ChangePasswordAsync(ChangePasswordRequest request, CancellationToken cancellationToken = default)
@@ -456,17 +559,23 @@ public sealed class LocalAccountService : IAccountService
 
     private async Task WriteAuditAsync(long? operatorUserId, long? targetUserId, string action, string result, string? message, CancellationToken cancellationToken)
     {
-        await using var context = new AccountDbContext(GetDatabasePath());
-        context.AccountAuditLogs.Add(new AccountAuditLogEntity
-        {
-            OperatorUserId = operatorUserId,
-            TargetUserId = targetUserId,
-            Action = action,
-            Result = result,
-            Message = message,
-            CreatedAtUnixMs = DateTimeOffset.Now.ToUnixTimeMilliseconds()
-        });
-        await context.SaveChangesAsync(cancellationToken);
+        var current = CurrentUser;
+        var actor = current is not null && current.UserId == operatorUserId
+            ? AuditActor.From(current)
+            : new AuditActor(operatorUserId, operatorUserId is null ? "system" : $"user-{operatorUserId}", null);
+        var mapped = AuditActionCatalog.FromLegacyAction(action);
+        var auditResult = AuditActionCatalog.ParseResult(result);
+        await auditTrail.AppendAsync(
+            new AuditEventInput(
+                mapped.Category,
+                mapped.ActionCode,
+                actor,
+                targetUserId is null ? "None" : "User",
+                targetUserId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+                auditResult,
+                auditResult == AuditEventResult.Success ? null : mapped.ActionCode,
+                message),
+            cancellationToken);
     }
 
     private static string BuildFailedLoginMessage(AccountUserEntity user, DateTimeOffset now)
@@ -480,6 +589,19 @@ public sealed class LocalAccountService : IAccountService
 
         var remainingAttempts = MaxFailedLoginAttempts - user.FailedLoginAttempts;
         return $"登录名或密码错误，仅剩 {remainingAttempts} 次机会";
+    }
+
+    private static string BuildFailedPasswordVerificationMessage(AccountUserEntity user, DateTimeOffset now)
+    {
+        if (user.FailedLoginAttempts >= MaxFailedLoginAttempts)
+        {
+            user.FailedLoginAttempts = MaxFailedLoginAttempts;
+            user.LockoutEndUnixMs = now.Add(LoginLockoutDuration).ToUnixTimeMilliseconds();
+            return "密码连续输错 5 次，账号已限制验证 30 分钟";
+        }
+
+        var remainingAttempts = MaxFailedLoginAttempts - user.FailedLoginAttempts;
+        return $"密码错误，仅剩 {remainingAttempts} 次机会";
     }
 
     private static string FormatLockoutMessage(long lockoutEndUnixMs, DateTimeOffset now)

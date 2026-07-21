@@ -37,9 +37,11 @@ public sealed class NullPatientService : IPatientService
         throw new NotSupportedException();
     }
 
-    public Task<IReadOnlyList<PatientRecord>> GetPatientsAsync(CancellationToken cancellationToken = default)
+    public Task<PageResult<PatientRecord>> GetPatientsPageAsync(
+        PageRequest request,
+        CancellationToken cancellationToken = default)
     {
-        return Task.FromResult<IReadOnlyList<PatientRecord>>(Array.Empty<PatientRecord>());
+        return Task.FromResult(new PageResult<PatientRecord>(Array.Empty<PatientRecord>(), false));
     }
 
     public Task<PatientRecord> SwitchCurrentPatientAsync(string patientCode, CancellationToken cancellationToken = default)
@@ -58,8 +60,10 @@ public sealed class NullStimulationRecordService : IStimulationRecordService
 {
     public Task RecordAsync(StimulationRecordRequest request, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-    public Task<IReadOnlyList<StimulationTreatmentRecord>> GetTreatmentRecordsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<StimulationTreatmentRecord>>(Array.Empty<StimulationTreatmentRecord>());
+    public Task<PageResult<StimulationTreatmentRecord>> GetTreatmentRecordsPageAsync(
+        PageRequest request,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new PageResult<StimulationTreatmentRecord>(Array.Empty<StimulationTreatmentRecord>(), false));
 }
 
 public sealed class NullConfigService : IConfigService

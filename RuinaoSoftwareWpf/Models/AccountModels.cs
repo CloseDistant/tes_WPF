@@ -33,6 +33,11 @@ public sealed record AccountLoginResult(
     CurrentUserInfo? User,
     string Message);
 
+public sealed record AccountPasswordVerificationResult(
+    bool Succeeded,
+    bool IsBlocked,
+    string Message);
+
 public sealed record CreateAccountRequest(
     string LoginName,
     string Password,

@@ -187,7 +187,8 @@
                              Background="#171B24"
                              BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.ScrollChanged="AccountListBox_ScrollChanged">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Border BorderBrush="#292F3C" BorderThickness="0,0,0,1">

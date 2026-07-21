@@ -40,6 +40,11 @@ public static class AppComposition
 
         // ---------- 核心服务（Singleton：全局共享） ----------
         services.AddSingleton<ILoggingService, AppLoggingService>();       // 日志服务
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(AuditTrailStorageOptions.CreateDefault());
+        services.AddSingleton<AuditTrailService>();
+        services.AddSingleton<IAuditTrailService>(provider => provider.GetRequiredService<AuditTrailService>());
+        services.AddSingleton<IAuditTrailStore>(provider => provider.GetRequiredService<AuditTrailService>());
         services.AddSingleton<IToastService, AppToastService>(); // 全局顶部主题 Toast
         services.AddSingleton<IDesktopShortcutService, DesktopShortcutService>(); // 手动创建或更新桌面快捷方式
         services.AddSingleton<IRuntimeTelemetryService, RuntimeTelemetryService>(); // CPU、内存、队列与写入延迟遥测
@@ -47,6 +52,8 @@ public static class AppComposition
         services.AddSingleton<IAppDatabaseInitializer, AppDatabaseInitializer>(); // EF Core 数据库迁移入口
         services.AddSingleton<IAppDatabaseWriteCoordinator, AppDatabaseWriteCoordinator>(); // 三个实时模块关键事件全局单写者
         services.AddSingleton<PatientDataProtector>(); // 患者敏感字段自动密钥加密
+        services.AddSingleton<IIntegrityCheckService, IntegrityCheckService>();
+        services.AddSingleton<IBackupRestoreService, BackupRestoreService>();
         services.AddSingleton<ILocalizationService, AppLocalizationService>(); // 多语言服务
         services.AddSingleton<ITiGroupFactory, DemoTiGroupFactory>();     // TI 刺激组工厂
         services.AddSingleton<IHardwareLink, LogOnlyHardwareTransport>(); // 尚未迁移到V1.4的业务命令暂保留日志链路
@@ -56,7 +63,7 @@ public static class AppComposition
         services.AddSingleton<BackplaneClient>();                         // 真实libusbK链路与V1.4应答匹配
         services.AddSingleton<RuinaoTesProtocolBridge>();                 // UI只能经Bridge调用共用硬件DLL
         services.AddSingleton<IDeviceHal, ProtocolDeviceHal>();           // 硬件抽象层，内部同样指向协议 DLL Bridge
-        services.AddSingleton<IAuditLogService, AuditLogService>();       // 审计日志服务
+        services.AddSingleton<IAuditLogService, AuditLogService>();       // 兼容状态机同步接口，底层写入独立安全审计库
         services.AddSingleton<IDeviceStateMachine, DeviceStateMachine>(); // 设备状态机
         services.AddSingleton<IStimulationStateMachine, StimulationStateMachine>(); // 刺激状态机
         services.AddSingleton<IHeadModelStateMachine, HeadModelStateMachine>(); // 头模型状态机
@@ -78,6 +85,9 @@ public static class AppComposition
         services.AddTransient<ICameraCaptureService, OpenCvCameraCaptureService>(); // 摄像头设备生命周期
         services.AddSingleton<IUserDialogService, UserDialogService>(); // 统一确认弹窗服务
         services.AddSingleton<IAccountService, LocalAccountService>(); // 本地离线账号服务
+        services.AddSingleton<ISoftwareActivationService, SoftwareActivationService>(); // 首次运行离线激活与受保护凭据
+        services.AddSingleton<IAuthorizationService, AuthorizationService>(); // 登录状态和少量受限业务权限统一校验
+        services.AddSingleton<IAuditTrailAdministrationService, AuditTrailAdministrationService>();
         services.AddSingleton<IFeatureVisibilityService, LocalFeatureVisibilityService>(); // Admin 功能显示配置
         services.AddSingleton<IStartupSettingsService, LocalStartupSettingsService>(); // 工作站级启动设置
         services.AddSingleton<IPatientService, LocalPatientService>(); // 本地患者服务
@@ -87,6 +97,9 @@ public static class AppComposition
         services.AddSingleton<IEegRecordingService, EegRecordingService>(); // EEG 采集存储服务
         services.AddSingleton<IEegAcquisitionService, MockEegAcquisitionService>(); // EEG 第一阶段：Mock 采集服务
         services.AddSingleton<ISessionLifecycleCoordinator, SessionLifecycleCoordinator>(); // Session 收尾和切换患者策略
+        services.AddSingleton<IAssessmentActivityState>(provider => provider.GetRequiredService<AssessmentCaptureViewModel>());
+        services.AddSingleton<ISessionSecurityService, SessionSecurityService>(); // 无操作锁定、当前账号再认证和安全配置
+        services.AddSingleton<GlobalUserActivityMonitor>(); // WPF 全局键鼠、触控与手写笔活动监听
         services.AddSingleton<IHeadModelDataService, HeadModelDataService>(); // 3D 分层网格、LOD、缓存与后台加载
         services.AddSingleton<IReportReadModelService, SqliteReportReadModelService>(); // 独立 SQLite 报表快照读模型
 
@@ -112,6 +125,8 @@ public static class AppComposition
         services.AddTransient<FemSimulationViewModel>();   // FEM 仿真面板
         services.AddTransient<DeviceViewModel>();          // 设备管理面板
         services.AddTransient<ConfigViewModel>();          // 设置面板
+        services.AddSingleton<SessionLockViewModel>();     // 应用会话锁屏
+        services.AddTransient<AuditTrailViewModel>();      // Admin安全审计查询与导出
         services.AddTransient<ReportViewModel>();          // 报告面板
         services.AddTransient<PlaceholderPageViewModel>(); // 未实现页面占位
         services.AddTransient<MainViewModel>();            // 主界面（聚合以上所有 VM）

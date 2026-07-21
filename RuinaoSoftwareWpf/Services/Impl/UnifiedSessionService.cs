@@ -57,8 +57,9 @@ public sealed class UnifiedSessionService : IUnifiedSessionService
         return CreateTimestamp(session);
     }
 
-    public Task<IReadOnlyList<UnifiedSessionTimelineEvent>> GetTimelineAsync(
+    public Task<PageResult<UnifiedSessionTimelineEvent>> GetTimelinePageAsync(
         string sessionKey,
+        PageRequest request,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sessionKey))
@@ -66,7 +67,8 @@ public sealed class UnifiedSessionService : IUnifiedSessionService
             throw new ArgumentException("SessionKey 不能为空。", nameof(sessionKey));
         }
 
-        return repository.GetTimelineAsync(sessionKey.Trim(), cancellationToken);
+        ArgumentNullException.ThrowIfNull(request);
+        return repository.GetTimelinePageAsync(sessionKey.Trim(), request, cancellationToken);
     }
 
     public async Task RecordEventAsync(

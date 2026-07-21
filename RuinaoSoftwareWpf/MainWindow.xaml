@@ -127,6 +127,14 @@
                 </StackPanel>
             </Grid>
         </Border>
+
+        <views:SoftwareActivationView x:Name="ActivationContent"
+                                      Panel.ZIndex="900"
+                                      Visibility="Collapsed" />
+
+        <views:SessionLockView x:Name="SessionLockContent"
+                       Panel.ZIndex="1000"
+                       Visibility="{Binding Visibility, Mode=OneWay}" />
     </Grid>
 </Window>
 

@@ -30,4 +30,5 @@ internal static class AppDatabasePathProvider
         Path.GetDirectoryName(MainDatabasePath)!,
         "security",
         "patient.key");
+
 }

@@ -1,5 +1,6 @@
 using System.Windows.Controls;
 using System.Windows;
+using RuinaoSoftwareWpf.Views.Dialogs;
 
 namespace RuinaoSoftwareWpf.Views;
 
@@ -36,4 +37,20 @@ public partial class MainView : UserControl
     {
         DeviceDropDownToggle.IsChecked = false;
     }
+
+    private void ToolsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        ToolsDropDownToggle.IsChecked = false;
+    }
+
+    private void SecurityGuideMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        ToolsDropDownToggle.IsChecked = false;
+        var dialog = new SecurityGuideDialog
+        {
+            Owner = Window.GetWindow(this)
+        };
+        dialog.ShowDialog();
+    }
+
 }

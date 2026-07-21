@@ -30,8 +30,14 @@ public sealed class SqliteReportReadModelService : IReportReadModelService
                 File.Delete(temporaryPath);
             }
 
-            await using var source = new SqliteConnection($"Data Source={sourcePath};Mode=ReadOnly");
-            await using var target = new SqliteConnection($"Data Source={temporaryPath}");
+            await using var source = EncryptedSqliteDatabase.CreateConnection(
+                sourcePath,
+                SqliteOpenMode.ReadOnly,
+                pooling: false);
+            await using var target = EncryptedSqliteDatabase.CreateConnection(
+                temporaryPath,
+                SqliteOpenMode.ReadWriteCreate,
+                pooling: false);
             await source.OpenAsync(cancellationToken);
             await target.OpenAsync(cancellationToken);
             source.BackupDatabase(target);

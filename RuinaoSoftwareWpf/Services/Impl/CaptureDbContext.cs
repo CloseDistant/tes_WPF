@@ -10,10 +10,12 @@ using Microsoft.EntityFrameworkCore;
 internal sealed class CaptureDbContext : DbContext
 {
     private readonly string databasePath;
+    private readonly bool encrypted;
 
-    public CaptureDbContext(string databasePath)
+    public CaptureDbContext(string databasePath, bool encrypted = true)
     {
         this.databasePath = databasePath;
+        this.encrypted = encrypted;
     }
 
     public DbSet<PatientEntity> Patients => Set<PatientEntity>();
@@ -49,14 +51,14 @@ internal sealed class CaptureDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        var connectionString = new SqliteConnectionStringBuilder
-        {
-            DataSource = databasePath,
-            Pooling = true,
-            DefaultTimeout = 30
-        }.ToString();
-
-        optionsBuilder.UseSqlite(connectionString);
+        optionsBuilder.UseSqlite(encrypted
+            ? EncryptedSqliteDatabase.CreateConnectionString(databasePath)
+            : new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Pooling = false,
+                DefaultTimeout = 30
+            }.ToString());
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

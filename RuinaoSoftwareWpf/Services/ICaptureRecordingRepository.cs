@@ -45,7 +45,7 @@ public static class CaptureModuleTypes
 /// <summary>
 /// 采集工作台本地记录仓储。
 /// 这里仅保存采集业务数据、模块事件和外部设备采样数据。
-/// 普通运行日志和审计日志统一走 ILoggingService，不写入 SQLite。
+/// 普通运行日志由 ILoggingService 保存；正式安全审计由 IAuditTrailService 写入独立数据库。
 /// </summary>
 public interface ICaptureRecordingRepository
 {

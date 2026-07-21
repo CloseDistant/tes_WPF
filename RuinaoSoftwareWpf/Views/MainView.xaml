@@ -139,6 +139,7 @@
                                     <Button Content="{Binding Localization.DisconnectText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding DisconnectCommand}" Click="DeviceMenuItem_Click" Visibility="Collapsed" />
                                     <Border Height="1" Background="#303645" Margin="0,4" Visibility="Collapsed" />
                                     <Button Content="{Binding Localization.HandshakeText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding HandshakeCommand}" Click="DeviceMenuItem_Click" />
+                                    <Button Content="{Binding Localization.ImpedanceCheckText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding CheckImpedanceCommand}" Click="DeviceMenuItem_Click" />
                                     <Button Content="{Binding Localization.ReadProductModelText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ReadProductModelCommand}" Click="DeviceMenuItem_Click" Visibility="Collapsed" />
                                     <Button Content="{Binding Localization.ReadBoardModelText}" Style="{StaticResource ToolbarDropDownItem}" Command="{Binding ReadBoardModelCommand}" Click="DeviceMenuItem_Click" Visibility="Collapsed" />
                                 </StackPanel>
@@ -165,7 +166,7 @@
                             </Border>
                         </Popup>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="10,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Margin="10,0" VerticalAlignment="Center" Visibility="{Binding AuditMenuVisibility}">
                         <ToggleButton x:Name="ToolsDropDownToggle"
                                       Content="{Binding Localization.ToolsMenuText}"
                                       Style="{StaticResource ToolbarDropDownButton}" />
@@ -177,9 +178,15 @@
                                     BorderBrush="#303645"
                                     BorderThickness="1"
                                     MinWidth="150">
-                                <Button Content="{Binding Localization.ImpedanceCheckText}"
-                                        Style="{StaticResource ToolbarDropDownItem}"
-                                        Command="{Binding CheckImpedanceCommand}" />
+                                <StackPanel>
+                                    <Button Content="安全审计"
+                                            Style="{StaticResource ToolbarDropDownItem}"
+                                            Command="{Binding OpenAuditTrailCommand}"
+                                            Click="ToolsMenuItem_Click" />
+                                    <Button Content="网络安全使用说明"
+                                            Style="{StaticResource ToolbarDropDownItem}"
+                                            Click="SecurityGuideMenuItem_Click" />
+                                </StackPanel>
                             </Border>
                         </Popup>
                     </StackPanel>

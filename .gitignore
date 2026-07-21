@@ -4,6 +4,7 @@
 !/.gitattributes
 !/Ruinao.slnx
 !/RuinaoSoftwareWpf/
+!/RuinaoSoftwareWpf.Tests/
 !/RuinaoHardwareEngineer/
 !/RuinaoTesHardware/
 !/RuinaoTesProtocol/

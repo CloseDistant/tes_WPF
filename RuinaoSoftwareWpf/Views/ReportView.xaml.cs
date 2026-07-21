@@ -21,4 +21,5 @@ public partial class ReportView : UserControl
             await viewModel.InitializeAsync();
         }
     }
+
 }

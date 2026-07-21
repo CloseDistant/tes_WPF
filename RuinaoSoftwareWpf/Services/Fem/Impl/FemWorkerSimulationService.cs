@@ -32,9 +32,15 @@ public sealed class FemWorkerSimulationService : ISimulationService
         IProgress<FemSimulationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(request.WorkerExecutable))
+        string workerExecutable;
+        try
         {
-            return new FemSimulationResult(false, null, request.OutputDirectory, "FEM Worker 不存在。", TimeSpan.Zero);
+            workerExecutable = TrustedExecutablePath.RequireTrustedToolPath(request.WorkerExecutable);
+        }
+        catch (Exception exception) when (exception is IOException or System.Security.SecurityException)
+        {
+            logger.Warning($"FEM Worker 路径被拒绝：{exception.Message}");
+            return new FemSimulationResult(false, null, request.OutputDirectory, "FEM Worker 路径不受信任。", TimeSpan.Zero);
         }
 
         lock (syncRoot)
@@ -53,7 +59,7 @@ public sealed class FemWorkerSimulationService : ISimulationService
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(activeCts.Token, timeoutCts.Token);
         var startInfo = new ProcessStartInfo
         {
-            FileName = request.WorkerExecutable,
+            FileName = workerExecutable,
             Arguments = request.Arguments,
             WorkingDirectory = request.OutputDirectory,
             UseShellExecute = false,

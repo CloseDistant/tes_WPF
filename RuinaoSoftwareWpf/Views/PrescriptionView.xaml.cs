@@ -13,6 +13,19 @@ public partial class PrescriptionView : UserControl
         if (DataContext is PrescriptionViewModel viewModel) await viewModel.InitializeAsync();
     }
 
+    private async void PrescriptionList_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (e.VerticalChange == 0 || e.VerticalOffset < e.ExtentHeight - e.ViewportHeight - 2)
+        {
+            return;
+        }
+
+        if (DataContext is PrescriptionViewModel viewModel)
+        {
+            await viewModel.LoadMoreAsync();
+        }
+    }
+
     private void MoreButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { ContextMenu: { } menu, DataContext: PrescriptionDefinition prescription }

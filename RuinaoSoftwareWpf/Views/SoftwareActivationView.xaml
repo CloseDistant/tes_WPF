@@ -1,0 +1,213 @@
+<UserControl x:Class="RuinaoSoftwareWpf.Views.SoftwareActivationView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="#C2080B11"
+             Focusable="True"
+             PreviewKeyDown="OnPreviewKeyDown">
+    <UserControl.Resources>
+        <Style x:Key="ActivationButton" TargetType="Button">
+            <Setter Property="Height" Value="42" />
+            <Setter Property="MinWidth" Value="118" />
+            <Setter Property="Padding" Value="20,0" />
+            <Setter Property="Background" Value="#242A36" />
+            <Setter Property="Foreground" Value="#D7DDE7" />
+            <Setter Property="BorderBrush" Value="#505A6D" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#2C3341" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#1B202A" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ActivationPrimaryButton"
+               TargetType="Button"
+               BasedOn="{StaticResource ActivationButton}">
+            <Setter Property="Background" Value="#DFA035" />
+            <Setter Property="Foreground" Value="#121720" />
+            <Setter Property="BorderBrush" Value="#E5A944" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#E8AA3D" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Border Width="560"
+                Background="#1C212D"
+                BorderBrush="#465064"
+                BorderThickness="1"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000" BlurRadius="28" ShadowDepth="8" Opacity="0.58" />
+            </Border.Effect>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="72" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="76" />
+                </Grid.RowDefinitions>
+                <Border Height="3"
+                        Background="#DFA035"
+                        VerticalAlignment="Top"
+                        Panel.ZIndex="2" />
+
+                <Border BorderBrush="#313846" BorderThickness="0,0,0,1">
+                    <Grid>
+                        <TextBlock Text="软件激活"
+                                   Foreground="#EDF1F7"
+                                   FontSize="21"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Margin="30,3,0,0" />
+                        <TextBlock Text="V1.0.0"
+                                   Foreground="#7E8AA0"
+                                   FontSize="12"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Center"
+                                   Margin="0,3,30,0" />
+                    </Grid>
+                </Border>
+
+                <StackPanel Grid.Row="1" Margin="30,27,30,26">
+                    <TextBlock Text="激活码"
+                               Foreground="#D8DEE8"
+                               FontSize="14"
+                               Margin="0,0,0,10" />
+                    <Grid>
+                        <Path Data="M7,14 A4,4 0 1 0 15,14 A4,4 0 1 0 7,14 M14,11 L21,4 M18,7 L21,10 M15,10 L18,13"
+                              Stroke="#DFA035"
+                              StrokeThickness="1.7"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              Width="22"
+                              Height="22"
+                              Stretch="Uniform"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Center"
+                              Margin="15,0,0,0"
+                              Panel.ZIndex="1" />
+                        <TextBox x:Name="ActivationCodeBox"
+                                 Height="50"
+                                 Padding="50,8,14,8"
+                                 Background="#151A24"
+                                 Foreground="#E4E8EF"
+                                 BorderBrush="#59657A"
+                                 BorderThickness="1"
+                                 FontSize="15"
+                                 VerticalContentAlignment="Center"
+                                 MaxLength="32"
+                                 TextChanged="ActivationCodeBox_TextChanged" />
+                        <TextBlock x:Name="PlaceholderText"
+                                   Text="请输入激活码"
+                                   Foreground="#818C9F"
+                                   FontSize="14"
+                                   VerticalAlignment="Center"
+                                   IsHitTestVisible="False"
+                                   Margin="50,0,0,0" />
+                    </Grid>
+                    <TextBlock x:Name="ActivationMessageText"
+                               Text="首次使用需要完成软件激活。"
+                               Foreground="#8E99AB"
+                               FontSize="12"
+                               MinHeight="23"
+                               Margin="0,9,0,0"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+
+                <Border Grid.Row="2" Background="#191E29" BorderBrush="#313846" BorderThickness="0,1,0,0">
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,30,0">
+                        <Button x:Name="CancelButton"
+                                Content="取消"
+                                Style="{StaticResource ActivationButton}"
+                                Click="CancelButton_Click" />
+                        <Button x:Name="ActivateButton"
+                                Content="激活"
+                                Style="{StaticResource ActivationPrimaryButton}"
+                                Margin="12,0,0,0"
+                                Click="ActivateButton_Click" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Grid x:Name="ExitConfirmationOverlay"
+              Background="#B505080D"
+              Visibility="Collapsed"
+              Panel.ZIndex="10">
+            <Border Width="440"
+                    Background="#1C212D"
+                    BorderBrush="#4B5669"
+                    BorderThickness="1"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="28" ShadowDepth="8" Opacity="0.64" />
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="74" />
+                    </Grid.RowDefinitions>
+                    <Border Height="3"
+                            Background="#DFA035"
+                            VerticalAlignment="Top"
+                            Panel.ZIndex="2" />
+                    <StackPanel Margin="30,27,30,25">
+                        <TextBlock Text="退出软件"
+                                   Foreground="#EDF1F7"
+                                   FontSize="20"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="软件尚未激活，退出后将无法进入登录界面。确定退出吗？"
+                                   Foreground="#AEB8C8"
+                                   FontSize="14"
+                                   LineHeight="23"
+                                   TextWrapping="Wrap"
+                                   Margin="0,12,0,0" />
+                    </StackPanel>
+                    <Border Grid.Row="1" Background="#191E29" BorderBrush="#313846" BorderThickness="0,1,0,0">
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,24,0">
+                            <Button Content="退出软件"
+                                    Style="{StaticResource ActivationButton}"
+                                    Click="ExitSoftwareButton_Click" />
+                            <Button Content="继续激活"
+                                    Style="{StaticResource ActivationPrimaryButton}"
+                                    Margin="12,0,0,0"
+                                    Click="ContinueActivationButton_Click" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

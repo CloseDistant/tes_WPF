@@ -1,0 +1,224 @@
+<Window x:Class="RuinaoSoftwareWpf.Views.Dialogs.SecurityGuideDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="1260"
+        Height="760"
+        MinWidth="1060"
+        MinHeight="620"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="GuideNavigationItem" TargetType="ListBoxItem">
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Foreground" Value="#AEB8C8" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="3,0,0,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="ItemBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#222936" />
+                                <Setter Property="Foreground" Value="#E7EBF2" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#272F3C" />
+                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#D49330" />
+                                <Setter Property="Foreground" Value="#F3F5F8" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GuideCloseButton" TargetType="Button">
+            <Setter Property="Width" Value="112" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Background" Value="#A97126" />
+            <Setter Property="BorderBrush" Value="#B98332" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#B77D2A" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#8E601F" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="#1B212C"
+            BorderBrush="#566071"
+            BorderThickness="1"
+            CornerRadius="4">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="74" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="68" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    BorderBrush="#343C49"
+                    BorderThickness="0,0,0,1"
+                    MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                <Grid Margin="28,0,18,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="网络安全使用说明"
+                                   Foreground="#F0F3F7"
+                                   FontSize="21"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="软件版本 V1.0.0"
+                                   Foreground="#8E9AAD"
+                                   FontSize="12"
+                                   VerticalAlignment="Center"
+                                   Margin="18,3,0,0" />
+                    </StackPanel>
+                    <Button Content="×"
+                            Width="38"
+                            Height="38"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="#E7EBF2"
+                            FontSize="24"
+                            Cursor="Hand"
+                            ToolTip="关闭"
+                            Click="CloseButton_Click" />
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="248" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0"
+                        Background="#181E28"
+                        BorderBrush="#343C49"
+                        BorderThickness="0,0,1,0"
+                        Padding="14,18">
+                    <ListBox x:Name="SectionList"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ItemContainerStyle="{StaticResource GuideNavigationItem}"
+                             DisplayMemberPath="Title"
+                             SelectionChanged="SectionList_SelectionChanged" />
+                </Border>
+
+                <ScrollViewer Grid.Column="1"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="40,28,34,24">
+                    <StackPanel x:Name="SectionContent">
+                        <TextBlock Text="{Binding Title}"
+                                   Foreground="#F0F3F7"
+                                   FontSize="19"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,18" />
+                        <TextBlock Text="{Binding Summary}"
+                                   Foreground="#C6CEDA"
+                                   FontSize="13"
+                                   LineHeight="24"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,18" />
+                        <TextBlock Text="使用要求"
+                                   Foreground="#E4E8EF"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,10" />
+                        <ItemsControl ItemsSource="{Binding Items}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="28" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding NumberText}"
+                                                   Foreground="#D59632"
+                                                   FontSize="13"
+                                                   VerticalAlignment="Top" />
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding Text}"
+                                                   Foreground="#C5CDDA"
+                                                   FontSize="13"
+                                                   LineHeight="23"
+                                                   TextWrapping="Wrap" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Border Background="#252C38"
+                                BorderBrush="#D59632"
+                                BorderThickness="3,0,0,0"
+                                Padding="15,12"
+                                Margin="0,14,0,0">
+                            <TextBlock Text="{Binding Notice}"
+                                       Foreground="#D7DEE8"
+                                       FontSize="12"
+                                       LineHeight="21"
+                                       TextWrapping="Wrap" />
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <Border Grid.Row="2"
+                    BorderBrush="#343C49"
+                    BorderThickness="0,1,0,0">
+                <Grid Margin="28,0">
+                    <TextBlock Text="本说明为只读内容，适用于软件版本 V1.0.0"
+                               Foreground="#8692A5"
+                               FontSize="11"
+                               VerticalAlignment="Center" />
+                    <Button Content="关闭"
+                            Style="{StaticResource GuideCloseButton}"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            IsDefault="True"
+                            Click="CloseButton_Click" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

@@ -113,6 +113,7 @@ public sealed class HardwareService : IHardwareService
         if (IsConnected)
         {
             var onlineHandshake = await RunDeviceOperationAsync(HandshakeOnProtocolBridgeAsync, cancellationToken);
+            auditLog.RecordUserAction("Handshake check");
             logger.Hardware(
                 $"联机状态握手检测成功：ackSeq={onlineHandshake.ResponseAckSequence}，耗时={onlineHandshake.Elapsed.TotalMilliseconds:F1}ms");
             return Result(
@@ -125,6 +126,7 @@ public sealed class HardwareService : IHardwareService
             // 离线诊断直接调用单次握手入口，不执行正式联机专用的“预热帧 + 正式帧”流程。
             // 这里不设置IsConnected，也不调用StartHeartbeat，避免把诊断动作误当成正式联机。
             var offlineHandshake = await RunDeviceOperationAsync(HandshakeOnProtocolBridgeAsync, cancellationToken);
+            auditLog.RecordUserAction("Handshake check");
             logger.Hardware(
                 $"离线握手检测成功但不进入联机状态：ackSeq={offlineHandshake.ResponseAckSequence}，"
                 + $"耗时={offlineHandshake.Elapsed.TotalMilliseconds:F1}ms");
@@ -181,6 +183,7 @@ public sealed class HardwareService : IHardwareService
     public async Task<HardwareOperationResult> CheckImpedanceAsync(CancellationToken cancellationToken = default)
     {
         await RunDeviceOperationAsync(ReadImpedanceOnProtocolBridgeAsync, cancellationToken);
+        auditLog.RecordUserAction("Impedance check");
         logger.Hardware("阻抗检测：已调用协议 API 生成读取阻抗寄存器帧");
         return Result("设备：已联机 | 阻抗：正常 | 刺激：待启动");
     }

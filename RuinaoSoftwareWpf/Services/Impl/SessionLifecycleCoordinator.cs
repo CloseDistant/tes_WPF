@@ -27,7 +27,10 @@ public sealed class SessionLifecycleCoordinator : ISessionLifecycleCoordinator
 
     public UnifiedSessionContext? CurrentSession => unifiedSessionService.CurrentSession;
 
-    public bool HasRunningModule => stimulationStateMachine.CurrentState == StimulationExecutionState.Running
+    public bool HasRunningModule => stimulationStateMachine.CurrentState is
+            StimulationExecutionState.Armed or
+            StimulationExecutionState.Running or
+            StimulationExecutionState.Paused
         || eegRecordingService.IsRecording
         || captureMediaRecorder.IsRecording;
 

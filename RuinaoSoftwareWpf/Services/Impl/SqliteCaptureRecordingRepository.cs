@@ -136,16 +136,21 @@ public sealed class SqliteCaptureRecordingRepository : ICaptureRecordingReposito
         }, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<UnifiedSessionTimelineEvent>> GetTimelineAsync(
+    public async Task<PageResult<UnifiedSessionTimelineEvent>> GetTimelinePageAsync(
         string sessionKey,
+        PageRequest request,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
         var databasePath = AppDatabasePathProvider.MainDatabasePath;
         await using var context = await OpenContextAsync(databasePath, cancellationToken);
-        return await context.SessionTimelineEvents
+        var items = await context.SessionTimelineEvents
             .AsNoTracking()
             .Where(item => item.SessionKey == sessionKey)
             .OrderBy(item => item.SequenceNo)
+            .ThenBy(item => item.Id)
+            .Skip(request.SafeOffset)
+            .Take(request.SafePageSize + 1)
             .Select(item => new UnifiedSessionTimelineEvent(
                 item.SessionKey,
                 item.ModuleCode,
@@ -159,6 +164,13 @@ public sealed class SqliteCaptureRecordingRepository : ICaptureRecordingReposito
                 item.Message ?? string.Empty,
                 item.PayloadJson ?? string.Empty))
             .ToListAsync(cancellationToken);
+        var hasMore = items.Count > request.SafePageSize;
+        if (hasMore)
+        {
+            items.RemoveAt(items.Count - 1);
+        }
+
+        return new PageResult<UnifiedSessionTimelineEvent>(items, hasMore);
     }
 
     public async Task<CaptureSessionInfo> CreateModuleSessionAsync(

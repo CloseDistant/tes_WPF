@@ -1,36 +1,109 @@
 namespace RuinaoSoftwareWpf;
 
 /// <summary>
-/// 审计日志默认实现。
-/// 当前审计日志只写入应用日志文件，不写入 SQLite；
-/// 采集数据库只保存采集业务数据、模块事件和传感器样本。
+/// 兼容既有状态机同步审计接口，正式数据写入独立安全审计数据库。
 /// </summary>
 public sealed class AuditLogService : IAuditLogService
 {
+    private readonly IAuditTrailService auditTrail;
+    private readonly IAccountService accountService;
     private readonly ILoggingService logger;
 
-    public AuditLogService(ILoggingService logger)
+    public AuditLogService(
+        IAuditTrailService auditTrail,
+        IAccountService accountService,
+        ILoggingService logger)
     {
+        this.auditTrail = auditTrail;
+        this.accountService = accountService;
         this.logger = logger;
     }
 
     public void RecordStateTransition<TState>(StateTransition<TState> transition)
     {
-        logger.Info($"AUDIT STATE {typeof(TState).Name} {transition.From} -> {transition.To} trigger={transition.Trigger} operator={transition.OperatorId}");
+        var isStimulationOrDevice = typeof(TState).Name.Contains("Stimulation", StringComparison.Ordinal)
+            || typeof(TState).Name.Contains("Device", StringComparison.Ordinal);
+        if (!isStimulationOrDevice)
+        {
+            return;
+        }
+
+        AppendSafely(new AuditEventInput(
+            AuditEventCategory.StimulationDevice,
+            $"STATE_{typeof(TState).Name}",
+            Actor(transition.OperatorId),
+            typeof(TState).Name,
+            transition.To?.ToString() ?? string.Empty,
+            AuditEventResult.Success,
+            Reason: $"from={transition.From}, trigger={transition.Trigger}"));
     }
 
     public void RecordUserAction(string action, string operatorId = "system")
     {
-        logger.Info($"AUDIT USER action={action} operator={operatorId}");
+        var mapped = AuditActionCatalog.FromLegacyAction(action);
+        if (mapped.Category == AuditEventCategory.AuditSystem)
+        {
+            return;
+        }
+
+        AppendSafely(new AuditEventInput(
+            mapped.Category,
+            mapped.ActionCode,
+            Actor(operatorId),
+            "Application",
+            string.Empty,
+            AuditEventResult.Success));
     }
 
     public void RecordHardwareCommunication(string direction, string command, string details)
     {
-        logger.Hardware($"AUDIT {direction} command={command} details={details}");
+        AppendSafely(new AuditEventInput(
+            AuditEventCategory.StimulationDevice,
+            $"HARDWARE_{direction}",
+            AuditActor.System,
+            "HardwareCommand",
+            command,
+            AuditEventResult.Success,
+            Reason: details));
     }
 
     public void RecordSafetyEvent(SafetyEvaluationResult result, string operatorId = "system")
     {
-        logger.Warning($"AUDIT SAFETY action={result.Action} reason={result.Reason} operator={operatorId}");
+        AppendSafely(new AuditEventInput(
+            AuditEventCategory.StimulationDevice,
+            $"SAFETY_{result.Action}",
+            Actor(operatorId),
+            "SafetyEvaluation",
+            result.Action.ToString(),
+            AuditEventResult.Blocked,
+            "SAFETY_CHECK_BLOCKED",
+            result.Reason));
+    }
+
+    private AuditActor Actor(string operatorId)
+    {
+        if (accountService.CurrentUser is { } currentUser
+            && (string.Equals(operatorId, "system", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(operatorId, currentUser.LoginName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(operatorId, currentUser.UserId.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)))
+        {
+            return AuditActor.From(currentUser);
+        }
+
+        return string.Equals(operatorId, "system", StringComparison.OrdinalIgnoreCase)
+            ? AuditActor.System
+            : new AuditActor(null, operatorId, null);
+    }
+
+    private void AppendSafely(AuditEventInput auditEvent)
+    {
+        try
+        {
+            auditTrail.AppendAsync(auditEvent).ConfigureAwait(false).GetAwaiter().GetResult();
+        }
+        catch (Exception exception)
+        {
+            logger.Error($"安全审计写入失败：action={auditEvent.ActionCode}", exception);
+        }
     }
 }

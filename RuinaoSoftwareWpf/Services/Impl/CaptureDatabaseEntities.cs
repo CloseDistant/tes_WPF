@@ -8,6 +8,7 @@ internal sealed class PatientEntity
 {
     public long Id { get; set; }
     public long? OwnerUserId { get; set; }
+    public long? UpdatedByUserId { get; set; }
     public string PatientCode { get; set; } = string.Empty;
     public string? Name { get; set; }
     public string? Gender { get; set; }
@@ -53,6 +54,8 @@ internal sealed class PrescriptionEntity
     public int RampDownSeconds { get; set; }
     public string EvidenceGrade { get; set; } = string.Empty;
     public bool IsBuiltin { get; set; }
+    public long? CreatedByUserId { get; set; }
+    public long? UpdatedByUserId { get; set; }
     public long CreatedAtUnixMs { get; set; }
     public long UpdatedAtUnixMs { get; set; }
 }

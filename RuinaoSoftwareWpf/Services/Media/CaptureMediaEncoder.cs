@@ -125,45 +125,18 @@ internal sealed class CaptureMediaEncoder : ICaptureMediaEncoder
         }
     }
 
-    internal static string ResolveFfmpegPath()
+    internal static string ResolveFfmpegPath(string? applicationDirectory = null)
     {
-        var environmentPath = Environment.GetEnvironmentVariable("RUINAO_FFMPEG_PATH");
-        if (!string.IsNullOrWhiteSpace(environmentPath) && File.Exists(environmentPath))
-        {
-            return environmentPath;
-        }
-
-        var baseDirectory = AppContext.BaseDirectory;
-        return new[]
-        {
-            Path.Combine(baseDirectory, "Tools", "ffmpeg", "ffmpeg.exe"),
-            Path.Combine(baseDirectory, "tools", "ffmpeg", "ffmpeg.exe"),
-            Path.Combine(baseDirectory, "ffmpeg.exe")
-        }.FirstOrDefault(File.Exists) ?? "ffmpeg";
+        return TrustedExecutablePath.RequireBundledTool(
+            Path.Combine("ffmpeg", "ffmpeg.exe"),
+            applicationDirectory);
     }
 
-    internal static string ResolveFfprobePath()
+    internal static string ResolveFfprobePath(string? applicationDirectory = null)
     {
-        var environmentPath = Environment.GetEnvironmentVariable("RUINAO_FFPROBE_PATH");
-        if (!string.IsNullOrWhiteSpace(environmentPath) && File.Exists(environmentPath))
-        {
-            return environmentPath;
-        }
-
-        var directory = Path.GetDirectoryName(ResolveFfmpegPath());
-        var sibling = string.IsNullOrWhiteSpace(directory) ? null : Path.Combine(directory, "ffprobe.exe");
-        if (sibling is not null && File.Exists(sibling))
-        {
-            return sibling;
-        }
-
-        var baseDirectory = AppContext.BaseDirectory;
-        return new[]
-        {
-            Path.Combine(baseDirectory, "Tools", "ffmpeg", "ffprobe.exe"),
-            Path.Combine(baseDirectory, "tools", "ffmpeg", "ffprobe.exe"),
-            Path.Combine(baseDirectory, "ffprobe.exe")
-        }.FirstOrDefault(File.Exists) ?? "ffprobe";
+        return TrustedExecutablePath.RequireBundledTool(
+            Path.Combine("ffmpeg", "ffprobe.exe"),
+            applicationDirectory);
     }
 
     private static ProcessStartInfo CreateProcessStartInfo(string fileName) => new()

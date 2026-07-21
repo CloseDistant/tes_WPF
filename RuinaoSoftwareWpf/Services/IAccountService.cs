@@ -14,11 +14,19 @@ public interface IAccountService
 
     Task<AccountLoginResult> LoginAsync(string loginName, string password, CancellationToken cancellationToken = default);
 
+    Task<AccountPasswordVerificationResult> VerifyCurrentPasswordAsync(
+        string password,
+        CancellationToken cancellationToken = default);
+
     Task LogoutAsync(CancellationToken cancellationToken = default);
 
     Task<CurrentUserInfo> CreateUserAsync(CreateAccountRequest request, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AccountListItemInfo>> GetAccountListAsync(CancellationToken cancellationToken = default);
+    Task<PageResult<AccountListItemInfo>> GetAccountListPageAsync(
+        PageRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> GetActiveLoginNamesAsync(CancellationToken cancellationToken = default);
 
     Task ChangePasswordAsync(ChangePasswordRequest request, CancellationToken cancellationToken = default);
 

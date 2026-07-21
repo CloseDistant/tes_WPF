@@ -1,0 +1,91 @@
+<UserControl x:Class="RuinaoSoftwareWpf.Views.Controls.DateOnlyPicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Height="36"
+             Focusable="False">
+    <UserControl.Resources>
+        <Style x:Key="DateNavigationButton" TargetType="Button">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Background" Value="#252C39" />
+            <Setter Property="Foreground" Value="#E9EDF4" />
+            <Setter Property="BorderBrush" Value="#465164" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style x:Key="DateDayButton" TargetType="Button">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Margin" Value="1" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#E9EDF4" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Border x:Name="FieldBorder"
+                Background="#171C25"
+                BorderBrush="#4B5669"
+                BorderThickness="1"
+                Cursor="Hand"
+                MouseLeftButtonUp="Field_MouseLeftButtonUp">
+            <Grid Margin="10,0">
+                <TextBlock x:Name="DateText"
+                           Foreground="#E9EDF4"
+                           FontSize="12"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="▾"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           Foreground="#98A5B8"
+                           FontSize="11" />
+            </Grid>
+        </Border>
+
+        <Popup x:Name="CalendarPopup"
+               PlacementTarget="{Binding ElementName=FieldBorder}"
+               Placement="Bottom"
+               StaysOpen="False"
+               AllowsTransparency="True"
+               PopupAnimation="Fade">
+            <Border Width="272"
+                    Margin="0,2,0,0"
+                    Padding="10"
+                    Background="#1B202B"
+                    BorderBrush="#4B5669"
+                    BorderThickness="1">
+                <StackPanel>
+                    <Grid Margin="0,0,0,8">
+                        <Button Content="‹"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource DateNavigationButton}"
+                                Click="PreviousMonthButton_Click" />
+                        <TextBlock x:Name="CalendarTitleText"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="#F0F3F8"
+                                   FontWeight="SemiBold" />
+                        <Button Content="›"
+                                HorizontalAlignment="Right"
+                                Style="{StaticResource DateNavigationButton}"
+                                Click="NextMonthButton_Click" />
+                    </Grid>
+                    <UniformGrid Columns="7" Margin="0,0,0,4">
+                        <TextBlock Text="一" Foreground="#91A0B5" TextAlignment="Center" />
+                        <TextBlock Text="二" Foreground="#91A0B5" TextAlignment="Center" />
+                        <TextBlock Text="三" Foreground="#91A0B5" TextAlignment="Center" />
+                        <TextBlock Text="四" Foreground="#91A0B5" TextAlignment="Center" />
+                        <TextBlock Text="五" Foreground="#91A0B5" TextAlignment="Center" />
+                        <TextBlock Text="六" Foreground="#91A0B5" TextAlignment="Center" />
+                        <TextBlock Text="日" Foreground="#91A0B5" TextAlignment="Center" />
+                    </UniformGrid>
+                    <UniformGrid x:Name="CalendarDaysGrid" Columns="7" Rows="6" />
+                </StackPanel>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

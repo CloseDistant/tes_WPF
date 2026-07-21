@@ -8,6 +8,7 @@ public sealed class LocalStartupSettingsService : IStartupSettingsService
 
     private readonly IAppDatabaseInitializer databaseInitializer;
     private readonly IAccountService accountService;
+    private readonly IAuthorizationService authorizationService;
     private readonly ILoggingService logger;
     private readonly SemaphoreSlim initializeGate = new(1, 1);
     private readonly SemaphoreSlim writeGate = new(1, 1);
@@ -17,10 +18,12 @@ public sealed class LocalStartupSettingsService : IStartupSettingsService
     public LocalStartupSettingsService(
         IAppDatabaseInitializer databaseInitializer,
         IAccountService accountService,
+        IAuthorizationService authorizationService,
         ILoggingService logger)
     {
         this.databaseInitializer = databaseInitializer;
         this.accountService = accountService;
+        this.authorizationService = authorizationService;
         this.logger = logger;
     }
 
@@ -64,7 +67,7 @@ public sealed class LocalStartupSettingsService : IStartupSettingsService
         CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken);
-        var currentUser = accountService.CurrentUser;
+        var currentUser = authorizationService.Demand(AppPermission.ManageStartupSettings);
 
         await writeGate.WaitAsync(cancellationToken);
         try

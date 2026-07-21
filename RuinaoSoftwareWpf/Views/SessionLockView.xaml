@@ -1,0 +1,186 @@
+<UserControl x:Class="RuinaoSoftwareWpf.Views.SessionLockView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="#0D121B"
+             Focusable="True">
+    <UserControl.Resources>
+        <Style x:Key="LockInput" TargetType="Control">
+            <Setter Property="Height" Value="48" />
+            <Setter Property="Background" Value="#181E29" />
+            <Setter Property="Foreground" Value="#F1F4F8" />
+            <Setter Property="BorderBrush" Value="#596579" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Padding" Value="14,8,44,8" />
+        </Style>
+
+        <Style x:Key="UnlockButton" TargetType="Button">
+            <Setter Property="Height" Value="48" />
+            <Setter Property="Background" Value="#D99A34" />
+            <Setter Property="Foreground" Value="#171C25" />
+            <Setter Property="BorderBrush" Value="#E2A743" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#E5A642" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#C98B2E" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="38" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="40" />
+        </Grid.RowDefinitions>
+
+        <Border Background="#292C34" BorderBrush="#3C4049" BorderThickness="0,0,0,1">
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
+                    <TextBlock Text="☼" Foreground="#E0A13A" FontSize="17" Margin="0,0,3,0" />
+                    <TextBlock Text="经颅直流电刺激上位机软件"
+                               Foreground="#F2F4F8"
+                               FontSize="15"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,18,0">
+                    <Ellipse Width="8" Height="8" Fill="#D99B36" Margin="0,0,9,0" />
+                    <TextBlock Text="会话已锁定" Foreground="#AEB7C6" FontSize="13" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <StackPanel Width="460" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,82,0,0">
+                <TextBlock Text="{Binding CurrentTimeText}"
+                           Foreground="#F4F6FA"
+                           FontSize="52"
+                           TextAlignment="Center" />
+                <TextBlock Text="{Binding CurrentDateText}"
+                           Foreground="#AEB8C8"
+                           FontSize="15"
+                           TextAlignment="Center"
+                           Margin="0,8,0,44" />
+
+                <TextBlock Text="当前账号" Foreground="#C6CFDD" FontSize="13" Margin="0,0,0,8" />
+                <Border Height="62"
+                        Background="#181E29"
+                        BorderBrush="#596579"
+                        BorderThickness="1"
+                        Padding="14,0"
+                        Margin="0,0,0,20">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="44" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="38" Height="38" CornerRadius="19" Background="#3A4353" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding AccountInitial}"
+                                       Foreground="#F5F7FA"
+                                       FontSize="16"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding CurrentAccount}"
+                                   Foreground="#F5F7FA"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Margin="8,0,0,0" />
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding CurrentRole}"
+                                   Foreground="#AAB6C8"
+                                   FontSize="13"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <TextBlock Text="密码" Foreground="#C6CFDD" FontSize="13" Margin="0,0,0,8" />
+                <Grid>
+                    <PasswordBox x:Name="PasswordBox" Style="{StaticResource LockInput}" />
+                    <TextBox x:Name="VisiblePasswordBox"
+                             Style="{StaticResource LockInput}"
+                             Visibility="Collapsed" />
+                    <ToggleButton x:Name="PasswordRevealButton"
+                                  Width="38"
+                                  Height="38"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,5,0"
+                                  Background="Transparent"
+                                  Foreground="#91A0B6"
+                                  BorderThickness="0"
+                                  Cursor="Hand"
+                                  ToolTip="显示或隐藏密码"
+                                  Checked="PasswordRevealButton_Checked"
+                                  Unchecked="PasswordRevealButton_Unchecked">
+                        <Path Data="M12,4.5 C7,4.5 2.73,7.61 1,12 C2.73,16.39 7,19.5 12,19.5 C17,19.5 21.27,16.39 23,12 C21.27,7.61 17,4.5 12,4.5 M12,17 C9.24,17 7,14.76 7,12 C7,9.24 9.24,7 12,7 C14.76,7 17,9.24 17,12 C17,14.76 14.76,17 12,17 M12,9 C10.34,9 9,10.34 9,12 C9,13.66 10.34,15 12,15 C13.66,15 15,13.66 15,12 C15,10.34 13.66,9 12,9"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                              Width="18"
+                              Height="18"
+                              Stretch="Uniform" />
+                    </ToggleButton>
+                </Grid>
+
+                <TextBlock Text="{Binding Message}"
+                           Foreground="#EF8E8E"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           MinHeight="25"
+                           Margin="0,6,0,0" />
+                <Button x:Name="UnlockButtonControl"
+                        Content="解锁"
+                        Style="{StaticResource UnlockButton}"
+                        IsDefault="True"
+                        IsEnabled="{Binding CanUnlock}"
+                        Click="UnlockButton_Click" />
+                <TextBlock Text="按 Enter 键快速解锁"
+                           Foreground="#8290A5"
+                           FontSize="12"
+                           TextAlignment="Center"
+                           Margin="0,12,0,0" />
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="0,0,18,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button Content="退出软件"
+                        Foreground="#9AA7BA"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Cursor="Hand"
+                        Padding="8,4"
+                        Click="ExitButton_Click" />
+                <Border Width="1" Height="14" Background="#4A5260" Margin="12,0" />
+                <TextBlock Text="{Binding LockedAtText}" Foreground="#9AA7BA" FontSize="12" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,6 +1,5 @@
 namespace RuinaoSoftwareWpf;
 
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 internal sealed class AccountDbContext : DbContext
@@ -18,14 +17,7 @@ internal sealed class AccountDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        var connectionString = new SqliteConnectionStringBuilder
-        {
-            DataSource = databasePath,
-            Pooling = true,
-            DefaultTimeout = 30
-        }.ToString();
-
-        optionsBuilder.UseSqlite(connectionString);
+        optionsBuilder.UseSqlite(EncryptedSqliteDatabase.CreateConnectionString(databasePath));
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

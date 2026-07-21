@@ -47,8 +47,9 @@ public interface IUnifiedSessionService
 
     UnifiedSessionTimestamp GetCurrentTimestamp();
 
-    Task<IReadOnlyList<UnifiedSessionTimelineEvent>> GetTimelineAsync(
+    Task<PageResult<UnifiedSessionTimelineEvent>> GetTimelinePageAsync(
         string sessionKey,
+        PageRequest request,
         CancellationToken cancellationToken = default);
 
     Task RecordEventAsync(
@@ -73,8 +74,9 @@ public interface IUnifiedSessionRepository
 
     Task RecordTimelineEventAsync(UnifiedSessionTimelineEvent timelineEvent, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<UnifiedSessionTimelineEvent>> GetTimelineAsync(
+    Task<PageResult<UnifiedSessionTimelineEvent>> GetTimelinePageAsync(
         string sessionKey,
+        PageRequest request,
         CancellationToken cancellationToken = default);
 
     Task CompleteUnifiedSessionAsync(
