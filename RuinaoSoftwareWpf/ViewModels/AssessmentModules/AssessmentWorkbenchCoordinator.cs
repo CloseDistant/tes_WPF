@@ -12,6 +12,9 @@ public enum AssessmentModuleKind
     ShortTextReading,
     EmotionQuestion,
     DotProbe,
+    EmotionOddball,
+    EmotionLetterSearch,
+    EmotionStroop,
     Questionnaire,
     BasicInformation,
     GenericTask,
@@ -79,6 +82,24 @@ public sealed class DotProbeAssessmentModuleViewModel(string code, string key, b
     : AssessmentModuleViewModel(code, key, developmentOnly)
 {
     public override AssessmentModuleKind Kind => AssessmentModuleKind.DotProbe;
+}
+
+public sealed class EmotionOddballAssessmentModuleViewModel(string code, string key, bool developmentOnly)
+    : AssessmentModuleViewModel(code, key, developmentOnly)
+{
+    public override AssessmentModuleKind Kind => AssessmentModuleKind.EmotionOddball;
+}
+
+public sealed class EmotionLetterSearchAssessmentModuleViewModel(string code, string key, bool developmentOnly)
+    : AssessmentModuleViewModel(code, key, developmentOnly)
+{
+    public override AssessmentModuleKind Kind => AssessmentModuleKind.EmotionLetterSearch;
+}
+
+public sealed class EmotionStroopAssessmentModuleViewModel(string code, string key, bool developmentOnly)
+    : AssessmentModuleViewModel(code, key, developmentOnly)
+{
+    public override AssessmentModuleKind Kind => AssessmentModuleKind.EmotionStroop;
 }
 
 public sealed class QuestionnaireAssessmentModuleViewModel(string code, string key, bool developmentOnly)
@@ -156,6 +177,9 @@ public sealed class AssessmentWorkbenchCoordinator : ObservableObject
             "short_text_reading" => new ShortTextReadingAssessmentModuleViewModel(code, key, developmentOnly),
             "emotion_question" => new EmotionQuestionAssessmentModuleViewModel(code, key, developmentOnly),
             "dot_probe" => new DotProbeAssessmentModuleViewModel(code, key, developmentOnly),
+            "emotion_oddball" => new EmotionOddballAssessmentModuleViewModel(code, key, developmentOnly),
+            "emotion_letter_search" => new EmotionLetterSearchAssessmentModuleViewModel(code, key, developmentOnly),
+            "emotion_stroop" => new EmotionStroopAssessmentModuleViewModel(code, key, developmentOnly),
             "basic_info" => new BasicInformationAssessmentModuleViewModel(code, key, developmentOnly),
             "sync_test" => new GenericAssessmentModuleViewModel(code, key, developmentOnly, AssessmentModuleKind.SynchronizationTest),
             _ when code.StartsWith("questionnaire_", StringComparison.Ordinal) => new QuestionnaireAssessmentModuleViewModel(code, key, developmentOnly),

@@ -76,6 +76,9 @@ public sealed partial class AssessmentCaptureViewModel
     private const string ShortTextReadingModuleCode = "short_text_reading";
     private const string EmotionQuestionModuleCode = "emotion_question";
     private const string DotProbeModuleCode = "dot_probe";
+    private const string EmotionOddballModuleCode = "emotion_oddball";
+    private const string EmotionLetterSearchModuleCode = "emotion_letter_search";
+    private const string EmotionStroopModuleCode = "emotion_stroop";
     private const string BasicInfoModuleCode = "basic_info";
     private const string QuestionnaireAModuleCode = "questionnaire_a";
     private const string QuestionnaireBModuleCode = "questionnaire_b";
@@ -129,9 +132,9 @@ public sealed partial class AssessmentCaptureViewModel
         new(ShortTextReadingModuleCode, "ModuleShortTextReading"),
         new(EmotionQuestionModuleCode, "ModuleEmotionQuestion"),
         new(DotProbeModuleCode, "ModuleDotProbe"),
-        new("emotion_oddball", "ModuleEmotionOddball"),
-        new("emotion_letter_search", "ModuleEmotionLetterSearch"),
-        new("emotion_stroop", "ModuleEmotionStroop"),
+        new(EmotionOddballModuleCode, "ModuleEmotionOddball"),
+        new(EmotionLetterSearchModuleCode, "ModuleEmotionLetterSearch"),
+        new(EmotionStroopModuleCode, "ModuleEmotionStroop"),
         new(BasicInfoModuleCode, "ModuleBasicInfo"),
         new(QuestionnaireAModuleCode, "ModuleQuestionnaireA"),
         new(QuestionnaireBModuleCode, "ModuleQuestionnaireB"),

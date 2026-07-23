@@ -158,6 +158,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         StartShortTextReadingCommand = new RelayCommand(_ => StartShortTextReadingFirstPassage());
         InitializeEmotionQuestionModule();
         InitializeDotProbeModule();
+        InitializeEmotionOddballModule();
+        InitializeEmotionLetterSearchModule();
+        InitializeEmotionStroopModule();
         LoadModuleProgressItems();
         frameSaveStatusText = T("CaptureWorkspaceRecordingPending");
         basicInfoSaveStatusText = T("CaptureWorkspaceFormPending");
@@ -206,6 +209,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         ShortTextReadingModuleCode => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "ShortTextReadingDemo.mp4"),
         EmotionQuestionModuleCode => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "EmotionQuestionDemo.mp4"),
         DotProbeModuleCode => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "DotProbeDemo.mp4"),
+        EmotionOddballModuleCode => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "EmotionOddballDemo.mp4"),
+        EmotionLetterSearchModuleCode => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "EmotionLetterSearchDemo.mp4"),
+        EmotionStroopModuleCode => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "EmotionStroopDemo.mp4"),
         _ => ResolveAssetPath("Assets", "CaptureWorkbench", "Videos", "EyeCalibrationDemo.mp4")
     };
 
@@ -415,6 +421,12 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public bool IsDotProbeModule => CurrentModuleCode == DotProbeModuleCode;
 
+    public bool IsEmotionOddballModule => CurrentModuleCode == EmotionOddballModuleCode;
+
+    public bool IsEmotionLetterSearchModule => CurrentModuleCode == EmotionLetterSearchModuleCode;
+
+    public bool IsEmotionStroopModule => CurrentModuleCode == EmotionStroopModuleCode;
+
     public bool IsBasicInfoModule => CurrentModuleCode == BasicInfoModuleCode;
 
     public bool IsQuestionnaireModule => GetQuestionnaireDefinition(CurrentModuleCode) is not null;
@@ -440,6 +452,12 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     public bool IsEmotionQuestionStage => IsCalibrationStage && IsEmotionQuestionModule;
 
     public bool IsDotProbeStage => IsCalibrationStage && IsDotProbeModule;
+
+    public bool IsEmotionOddballStage => IsCalibrationStage && IsEmotionOddballModule;
+
+    public bool IsEmotionLetterSearchStage => IsCalibrationStage && IsEmotionLetterSearchModule;
+
+    public bool IsEmotionStroopStage => IsCalibrationStage && IsEmotionStroopModule;
 
     public bool IsBasicInfoStage => IsCalibrationStage && IsBasicInfoModule;
 
@@ -483,7 +501,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public bool ShowWordReadingStartAction => IsWordReadingWaiting && wordReadingIndex == 0;
 
-    public bool IsFallbackStage => !IsDemoStage && !IsEyeCalibrationStage && !IsPictureBrowseStage && !IsVideoBrowseStage && !IsVoiceBaselineStage && !IsWordReadingStage && !IsShortTextReadingStage && !IsEmotionQuestionStage && !IsDotProbeStage && !IsBasicInfoStage && !IsQuestionnaireStage && !IsSyncTestStage;
+    public bool IsFallbackStage => !IsDemoStage && !IsEyeCalibrationStage && !IsPictureBrowseStage && !IsVideoBrowseStage && !IsVoiceBaselineStage && !IsWordReadingStage && !IsShortTextReadingStage && !IsEmotionQuestionStage && !IsDotProbeStage && !IsEmotionOddballStage && !IsEmotionLetterSearchStage && !IsEmotionStroopStage && !IsBasicInfoStage && !IsQuestionnaireStage && !IsSyncTestStage;
 
     public bool IsCompletionStage => currentStep == CaptureWorkbenchStep.Completed;
 
@@ -891,6 +909,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         CaptureWorkbenchStep.ModuleExecution when IsShortTextReadingModule => T("CaptureWorkspaceMainShortTextReading"),
         CaptureWorkbenchStep.ModuleExecution when IsEmotionQuestionModule => T("CaptureWorkspaceMainEmotionQuestion"),
         CaptureWorkbenchStep.ModuleExecution when IsDotProbeModule => T("CaptureWorkspaceMainDotProbe"),
+        CaptureWorkbenchStep.ModuleExecution when IsEmotionOddballModule => T("CaptureWorkspaceMainEmotionOddball"),
+        CaptureWorkbenchStep.ModuleExecution when IsEmotionLetterSearchModule => T("CaptureWorkspaceMainEmotionLetterSearch"),
+        CaptureWorkbenchStep.ModuleExecution when IsEmotionStroopModule => T("CaptureWorkspaceMainEmotionStroop"),
         CaptureWorkbenchStep.ModuleExecution when IsPictureBrowseModule => T("CaptureWorkspaceMainPictureBrowse"),
         CaptureWorkbenchStep.ModuleExecution when IsVideoBrowseModule => T("CaptureWorkspaceMainVideoBrowse"),
         CaptureWorkbenchStep.ModuleExecution => T("CaptureWorkspaceMainEyeCalibration"),
@@ -1050,6 +1071,18 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         else if (IsDotProbeModule)
         {
             BeginDotProbeSequence();
+        }
+        else if (IsEmotionOddballModule)
+        {
+            BeginEmotionOddballSequence();
+        }
+        else if (IsEmotionLetterSearchModule)
+        {
+            BeginEmotionLetterSearchSequence();
+        }
+        else if (IsEmotionStroopModule)
+        {
+            BeginEmotionStroopSequence();
         }
         else
         {
@@ -1297,6 +1330,18 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
             else if (IsDotProbeModule)
             {
                 BeginDotProbeSequence();
+            }
+            else if (IsEmotionOddballModule)
+            {
+                BeginEmotionOddballSequence();
+            }
+            else if (IsEmotionLetterSearchModule)
+            {
+                BeginEmotionLetterSearchSequence();
+            }
+            else if (IsEmotionStroopModule)
+            {
+                BeginEmotionStroopSequence();
             }
             else if (IsSyncTestModule)
             {
@@ -1552,6 +1597,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         ResetShortTextReadingState();
         ResetEmotionQuestionState();
         ResetDotProbeState();
+        ResetEmotionOddballState();
+        ResetEmotionLetterSearchState();
+        ResetEmotionStroopState();
         ResetSyncTestState();
     }
 
@@ -1666,6 +1714,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(IsShortTextReadingModule));
         OnPropertyChanged(nameof(IsEmotionQuestionModule));
         OnPropertyChanged(nameof(IsDotProbeModule));
+        OnPropertyChanged(nameof(IsEmotionOddballModule));
+        OnPropertyChanged(nameof(IsEmotionLetterSearchModule));
+        OnPropertyChanged(nameof(IsEmotionStroopModule));
         OnPropertyChanged(nameof(IsBasicInfoModule));
         OnPropertyChanged(nameof(IsQuestionnaireModule));
         OnPropertyChanged(nameof(IsFormModule));
@@ -1679,6 +1730,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(IsShortTextReadingStage));
         OnPropertyChanged(nameof(IsEmotionQuestionStage));
         OnPropertyChanged(nameof(IsDotProbeStage));
+        OnPropertyChanged(nameof(IsEmotionOddballStage));
+        OnPropertyChanged(nameof(IsEmotionLetterSearchStage));
+        OnPropertyChanged(nameof(IsEmotionStroopStage));
         OnPropertyChanged(nameof(IsBasicInfoStage));
         OnPropertyChanged(nameof(IsQuestionnaireStage));
         OnPropertyChanged(nameof(IsSyncTestStage));
@@ -1718,6 +1772,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(IsDotProbeProbeTop));
         OnPropertyChanged(nameof(IsDotProbeProbeBottom));
         OnPropertyChanged(nameof(ShowDotProbeResponseButtons));
+        NotifyEmotionOddballStateChanged();
+        NotifyEmotionLetterSearchStateChanged();
+        NotifyEmotionStroopStateChanged();
         OnPropertyChanged(nameof(IsFallbackStage));
         OnPropertyChanged(nameof(IsCompletionStage));
         OnPropertyChanged(nameof(IsGenericFallbackStage));

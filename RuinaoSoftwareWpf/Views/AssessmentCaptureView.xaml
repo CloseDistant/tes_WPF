@@ -1082,6 +1082,272 @@
                                                 </StackPanel>
                                             </Grid>
 
+                                            <Grid Visibility="{Binding IsEmotionOddballStage, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                  Background="#11141D"
+                                                  ClipToBounds="True">
+                                                <TextBlock Text="+"
+                                                           Foreground="{StaticResource Text}"
+                                                           FontSize="64"
+                                                           FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Visibility="{Binding IsEmotionOddballFixation, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                                                <Grid Margin="24,18,24,22"
+                                                      Visibility="{Binding IsEmotionOddballImageVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="*" />
+                                                        <RowDefinition Height="82" />
+                                                    </Grid.RowDefinitions>
+
+                                                    <Viewbox Grid.Row="0"
+                                                             Stretch="Uniform"
+                                                             HorizontalAlignment="Center"
+                                                             VerticalAlignment="Center"
+                                                             MaxWidth="980"
+                                                             MaxHeight="650">
+                                                        <Grid Width="1000" Height="700">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="14*" />
+                                                                <ColumnDefinition Width="72*" />
+                                                                <ColumnDefinition Width="14*" />
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <Grid Grid.Column="1">
+                                                                <Image Source="{Binding EmotionOddballImagePath}"
+                                                                       Stretch="Uniform"
+                                                                       HorizontalAlignment="Stretch"
+                                                                       VerticalAlignment="Stretch" />
+                                                                <Ellipse Width="300"
+                                                                         Height="300"
+                                                                         Stroke="#777D85"
+                                                                         StrokeThickness="16"
+                                                                         Opacity="0.9"
+                                                                         HorizontalAlignment="Center"
+                                                                         VerticalAlignment="Center"
+                                                                         Visibility="{Binding IsEmotionOddballCircle, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                                <Rectangle Width="300"
+                                                                           Height="300"
+                                                                           Stroke="#777D85"
+                                                                           StrokeThickness="16"
+                                                                           Opacity="0.9"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"
+                                                                           Visibility="{Binding IsEmotionOddballSquare, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                            </Grid>
+
+                                                        </Grid>
+                                                    </Viewbox>
+
+                                                    <Grid Grid.Row="1"
+                                                          Width="520"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"
+                                                          Visibility="{Binding ShowEmotionOddballResponseButtons, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="28" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Button Grid.Column="0"
+                                                                Content="{Binding EmotionOddballSquareText}"
+                                                                Command="{Binding EmotionOddballRespondSquareCommand}"
+                                                                Style="{StaticResource PrimaryCaptureButton}"
+                                                                Height="56"
+                                                                FontSize="18" />
+                                                        <Button Grid.Column="2"
+                                                                Content="{Binding EmotionOddballCircleText}"
+                                                                Command="{Binding EmotionOddballRespondCircleCommand}"
+                                                                Style="{StaticResource PrimaryCaptureButton}"
+                                                                Height="56"
+                                                                FontSize="18" />
+                                                    </Grid>
+                                                </Grid>
+                                            </Grid>
+
+                                            <Grid Visibility="{Binding IsEmotionLetterSearchStage, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                  Background="#11141D"
+                                                  ClipToBounds="True">
+                                                <TextBlock Text="+"
+                                                           Foreground="{StaticResource Text}"
+                                                           FontSize="64"
+                                                           FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Visibility="{Binding IsEmotionLetterSearchFixation, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                                                <Grid Margin="24,10,24,18"
+                                                      Visibility="{Binding IsEmotionLetterSearchImageVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="*" />
+                                                        <RowDefinition Height="82" />
+                                                    </Grid.RowDefinitions>
+
+                                                    <Viewbox Grid.Row="0"
+                                                             Stretch="Uniform"
+                                                             HorizontalAlignment="Center"
+                                                             VerticalAlignment="Center"
+                                                             Margin="0,-7,0,7"
+                                                             MaxWidth="1000"
+                                                             MaxHeight="650">
+                                                        <Canvas Width="608" Height="762">
+                                                            <Image Source="{Binding EmotionLetterSearchImagePath}"
+                                                                   Width="608"
+                                                                   Height="762"
+                                                                   Stretch="Uniform" />
+                                                            <TextBlock Text="{Binding EmotionLetterSearchLetters}"
+                                                                       Canvas.Left="{Binding EmotionLetterSearchLetterLeft}"
+                                                                       Canvas.Top="{Binding EmotionLetterSearchLetterTop}"
+                                                                       Width="180"
+                                                                       Foreground="White"
+                                                                       FontSize="42"
+                                                                       FontWeight="Bold"
+                                                                       TextAlignment="Center"
+                                                                       Visibility="{Binding IsEmotionLetterSearchLettersVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                                <TextBlock.Effect>
+                                                                    <DropShadowEffect Color="Black"
+                                                                                      BlurRadius="3"
+                                                                                      ShadowDepth="1"
+                                                                                      Opacity="0.95" />
+                                                                </TextBlock.Effect>
+                                                            </TextBlock>
+                                                        </Canvas>
+                                                    </Viewbox>
+
+                                                    <Grid Grid.Row="1"
+                                                          Width="520"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"
+                                                          Visibility="{Binding ShowEmotionLetterSearchResponseButtons, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="28" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Button Grid.Column="0"
+                                                                Content="{Binding EmotionLetterSearchButtonOneText}"
+                                                                Command="{Binding EmotionLetterSearchRespondOneCommand}"
+                                                                Style="{StaticResource PrimaryCaptureButton}"
+                                                                Height="56"
+                                                                FontSize="20" />
+                                                        <Button Grid.Column="2"
+                                                                Content="{Binding EmotionLetterSearchButtonTwoText}"
+                                                                Command="{Binding EmotionLetterSearchRespondTwoCommand}"
+                                                                Style="{StaticResource PrimaryCaptureButton}"
+                                                                Height="56"
+                                                                FontSize="20" />
+                                                    </Grid>
+                                                </Grid>
+
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            Width="520"
+                                                            Visibility="{Binding IsEmotionLetterSearchResting, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding EmotionLetterSearchRestTitleText}"
+                                                               Foreground="{StaticResource Text}"
+                                                               FontSize="28"
+                                                               FontWeight="SemiBold"
+                                                               TextAlignment="Center"
+                                                               Margin="0,0,0,14" />
+                                                    <TextBlock Text="{Binding EmotionLetterSearchRestText}"
+                                                               Foreground="{StaticResource SubText}"
+                                                               FontSize="16"
+                                                               TextAlignment="Center"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <Grid Visibility="{Binding IsEmotionStroopStage, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                  Background="#11141D"
+                                                  ClipToBounds="True">
+                                                <TextBlock Text="+"
+                                                           Foreground="{StaticResource Text}"
+                                                           FontSize="64"
+                                                           FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Visibility="{Binding IsEmotionStroopFixation, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                                                <Grid Margin="24,10,24,18"
+                                                      Visibility="{Binding IsEmotionStroopStimulusVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="*" />
+                                                        <RowDefinition Height="82" />
+                                                    </Grid.RowDefinitions>
+
+                                                    <Viewbox Grid.Row="0"
+                                                             Stretch="Uniform"
+                                                             HorizontalAlignment="Center"
+                                                             VerticalAlignment="Center"
+                                                             Margin="0,-7,0,7"
+                                                             MaxWidth="1000"
+                                                             MaxHeight="650">
+                                                        <Grid Width="640" Height="720"
+                                                              Background="Black">
+                                                            <Image Source="{Binding EmotionStroopImagePath}"
+                                                                   Width="640"
+                                                                   Height="720"
+                                                                   Stretch="Uniform" />
+                                                            <TextBlock Text="{Binding EmotionStroopWordText}"
+                                                                       Foreground="White"
+                                                                       FontSize="58"
+                                                                       FontWeight="Bold"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"
+                                                                       TextAlignment="Center">
+                                                                <TextBlock.Effect>
+                                                                    <DropShadowEffect Color="Black"
+                                                                                      BlurRadius="5"
+                                                                                      ShadowDepth="2"
+                                                                                      Opacity="1" />
+                                                                </TextBlock.Effect>
+                                                            </TextBlock>
+                                                        </Grid>
+                                                    </Viewbox>
+
+                                                    <Grid Grid.Row="1"
+                                                          Width="520"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"
+                                                          Visibility="{Binding ShowEmotionStroopResponseButtons, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="28" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Button Grid.Column="0"
+                                                                Content="{Binding EmotionStroopPositiveText}"
+                                                                Command="{Binding EmotionStroopRespondPositiveCommand}"
+                                                                Style="{StaticResource PrimaryCaptureButton}"
+                                                                Height="56"
+                                                                FontSize="18" />
+                                                        <Button Grid.Column="2"
+                                                                Content="{Binding EmotionStroopNegativeText}"
+                                                                Command="{Binding EmotionStroopRespondNegativeCommand}"
+                                                                Style="{StaticResource PrimaryCaptureButton}"
+                                                                Height="56"
+                                                                FontSize="18" />
+                                                    </Grid>
+                                                </Grid>
+
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            Width="520"
+                                                            Visibility="{Binding IsEmotionStroopResting, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding EmotionStroopRestTitleText}"
+                                                               Foreground="{StaticResource Text}"
+                                                               FontSize="28"
+                                                               FontWeight="SemiBold"
+                                                               TextAlignment="Center"
+                                                               Margin="0,0,0,14" />
+                                                    <TextBlock Text="{Binding EmotionStroopRestText}"
+                                                               Foreground="{StaticResource SubText}"
+                                                               FontSize="16"
+                                                               TextAlignment="Center"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Grid>
+
                                             <Grid Visibility="{Binding IsBasicInfoStage, Converter={StaticResource BoolToVisibilityConverter}}"
                                                   Background="#11141D">
                                                 <ScrollViewer Style="{StaticResource WorkbenchScrollViewer}"
