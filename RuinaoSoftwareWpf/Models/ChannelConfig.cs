@@ -24,6 +24,7 @@ public sealed class ChannelConfig : ObservableObject
     private string stimulationMode = "间隔";
     private string remainingTime = "00:00:00";
     private Brush accentBrush = Brushes.White;
+    private bool isParameterEditingEnabled = true;
 
     /// <summary>通道名称，例如 "CH 13"。</summary>
     public string Name { get => name; set => SetProperty(ref name, value); }
@@ -59,7 +60,7 @@ public sealed class ChannelConfig : ObservableObject
         }
     }
 
-    /// <summary>间隔模式下每次刺激持续时间，单位秒。</summary>
+    /// <summary>间隔模式下每次完整刺激持续时间，单位秒；已包含渐升和渐降时间。</summary>
     public string SingleDurationS
     {
         get => singleDurationS;
@@ -85,7 +86,7 @@ public sealed class ChannelConfig : ObservableObject
         }
     }
 
-    /// <summary>连续模式显示“/”，间隔模式显示并编辑真实单次时长。</summary>
+    /// <summary>连续模式显示“/”，间隔模式显示并编辑包含渐升、平台和渐降的真实单次时长。</summary>
     public string SingleDurationDisplay
     {
         get => IsContinuousMode ? "/" : SingleDurationS;
@@ -99,6 +100,8 @@ public sealed class ChannelConfig : ObservableObject
     }
 
     public bool AreIntervalFieldsEnabled => !IsContinuousMode;
+
+    public bool AreIntervalFieldsEditable => AreIntervalFieldsEnabled && IsParameterEditingEnabled;
 
     /// <summary>载波频率，单位 Hz。</summary>
     public string FrequencyHz { get => frequencyHz; set => SetProperty(ref frequencyHz, value); }
@@ -120,6 +123,7 @@ public sealed class ChannelConfig : ObservableObject
                 OnPropertyChanged(nameof(IsIntervalMode));
                 OnPropertyChanged(nameof(IsContinuousMode));
                 OnPropertyChanged(nameof(AreIntervalFieldsEnabled));
+                OnPropertyChanged(nameof(AreIntervalFieldsEditable));
                 OnPropertyChanged(nameof(IntervalDisplay));
                 OnPropertyChanged(nameof(SingleDurationDisplay));
             }
@@ -154,6 +158,20 @@ public sealed class ChannelConfig : ObservableObject
 
     /// <summary>剩余时间显示，例如 "00:10:00"。</summary>
     public string RemainingTime { get => remainingTime; set => SetProperty(ref remainingTime, value); }
+
+    public bool IsParameterEditingEnabled
+    {
+        get => isParameterEditingEnabled;
+        set
+        {
+            if (SetProperty(ref isParameterEditingEnabled, value))
+            {
+                OnPropertyChanged(nameof(AreIntervalFieldsEditable));
+            }
+        }
+    }
+
+    public DirectCurrentWaveformState DirectCurrentWaveform { get; } = new();
 
     /// <summary>该通道名称在列表和详情页中的显示颜色。</summary>
     public Brush AccentBrush { get => accentBrush; set => SetProperty(ref accentBrush, value); }

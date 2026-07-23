@@ -6,6 +6,12 @@ namespace RuinaoSoftwareWpf;
 /// </summary>
 public sealed class SafetyService : ISafetyService
 {
+    // TODO(Hardware interlock): 硬件业务板完成后，在本服务统一接入以下安全联锁：
+    // - 设备断开：运行中立即停止刺激；
+    // - 阻抗异常：启动前禁止启动，运行中立即停止刺激；
+    // - 通信丢失：运行中立即停止刺激。
+    // 停止动作必须下发至设备并生成治疗记录与审计日志，不能只改变 UI 状态。
+    // 阻抗异常阈值和通信丢失判定时限待硬件协议与产品安全参数确认。
     private const double TemperatureWarningC = 40.0;
     private const double TemperatureCriticalC = 42.0;
     private const double ImpedanceWarningOhm = 10_000.0;
@@ -34,6 +40,8 @@ public sealed class SafetyService : ISafetyService
     public Task EnsureCanStartStimulationAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        // TODO(Hardware interlock): 取得业务板连接、通信健康和阻抗状态后再允许启动。
+        // 任何一个待启动通道阻抗异常时，整次同步启动必须失败且不得下发启动命令。
         return Task.CompletedTask;
     }
 

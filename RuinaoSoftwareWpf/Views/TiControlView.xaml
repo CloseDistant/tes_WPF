@@ -110,6 +110,7 @@
                                                          Localization="{Binding DataContext.Localization, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                          StartCommand="{Binding DataContext.StartChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                          ShowCarrierFrequency="True"
+                                                         ShowPolarity="False"
                                                          ShowElectrodeDescription="True" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>

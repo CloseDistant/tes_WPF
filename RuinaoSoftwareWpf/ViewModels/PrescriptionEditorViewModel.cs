@@ -140,6 +140,12 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
                 ErrorMessage = "间隔模式下，间隔时间和单次时长必须填写大于 0 的整数。";
                 return false;
             }
+
+            if ((long)parsedSessionDuration * 60 < rampUp + rampDown)
+            {
+                ErrorMessage = "单次时长已包含渐升和渐降，不能小于渐升与渐降时间之和。";
+                return false;
+            }
             interval = parsedInterval;
             sessionDuration = parsedSessionDuration;
         }

@@ -39,17 +39,7 @@ public sealed class StimulationTypeSelectionViewModel : ObservableObject
         ? Visibility.Visible
         : Visibility.Collapsed;
 
-    public GridLength TemporalInterferenceColumnWidth => IsTemporalInterferenceVisible
-        ? new GridLength(1, GridUnitType.Star)
-        : new GridLength(0);
-
-    public GridLength CardSpacingColumnWidth => IsTemporalInterferenceVisible && IsDirectCurrentVisible
-        ? new GridLength(22)
-        : new GridLength(0);
-
-    public GridLength DirectCurrentColumnWidth => IsDirectCurrentVisible
-        ? new GridLength(1, GridUnitType.Star)
-        : new GridLength(0);
+    public int DirectCurrentCardColumn => IsTemporalInterferenceVisible ? 2 : 0;
 
     public event EventHandler? TemporalInterferenceRequested;
 
@@ -59,9 +49,7 @@ public sealed class StimulationTypeSelectionViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(TemporalInterferenceVisibility));
         OnPropertyChanged(nameof(DirectCurrentVisibility));
-        OnPropertyChanged(nameof(TemporalInterferenceColumnWidth));
-        OnPropertyChanged(nameof(CardSpacingColumnWidth));
-        OnPropertyChanged(nameof(DirectCurrentColumnWidth));
+        OnPropertyChanged(nameof(DirectCurrentCardColumn));
     }
 
     private bool IsTemporalInterferenceVisible =>

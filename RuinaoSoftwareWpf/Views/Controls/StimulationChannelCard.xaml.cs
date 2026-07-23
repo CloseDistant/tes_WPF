@@ -22,11 +22,23 @@ public partial class StimulationChannelCard : UserControl
         typeof(StimulationChannelCard),
         new PropertyMetadata(true));
 
+    public static readonly DependencyProperty ShowPolarityProperty = DependencyProperty.Register(
+        nameof(ShowPolarity),
+        typeof(bool),
+        typeof(StimulationChannelCard),
+        new PropertyMetadata(true));
+
     public static readonly DependencyProperty ShowElectrodeDescriptionProperty = DependencyProperty.Register(
         nameof(ShowElectrodeDescription),
         typeof(bool),
         typeof(StimulationChannelCard),
         new PropertyMetadata(true));
+
+    public static readonly DependencyProperty EnableSimulatedWaveformProperty = DependencyProperty.Register(
+        nameof(EnableSimulatedWaveform),
+        typeof(bool),
+        typeof(StimulationChannelCard),
+        new PropertyMetadata(false));
 
     public StimulationChannelCard()
     {
@@ -51,9 +63,29 @@ public partial class StimulationChannelCard : UserControl
         set => SetValue(ShowCarrierFrequencyProperty, value);
     }
 
+    public bool ShowPolarity
+    {
+        get => (bool)GetValue(ShowPolarityProperty);
+        set => SetValue(ShowPolarityProperty, value);
+    }
+
     public bool ShowElectrodeDescription
     {
         get => (bool)GetValue(ShowElectrodeDescriptionProperty);
         set => SetValue(ShowElectrodeDescriptionProperty, value);
+    }
+
+    public bool EnableSimulatedWaveform
+    {
+        get => (bool)GetValue(EnableSimulatedWaveformProperty);
+        set => SetValue(EnableSimulatedWaveformProperty, value);
+    }
+
+    private void ToggleWaveformViewMode(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is ChannelConfig channel)
+        {
+            channel.DirectCurrentWaveform.ToggleViewMode();
+        }
     }
 }

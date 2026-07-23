@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace RuinaoSoftwareWpf;
 
@@ -11,7 +13,11 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     private readonly IStimulationEngine stimulationEngine;
     private readonly ILoggingService logger;
     private readonly IToastService toastService;
-    private readonly StimulationChannelCountdown countdown = new();
+    private readonly DispatcherTimer waveformTimer;
+    private readonly Dictionary<ChannelConfig, ChannelRuntime> activeChannels = [];
+    private readonly AsyncRelayCommand synchronizedStartCommand;
+    private readonly AsyncRelayCommand startChannelCommand;
+    private readonly AsyncRelayCommand emergencyStopCommand;
     private string appliedPrescriptionName = "手动设置";
 
     public DirectCurrentControlViewModel(
@@ -23,7 +29,6 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         this.stimulationEngine = stimulationEngine;
         this.logger = logger;
         this.toastService = toastService;
-        countdown.Completed += channel => _ = CompleteChannelAsync(channel);
         Localization = localization;
 
         var accent = new SolidColorBrush(Color.FromRgb(228, 232, 239));
@@ -34,18 +39,33 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             CreateChannel("CH 2", accent)
         ];
 
-        BackCommand = new RelayCommand(_ => BackRequested?.Invoke(this, EventArgs.Empty));
-        SynchronizedStartCommand = CreateHardwareCommand(_ => StartSynchronizedAsync(), HandleStartFailure);
-        StartChannelCommand = new AsyncRelayCommand(
+        waveformTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(100)
+        };
+        waveformTimer.Tick += OnWaveformTimerTick;
+
+        BackCommand = new RelayCommand(_ => RequestBack());
+        synchronizedStartCommand = new AsyncRelayCommand(
+            (_, _) => StartSynchronizedAsync(),
+            _ => activeChannels.Count == 0,
+            HandleStartFailure);
+        SynchronizedStartCommand = synchronizedStartCommand;
+        startChannelCommand = new AsyncRelayCommand(
             async (parameter, _) =>
             {
                 if (parameter is ChannelConfig channel)
                 {
                     await StartChannelAsync(channel);
                 }
-            },
+            }, parameter => parameter is ChannelConfig channel && !activeChannels.ContainsKey(channel),
             onError: HandleStartFailure);
-        EmergencyStopCommand = CreateHardwareCommand(_ => EmergencyStopAsync());
+        StartChannelCommand = startChannelCommand;
+        emergencyStopCommand = new AsyncRelayCommand(
+            (_, _) => EmergencyStopAsync(),
+            _ => activeChannels.Count > 0,
+            ex => logger.Error("tDCS 急停命令执行失败", ex));
+        EmergencyStopCommand = emergencyStopCommand;
     }
 
     public LocalizationViewModel Localization { get; }
@@ -129,14 +149,33 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
 
     private async Task StartSynchronizedAsync()
     {
+        if (activeChannels.Count > 0)
+        {
+            toastService.ShowInformation("已有通道正在运行，不能执行同步开始。", "同步开始");
+            return;
+        }
+
+        var snapshots = new Dictionary<ChannelConfig, DirectCurrentWaveformParameters>();
+        foreach (var channel in Channels)
+        {
+            if (!DirectCurrentWaveformParameters.TryCreate(channel, out var snapshot, out var error))
+            {
+                toastService.ShowError("参数校验失败", error);
+                return;
+            }
+
+            snapshots[channel] = snapshot!;
+        }
+
         var group = CreateExecutionGroup(Channels);
         var result = await stimulationEngine.StartDirectCurrentGroupAsync(
             group,
             string.Join(" + ", Channels.Select(channel => channel.Name)),
             AppliedPrescriptionName);
+        var sharedTimestamp = Stopwatch.GetTimestamp();
         foreach (var channel in Channels)
         {
-            countdown.Start(channel);
+            BeginChannelRuntime(channel, snapshots[channel], sharedTimestamp);
         }
 
         HardwareOperationCompleted?.Invoke(this, result);
@@ -149,18 +188,145 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             return;
         }
 
+
+        if (activeChannels.ContainsKey(channel))
+        {
+            toastService.ShowInformation($"{channel.Name} 正在运行。", "开始刺激");
+            return;
+        }
+
+        if (!DirectCurrentWaveformParameters.TryCreate(channel, out var snapshot, out var error))
+        {
+            toastService.ShowError("参数校验失败", error);
+            return;
+        }
+
         var group = CreateExecutionGroup([channel]);
         var result = await stimulationEngine.StartDirectCurrentGroupAsync(group, channel.Name, AppliedPrescriptionName);
-        countdown.Start(channel);
+        BeginChannelRuntime(channel, snapshot!, Stopwatch.GetTimestamp());
         HardwareOperationCompleted?.Invoke(this, result);
     }
 
     private async Task EmergencyStopAsync()
     {
-        var group = CreateExecutionGroup(Channels);
+        var running = activeChannels.Keys.ToArray();
+        if (running.Length == 0)
+        {
+            return;
+        }
+
+        var stoppedAt = Stopwatch.GetTimestamp();
+        var group = CreateExecutionGroup(running);
         var result = await stimulationEngine.EmergencyStopDirectCurrentGroupAsync(group, "用户点击急停");
-        countdown.CancelAll(Channels, reset: true);
+        foreach (var channel in running)
+        {
+            if (!activeChannels.Remove(channel, out var runtime))
+            {
+                continue;
+            }
+
+            channel.DirectCurrentWaveform.EmergencyStop(Stopwatch.GetElapsedTime(runtime.StartTimestamp, stoppedAt).TotalSeconds);
+            channel.RemainingTime = "00:00:00";
+            channel.IsParameterEditingEnabled = true;
+        }
+
+        StopTimerWhenIdle();
+        RefreshCommandStates();
         HardwareOperationCompleted?.Invoke(this, result);
+    }
+
+    private void BeginChannelRuntime(
+        ChannelConfig channel,
+        DirectCurrentWaveformParameters snapshot,
+        long startTimestamp)
+    {
+        channel.DirectCurrentWaveform.Start(snapshot);
+        channel.RemainingTime = FormatRemaining(snapshot.TotalDurationSeconds);
+        channel.IsParameterEditingEnabled = false;
+        activeChannels[channel] = new ChannelRuntime(startTimestamp, snapshot);
+        if (!waveformTimer.IsEnabled)
+        {
+            waveformTimer.Start();
+        }
+
+        RefreshCommandStates();
+    }
+
+    private void OnWaveformTimerTick(object? sender, EventArgs e)
+    {
+        if (activeChannels.Count == 0)
+        {
+            waveformTimer.Stop();
+            return;
+        }
+
+        var now = Stopwatch.GetTimestamp();
+        var completed = new List<ChannelConfig>();
+        foreach (var pair in activeChannels.ToArray())
+        {
+            var channel = pair.Key;
+            var runtime = pair.Value;
+            var elapsed = Stopwatch.GetElapsedTime(runtime.StartTimestamp, now).TotalSeconds;
+            channel.DirectCurrentWaveform.UpdateElapsed(elapsed);
+            channel.RemainingTime = FormatRemaining(runtime.Parameters.TotalDurationSeconds - elapsed);
+            if (elapsed < runtime.Parameters.TotalDurationSeconds)
+            {
+                continue;
+            }
+
+            activeChannels.Remove(channel);
+            channel.DirectCurrentWaveform.Complete();
+            channel.RemainingTime = "00:00:00";
+            channel.IsParameterEditingEnabled = true;
+            completed.Add(channel);
+        }
+
+        if (completed.Count == 0)
+        {
+            return;
+        }
+
+        StopTimerWhenIdle();
+        RefreshCommandStates();
+        foreach (var channel in completed)
+        {
+            _ = CompleteChannelAsync(channel);
+        }
+    }
+
+    private void RequestBack()
+    {
+        if (activeChannels.Count > 0)
+        {
+            toastService.ShowInformation("刺激正在运行，请等待刺激完成或使用紧急停止后再离开当前界面。", "无法离开");
+            return;
+        }
+
+        BackRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void StopTimerWhenIdle()
+    {
+        if (activeChannels.Count == 0)
+        {
+            waveformTimer.Stop();
+        }
+    }
+
+    private void RefreshCommandStates()
+    {
+        synchronizedStartCommand.RaiseCanExecuteChanged();
+        startChannelCommand.RaiseCanExecuteChanged();
+        emergencyStopCommand.RaiseCanExecuteChanged();
+    }
+
+    private static string FormatRemaining(double seconds)
+    {
+        var wholeSeconds = Math.Max(0, (int)Math.Ceiling(seconds));
+        var hours = wholeSeconds / 3600;
+        var minutes = wholeSeconds % 3600 / 60;
+        var remainingSeconds = wholeSeconds % 60;
+        return $"{hours:00}:{minutes:00}:{remainingSeconds:00}";
     }
 
     private async Task CompleteChannelAsync(ChannelConfig channel)
@@ -192,4 +358,6 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
 
         return group;
     }
+
+    private sealed record ChannelRuntime(long StartTimestamp, DirectCurrentWaveformParameters Parameters);
 }
