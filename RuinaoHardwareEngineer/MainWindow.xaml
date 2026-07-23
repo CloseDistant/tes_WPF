@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="睿脑 tES 硬件工程师工具"
         Width="1120"
-        Height="760"
+        Height="950"
         MinWidth="920"
         MinHeight="620"
         WindowStartupLocation="CenterScreen"
@@ -13,6 +13,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="2*" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -26,7 +27,7 @@
                            FontSize="28"
                            FontWeight="SemiBold"
                            Foreground="{StaticResource TextBrush}" />
-                <TextBlock Text="第一阶段：设备发现、联机、握手、断联"
+                <TextBlock Text="设备发现、联机握手与 V1.4 背板分组字符串读写"
                            Margin="0,6,0,0"
                            FontSize="14"
                            Foreground="{StaticResource MutedBrush}" />
@@ -90,7 +91,7 @@
                     <TextBlock Text="版本字段" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <TextBox x:Name="ProtocolVersionTextBox" Text="0x01" Width="100" FontFamily="Consolas" />
                     <TextBlock Text="超时(ms)" VerticalAlignment="Center" Margin="24,0,8,0" />
-                    <TextBox x:Name="TimeoutTextBox" Text="1000" Width="110" FontFamily="Consolas" />
+                    <TextBox x:Name="TimeoutTextBox" Text="5000" Width="110" FontFamily="Consolas" />
                 </StackPanel>
 
                 <WrapPanel Grid.Row="1" Margin="0,14,0,0">
@@ -102,7 +103,281 @@
             </Grid>
         </Border>
 
-        <Border Grid.Row="3"
+        <TabControl Grid.Row="3" Margin="0,0,0,14">
+            <TabItem Header="分组字符串读写">
+                <Border Background="{StaticResource SurfaceBrush}"
+                        Padding="18">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid>
+                    <TextBlock Text="背板分组字符串读写" FontSize="16" FontWeight="SemiBold" />
+                    <TextBlock Text="32组布局 · 每组32个寄存器 · UTF-8"
+                               HorizontalAlignment="Right"
+                               Foreground="{StaticResource MutedBrush}" />
+                </Grid>
+                <Grid Grid.Row="1" Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="180" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="分组" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,5" />
+                        <ComboBox x:Name="ProductInfoGroupComboBox"
+                                  ItemsSource="{Binding ProductInfoGroups}"
+                                  SelectedIndex="0"
+                                  SelectionChanged="ProductInfoGroupComboBox_SelectionChanged" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="当前操作范围" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,5" />
+                        <TextBlock x:Name="ProductInfoGroupRangeText"
+                                   Text="组0 · 0x0100～0x011F · 32个寄存器 / 128字节"
+                                   FontFamily="Consolas"
+                                   FontWeight="SemiBold" />
+                    </StackPanel>
+                </Grid>
+                <TextBox Grid.Row="2"
+                         x:Name="ProductInfoTextBox"
+                         Margin="0,10,0,0"
+                         MinHeight="72"
+                         MaxHeight="120"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         TextChanged="ProductInfoTextBox_TextChanged" />
+                <Grid Grid.Row="3" Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="ProductInfoByteCountText"
+                                   Text="UTF-8：0 / 127 字节"
+                                   Foreground="{StaticResource MutedBrush}" />
+                        <TextBlock Text="仅覆盖当前组，未使用部分补0；写完自动回读比较。"
+                                   Margin="18,0,0,0"
+                                   Foreground="#B36200" />
+                    </StackPanel>
+                    <WrapPanel Grid.Column="1">
+                        <Button x:Name="ReadProductInfoTextButton"
+                                Content="读取当前组并解码"
+                                Click="ReadProductInfoTextButton_Click"
+                                Background="#E8EEFF" />
+                        <Button x:Name="WriteProductInfoTextButton"
+                                Content="编码写入并校验"
+                                Click="WriteProductInfoTextButton_Click"
+                                Background="#FFF1DD"
+                                Margin="0" />
+                    </WrapPanel>
+                </Grid>
+            </Grid>
+                </Border>
+            </TabItem>
+
+            <TabItem Header="通信诊断">
+                <TabControl Background="{StaticResource SurfaceBrush}" Padding="8">
+                    <TabItem Header="握手稳定性与延迟">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="14">
+                                <TextBlock Text="连续执行真实背板握手，统计成功率与通信延迟。测试期间其他硬件操作会被锁定。"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           TextWrapping="Wrap" />
+                                <WrapPanel Margin="0,14,0,0">
+                                    <TextBlock Text="执行次数" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBox x:Name="StabilityCountTextBox" Text="100" Width="90" FontFamily="Consolas" />
+                                    <TextBlock Text="间隔(ms)" VerticalAlignment="Center" Margin="20,0,8,0" />
+                                    <TextBox x:Name="StabilityIntervalTextBox" Text="100" Width="90" FontFamily="Consolas" />
+                                    <Button x:Name="StartHandshakeStabilityButton"
+                                            Content="开始测试"
+                                            Click="StartHandshakeStabilityButton_Click"
+                                            Background="#DDF6EA"
+                                            Margin="20,0,10,0" />
+                                    <Button x:Name="StopDiagnosticButton"
+                                            Content="停止"
+                                            Click="StopDiagnosticButton_Click"
+                                            IsEnabled="False"
+                                            Margin="0" />
+                                </WrapPanel>
+                                <TextBlock x:Name="HandshakeStabilityProgressText"
+                                           Text="尚未开始"
+                                           Margin="0,14,0,0"
+                                           FontWeight="SemiBold" />
+                                <Border Margin="0,10,0,0" Padding="14" Background="#F6F8FC" CornerRadius="8">
+                                    <TextBlock x:Name="HandshakeStabilityResultText"
+                                               Text="成功率、最小/平均/P95/最大耗时将在这里显示。"
+                                               FontFamily="Consolas"
+                                               TextWrapping="Wrap" />
+                                </Border>
+                                <Separator Margin="0,18,0,16" />
+                                <TextBlock Text="序号循环实机测试" FontSize="15" FontWeight="SemiBold" />
+                                <TextBlock Text="把下一发送序号设置为65534，连续握手4次，验证序号是否按65534、65535、1、2循环，并检查硬件ACK。"
+                                           Margin="0,6,0,0"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           TextWrapping="Wrap" />
+                                <WrapPanel Margin="0,12,0,0">
+                                    <Button x:Name="SequenceCycleButton"
+                                            Content="执行序号循环测试"
+                                            Click="SequenceCycleButton_Click"
+                                            Background="#E8EEFF" />
+                                    <TextBlock x:Name="SequenceCycleResultText"
+                                               Text="尚未测试"
+                                               VerticalAlignment="Center"
+                                               FontFamily="Consolas" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <TabItem Header="寄存器批量读取">
+                        <Grid Margin="14">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="只读测试：从起始地址连续读取指定数量的背板寄存器，并按每批数量拆分请求。"
+                                           Foreground="{StaticResource MutedBrush}" />
+                                <WrapPanel Margin="0,12,0,0">
+                                    <TextBlock Text="起始地址" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBox x:Name="BatchReadStartAddressTextBox" Text="0x0100" Width="100" FontFamily="Consolas" />
+                                    <TextBlock Text="总数量" VerticalAlignment="Center" Margin="18,0,8,0" />
+                                    <TextBox x:Name="BatchReadCountTextBox" Text="32" Width="70" FontFamily="Consolas" />
+                                    <TextBlock Text="每批数量" VerticalAlignment="Center" Margin="18,0,8,0" />
+                                    <TextBox x:Name="BatchReadSizeTextBox" Text="8" Width="70" FontFamily="Consolas" />
+                                    <Button x:Name="StartBatchReadButton"
+                                            Content="开始批量读取"
+                                            Click="StartBatchReadButton_Click"
+                                            Background="#E8EEFF"
+                                            Margin="20,0,0,0" />
+                                </WrapPanel>
+                            </StackPanel>
+                            <TextBlock Grid.Row="1"
+                                       x:Name="BatchReadSummaryText"
+                                       Text="尚未读取"
+                                       Margin="0,12,0,8"
+                                       FontFamily="Consolas"
+                                       TextWrapping="Wrap" />
+                            <DataGrid Grid.Row="2"
+                                      ItemsSource="{Binding BatchRegisterItems}"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      HeadersVisibility="Column"
+                                      GridLinesVisibility="Horizontal">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="60" />
+                                    <DataGridTextColumn Header="寄存器地址" Binding="{Binding AddressHex}" Width="140" />
+                                    <DataGridTextColumn Header="十六进制值" Binding="{Binding ValueHex}" Width="180" />
+                                    <DataGridTextColumn Header="UInt32" Binding="{Binding UnsignedValue}" Width="*" />
+                                    <DataGridTextColumn Header="Int32" Binding="{Binding SignedValue}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem Header="原始帧监视">
+                        <Grid Margin="14">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid>
+                                <StackPanel Orientation="Horizontal">
+                                    <CheckBox x:Name="RawFrameMonitorCheckBox"
+                                              Content="启用监视"
+                                              IsChecked="True"
+                                              VerticalAlignment="Center"
+                                              Checked="RawFrameMonitorCheckBox_Changed"
+                                              Unchecked="RawFrameMonitorCheckBox_Changed" />
+                                    <TextBlock x:Name="RawFrameCountText"
+                                               Text="0帧"
+                                               Margin="16,0,0,0"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource MutedBrush}" />
+                                </StackPanel>
+                                <Button Content="清空帧"
+                                        HorizontalAlignment="Right"
+                                        MinHeight="28"
+                                        Padding="12,3"
+                                        Margin="0"
+                                        Click="ClearRawFramesButton_Click" />
+                            </Grid>
+                            <DataGrid Grid.Row="1"
+                                      x:Name="RawFrameGrid"
+                                      Margin="0,10,0,0"
+                                      ItemsSource="{Binding RawFrameItems}"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      HeadersVisibility="Column"
+                                      GridLinesVisibility="Horizontal">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="时间" Binding="{Binding Time}" Width="100" />
+                                    <DataGridTextColumn Header="方向" Binding="{Binding Direction}" Width="55" />
+                                    <DataGridTextColumn Header="命令" Binding="{Binding Command}" Width="90" />
+                                    <DataGridTextColumn Header="地址" Binding="{Binding Address}" Width="100" />
+                                    <DataGridTextColumn Header="sendSeq" Binding="{Binding SendSequence}" Width="80" />
+                                    <DataGridTextColumn Header="ackSeq" Binding="{Binding AckSequence}" Width="80" />
+                                    <DataGridTextColumn Header="判定" Binding="{Binding MatchState}" Width="100" />
+                                    <DataGridTextColumn Header="原始byte[]" Binding="{Binding Hex}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem Header="USB/协议状态">
+                        <Grid Margin="14">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid>
+                                <TextBlock Text="只读诊断快照，每500ms自动刷新，不会向硬件发送命令。"
+                                           Foreground="{StaticResource MutedBrush}" />
+                                <Button Content="立即刷新"
+                                        HorizontalAlignment="Right"
+                                        MinHeight="28"
+                                        Padding="12,3"
+                                        Margin="0"
+                                        Click="RefreshDiagnosticsButton_Click" />
+                            </Grid>
+                            <Grid Grid.Row="1" Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="14" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Padding="14" Background="#F6F8FC" CornerRadius="8">
+                                    <StackPanel>
+                                        <TextBlock Text="USB链路" FontWeight="SemiBold" FontSize="15" />
+                                        <TextBlock x:Name="UsbDiagnosticText"
+                                                   Margin="0,10,0,0"
+                                                   FontFamily="Consolas"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="2" Padding="14" Background="#F6F8FC" CornerRadius="8">
+                                    <StackPanel>
+                                        <TextBlock Text="协议运行状态" FontWeight="SemiBold" FontSize="15" />
+                                        <TextBlock x:Name="ProtocolDiagnosticText"
+                                                   Margin="0,10,0,0"
+                                                   FontFamily="Consolas"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+        </TabControl>
+
+        <Border Grid.Row="4"
                 Background="{StaticResource SurfaceBrush}"
                 CornerRadius="12"
                 Padding="0">

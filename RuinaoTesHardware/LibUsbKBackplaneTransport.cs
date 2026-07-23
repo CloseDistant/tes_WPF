@@ -26,6 +26,24 @@ public sealed class LibUsbKBackplaneTransport : IBackplaneTransport, IBackplaneT
     public event EventHandler<UsbWriteCompletedEventArgs>? WriteCompleted;
     public event EventHandler<UsbFrameReceivedEventArgs>? FrameReceived;
 
+    public UsbTransportDiagnosticSnapshot GetSnapshot() => new(
+        IsOpen,
+        IsOpen,
+        bulkOutPipe,
+        bulkInPipe,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        null,
+        0,
+        null,
+        null);
+
     public async Task OpenAsync(
         UsbBackplaneDevice device,
         TimeSpan timeout,

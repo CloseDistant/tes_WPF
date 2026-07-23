@@ -29,6 +29,39 @@ public sealed record BackplaneHandshakeResult(
     byte ResponseCommand = 0,
     ushort ResponseAckSequence = 0);
 
+/// <summary>一次普通寄存器读写操作的真实收发结果。</summary>
+public sealed record BackplaneRegisterOperationResult(
+    ushort RequestSequence,
+    TimeSpan Elapsed,
+    byte TargetAddress,
+    bool IsWrite,
+    IReadOnlyList<RuinaoTesProtocol.V14.TesV14RegisterValue> Registers,
+    byte[] RequestFrame,
+    byte[] ResponseFrame,
+    byte ResponseCommand,
+    ushort ResponseAckSequence);
+
+/// <summary>背板产品信息区一个字符串分组的完整读取结果。</summary>
+public sealed record BackplaneProductInfoTextResult(
+    RuinaoTesProtocol.V14.TesV14ProductInfoGrouping Grouping,
+    int GroupIndex,
+    ushort StartAddress,
+    ushort EndAddress,
+    string Text,
+    int Utf8ByteCount,
+    TimeSpan Elapsed,
+    IReadOnlyList<BackplaneRegisterOperationResult> BatchResults);
+
+/// <summary>背板产品信息区一个字符串分组的分批写入结果。</summary>
+public sealed record BackplaneProductInfoTextWriteResult(
+    RuinaoTesProtocol.V14.TesV14ProductInfoGrouping Grouping,
+    int GroupIndex,
+    ushort StartAddress,
+    ushort EndAddress,
+    int Utf8ByteCount,
+    TimeSpan Elapsed,
+    IReadOnlyList<BackplaneRegisterOperationResult> BatchResults);
+
 public sealed record HardwareLogEntry(
     DateTimeOffset Timestamp,
     string Category,
@@ -51,7 +84,27 @@ public sealed record UsbFrameReceivedEventArgs(
     byte[] Frame,
     ushort SendSequence,
     ushort AckSequence,
-    bool MatchedRequest);
+    bool MatchedRequest,
+    bool IntermediateAcknowledgement = false);
+
+/// <summary>libusbK传输层的只读运行快照，供工程师软件诊断USB和协议链路。</summary>
+public sealed record UsbTransportDiagnosticSnapshot(
+    bool IsOpen,
+    bool ReceiveLoopRunning,
+    byte BulkOutEndpoint,
+    byte BulkInEndpoint,
+    long TransmittedFrameCount,
+    long ReceivedFrameCount,
+    long ReceivedByteCount,
+    long MatchedFrameCount,
+    long UnmatchedFrameCount,
+    long IntermediateAcknowledgementCount,
+    long InvalidFrameCount,
+    long ExchangeTimeoutCount,
+    ushort? PendingSequence,
+    int BufferedByteCount,
+    DateTimeOffset? LastTransmitTime,
+    DateTimeOffset? LastReceiveTime);
 
 /// <summary>
 /// 可选的传输诊断接口。业务层通过它区分“已经生成帧”和“USB已经完整写入”。
@@ -66,6 +119,9 @@ public interface IBackplaneTransferDiagnostics
 
     /// <summary>Endpoint 0x81收到数据并成功拆出完整协议帧时触发。</summary>
     event EventHandler<UsbFrameReceivedEventArgs>? FrameReceived;
+
+    /// <summary>取得当前USB接收线程、帧计数和待应答请求等只读状态。</summary>
+    UsbTransportDiagnosticSnapshot GetSnapshot();
 }
 
 public interface IUsbBackplaneDiscovery

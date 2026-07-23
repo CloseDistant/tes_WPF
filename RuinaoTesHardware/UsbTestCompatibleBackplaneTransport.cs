@@ -23,6 +23,17 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
     private Task? receiveTask;
     private TaskCompletionSource<bool>? receiveLoopReady;
     private PendingExchange? pendingExchange;
+    private long transmittedFrameCount;
+    private long receivedFrameCount;
+    private long receivedByteCount;
+    private long matchedFrameCount;
+    private long unmatchedFrameCount;
+    private long intermediateAcknowledgementCount;
+    private long invalidFrameCount;
+    private long exchangeTimeoutCount;
+    private int bufferedByteCount;
+    private long lastTransmitUtcTicks;
+    private long lastReceiveUtcTicks;
 
     public bool IsOpen => deviceHandle is { IsInvalid: false, IsClosed: false }
         && interfaceHandle != IntPtr.Zero;
@@ -30,6 +41,33 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
     public byte[]? LastWrittenFrame => lastWrittenFrame?.ToArray();
     public event EventHandler<UsbWriteCompletedEventArgs>? WriteCompleted;
     public event EventHandler<UsbFrameReceivedEventArgs>? FrameReceived;
+
+    public UsbTransportDiagnosticSnapshot GetSnapshot()
+    {
+        ushort? pendingSequence;
+        lock (pendingLock)
+        {
+            pendingSequence = pendingExchange?.SendSequence;
+        }
+
+        return new UsbTransportDiagnosticSnapshot(
+            IsOpen,
+            receiveTask is { IsCompleted: false },
+            BulkOutEndpoint,
+            BulkInEndpoint,
+            Interlocked.Read(ref transmittedFrameCount),
+            Interlocked.Read(ref receivedFrameCount),
+            Interlocked.Read(ref receivedByteCount),
+            Interlocked.Read(ref matchedFrameCount),
+            Interlocked.Read(ref unmatchedFrameCount),
+            Interlocked.Read(ref intermediateAcknowledgementCount),
+            Interlocked.Read(ref invalidFrameCount),
+            Interlocked.Read(ref exchangeTimeoutCount),
+            pendingSequence,
+            Volatile.Read(ref bufferedByteCount),
+            ReadTimestamp(ref lastTransmitUtcTicks),
+            ReadTimestamp(ref lastReceiveUtcTicks));
+    }
 
     public async Task OpenAsync(
         UsbBackplaneDevice device,
@@ -105,6 +143,7 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
                 }
                 catch (TimeoutException)
                 {
+                    Interlocked.Increment(ref exchangeTimeoutCount);
                     throw new TimeoutException(
                         $"Endpoint 0x01已发送成功，但在{timeoutMilliseconds}ms内未收到ackSeq={pending.SendSequence}的匹配回复。");
                 }
@@ -209,6 +248,8 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
         }
 
         lastWrittenFrame = request.ToArray();
+        Interlocked.Increment(ref transmittedFrameCount);
+        Interlocked.Exchange(ref lastTransmitUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
         WriteCompleted?.Invoke(
             this,
             new UsbWriteCompletedEventArgs(DateTimeOffset.Now, lastWrittenFrame.ToArray(), checked((int)written)));
@@ -255,6 +296,7 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
                 continue;
             }
 
+            Interlocked.Add(ref receivedByteCount, read);
             AppendAndDispatchFrames(buffer.AsSpan(0, checked((int)read)));
         }
     }
@@ -265,6 +307,7 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
         {
             receiveBuffer.Add(chunk[index]);
         }
+        Volatile.Write(ref bufferedByteCount, receiveBuffer.Count);
 
         while (true)
         {
@@ -279,12 +322,15 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
                     receiveBuffer.Add(0xA5);
                 }
 
+                Volatile.Write(ref bufferedByteCount, receiveBuffer.Count);
+
                 return;
             }
 
             if (markerIndex > 0)
             {
                 receiveBuffer.RemoveRange(0, markerIndex);
+                Volatile.Write(ref bufferedByteCount, receiveBuffer.Count);
             }
 
             if (receiveBuffer.Count < TesV14ProtocolConstants.HeaderLength)
@@ -307,10 +353,13 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
             {
                 // 当前A5 5A不是有效帧头或帧已损坏，右移一字节重新同步。
                 receiveBuffer.RemoveAt(0);
+                Interlocked.Increment(ref invalidFrameCount);
+                Volatile.Write(ref bufferedByteCount, receiveBuffer.Count);
                 continue;
             }
 
             receiveBuffer.RemoveRange(0, frameLength);
+            Volatile.Write(ref bufferedByteCount, receiveBuffer.Count);
             DispatchFrame(frame, candidate);
         }
     }
@@ -319,24 +368,50 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
     {
         PendingExchange? pending;
         var matched = false;
+        var intermediateAcknowledgement = false;
         lock (pendingLock)
         {
             pending = pendingExchange;
             if (pending is not null
                 && !pending.Completion.Task.IsCompleted
                 && frame.SourceAddress == pending.ExpectedSourceAddress
-                && frame.DestinationAddress == pending.ExpectedDestinationAddress
-                && (frame.AckSequence == pending.SendSequence
-                    || (frame.AckSequence == 0
-                        && (frame.Command is TesV14Command.Acknowledgement
-                            || frame.Command == pending.RequestCommand))))
+                && frame.DestinationAddress == pending.ExpectedDestinationAddress)
             {
-                matched = pending.Completion.TrySetResult(frameBytes);
+                var terminalCommand = IsTerminalResponse(pending.RequestCommand, frame.Command);
+                var sequenceMatches = frame.AckSequence == pending.SendSequence
+                    || (frame.AckSequence == 0 && terminalCommand);
+                if (terminalCommand && sequenceMatches)
+                {
+                    matched = pending.Completion.TrySetResult(frameBytes);
+                }
+                else if (pending.RequestCommand == TesV14Command.Read
+                    && frame.Command == TesV14Command.Acknowledgement
+                    && frame.AckSequence == pending.SendSequence)
+                {
+                    // 固件会先用ACK表示“读取请求已受理”，随后再返回包含寄存器内容的0x04响应。
+                    // 这帧不能结束Exchange，否则4字节ACK状态会被误当成寄存器载荷。
+                    intermediateAcknowledgement = true;
+                }
             }
         }
 
         try
         {
+            Interlocked.Increment(ref receivedFrameCount);
+            Interlocked.Exchange(ref lastReceiveUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
+            if (matched)
+            {
+                Interlocked.Increment(ref matchedFrameCount);
+            }
+            else if (intermediateAcknowledgement)
+            {
+                Interlocked.Increment(ref intermediateAcknowledgementCount);
+            }
+            else
+            {
+                Interlocked.Increment(ref unmatchedFrameCount);
+            }
+
             FrameReceived?.Invoke(
                 this,
                 new UsbFrameReceivedEventArgs(
@@ -344,13 +419,23 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
                     frameBytes.ToArray(),
                     frame.SendSequence,
                     frame.AckSequence,
-                    matched));
+                    matched,
+                    intermediateAcknowledgement));
         }
         catch
         {
             // 诊断日志订阅者异常不能终止USB后台接收循环。
         }
     }
+
+    private static bool IsTerminalResponse(TesV14Command request, TesV14Command response) =>
+        request switch
+        {
+            TesV14Command.Handshake => response is TesV14Command.Handshake or TesV14Command.Acknowledgement,
+            TesV14Command.Read => response == TesV14Command.Response,
+            TesV14Command.Write => response is TesV14Command.Response or TesV14Command.Acknowledgement,
+            _ => response is TesV14Command.Response or TesV14Command.Acknowledgement,
+        };
 
     private async Task CloseCoreAsync()
     {
@@ -396,6 +481,13 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
         receiveLoopReady = null;
         cancellation?.Dispose();
         receiveBuffer.Clear();
+        Volatile.Write(ref bufferedByteCount, 0);
+    }
+
+    private static DateTimeOffset? ReadTimestamp(ref long utcTicks)
+    {
+        var ticks = Interlocked.Read(ref utcTicks);
+        return ticks == 0 ? null : new DateTimeOffset(ticks, TimeSpan.Zero);
     }
 
     private static PendingExchange CreatePendingExchange(byte[] request)
