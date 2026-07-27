@@ -326,10 +326,13 @@
 
                                         <TextBlock Grid.Row="4" Text="极性" Style="{StaticResource PulseLabelStyle}" />
                                         <ComboBox Grid.Row="4" Grid.Column="1"
-                                                  ItemsSource="{Binding DataContext.Polarities, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                  SelectedItem="{Binding Polarity, Mode=TwoWay}"
                                                   IsEnabled="{Binding IsParameterEditingEnabled}"
-                                                  Style="{StaticResource StimulationComboBox}" />
+                                                  SelectedValuePath="Content"
+                                                  SelectedValue="{Binding Polarity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  Style="{StaticResource StimulationComboBox}">
+                                            <ComboBoxItem Content="不掉转" />
+                                            <ComboBoxItem Content="调转" />
+                                        </ComboBox>
                                     </Grid>
 
                                     <Grid Grid.Column="2" Margin="18,0,0,0">

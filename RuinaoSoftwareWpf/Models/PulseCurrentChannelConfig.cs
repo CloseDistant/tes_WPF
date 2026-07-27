@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 namespace RuinaoSoftwareWpf;
 
@@ -54,7 +54,21 @@ public sealed class PulseCurrentChannelConfig : ObservableObject
         set => SetParameter(ref treatmentDurationSeconds, value);
     }
 
-    public string Polarity { get => polarity; set => SetParameter(ref polarity, value); }
+    public string Polarity
+    {
+        get => polarity;
+        set
+        {
+            // WPF 在页面退出、ItemsSource 解除绑定时可能短暂回写 null。
+            // 极性属于本次登录期间保留的通道参数，不能被视图生命周期清空。
+            if (!PulseCurrentPolarities.All.Contains(value, StringComparer.Ordinal))
+            {
+                return;
+            }
+
+            SetParameter(ref polarity, value);
+        }
+    }
 
     public string MonitoringDisplay => "允许";
 
