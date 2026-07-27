@@ -1,5 +1,11 @@
 ﻿namespace RuinaoTesProtocol.V15;
 
+public enum TesV15ParameterValidationMode
+{
+    RecommendedRange,
+    ProtocolRange,
+}
+
 /// <summary>
 /// 工程师软件输入单位到 V1.5 寄存器单位的确定性转换。
 /// tDCS 的 DAC 比例属于硬件标定值，必须由调用方明确提供。
@@ -8,13 +14,23 @@ public static class TesV15EngineeringUnitConverter
 {
     public const decimal MaximumCurrentMilliampere = 15M;
 
-    public static uint MilliampereToMicroampere(decimal currentMilliampere)
+    public static uint MilliampereToMicroampere(
+        decimal currentMilliampere,
+        TesV15ParameterValidationMode validationMode = TesV15ParameterValidationMode.RecommendedRange)
     {
-        ValidateCurrent(currentMilliampere);
-        return checked((uint)decimal.Round(
+        ValidateCurrent(currentMilliampere, validationMode);
+        var microampere = decimal.Round(
             currentMilliampere * 1000M,
             0,
-            MidpointRounding.AwayFromZero));
+            MidpointRounding.AwayFromZero);
+        if (microampere > uint.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(currentMilliampere),
+                "电流换算结果超出协议uint32可表示范围。");
+        }
+
+        return checked((uint)microampere);
     }
 
     public static uint SecondsToMilliseconds(decimal seconds, string parameterName)
@@ -78,10 +94,12 @@ public static class TesV15EngineeringUnitConverter
         decimal currentMilliampere,
         uint zeroCurrentDac,
         decimal dacCountsPerMilliampere,
-        bool reversePolarity)
+        bool reversePolarity,
+        TesV15ParameterValidationMode validationMode = TesV15ParameterValidationMode.RecommendedRange)
     {
-        ValidateCurrent(currentMilliampere);
-        if (zeroCurrentDac > 60000)
+        ValidateCurrent(currentMilliampere, validationMode);
+        if (validationMode == TesV15ParameterValidationMode.RecommendedRange
+            && zeroCurrentDac > 60000)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(zeroCurrentDac),
@@ -100,7 +118,15 @@ public static class TesV15EngineeringUnitConverter
             0,
             MidpointRounding.AwayFromZero);
         var target = reversePolarity ? zeroCurrentDac - delta : zeroCurrentDac + delta;
-        if (target is < 0 or > 60000)
+        if (target < 0 || target > uint.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(currentMilliampere),
+                $"换算后的目标DAC值{target}超出协议uint32可表示范围。");
+        }
+
+        if (validationMode == TesV15ParameterValidationMode.RecommendedRange
+            && target > 60000)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(currentMilliampere),
@@ -126,9 +152,19 @@ public static class TesV15EngineeringUnitConverter
         return checked((uint)converted);
     }
 
-    private static void ValidateCurrent(decimal currentMilliampere)
+    private static void ValidateCurrent(
+        decimal currentMilliampere,
+        TesV15ParameterValidationMode validationMode)
     {
-        if (currentMilliampere <= 0 || currentMilliampere > MaximumCurrentMilliampere)
+        if (currentMilliampere <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(currentMilliampere),
+                "电流必须大于0mA。");
+        }
+
+        if (validationMode == TesV15ParameterValidationMode.RecommendedRange
+            && currentMilliampere > MaximumCurrentMilliampere)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(currentMilliampere),

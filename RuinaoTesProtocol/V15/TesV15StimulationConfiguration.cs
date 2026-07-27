@@ -60,7 +60,8 @@ public static class TesV15StimulationRegisterCodec
         uint highLevel,
         uint risePermille,
         uint holdPermille,
-        uint fallPermille)
+        uint fallPermille,
+        TesV15ParameterValidationMode validationMode = TesV15ParameterValidationMode.RecommendedRange)
     {
         return CreateDirectCurrent(
             channelNumber,
@@ -71,7 +72,8 @@ public static class TesV15StimulationRegisterCodec
             highLevel,
             risePermille,
             holdPermille,
-            fallPermille);
+            fallPermille,
+            validationMode);
     }
 
     public static TesV15StimulationConfiguration CreateDirectCurrent(
@@ -83,11 +85,12 @@ public static class TesV15StimulationRegisterCodec
         uint highLevel,
         uint risePermille,
         uint holdPermille,
-        uint fallPermille)
+        uint fallPermille,
+        TesV15ParameterValidationMode validationMode = TesV15ParameterValidationMode.RecommendedRange)
     {
         ValidateChannelAndTime(channelNumber, totalTimeMs);
-        ValidateDacValue(lowLevel, nameof(lowLevel));
-        ValidateDacValue(highLevel, nameof(highLevel));
+        ValidateDacValue(lowLevel, nameof(lowLevel), validationMode);
+        ValidateDacValue(highLevel, nameof(highLevel), validationMode);
         ValidateTrapezoidPermille(risePermille, holdPermille, fallPermille);
         return CreateTrapezoidProgram(
             channelNumber,
@@ -112,11 +115,12 @@ public static class TesV15StimulationRegisterCodec
         uint targetLevel,
         uint riseDurationUs,
         uint plateauDurationUs,
-        uint intervalDurationUs)
+        uint intervalDurationUs,
+        TesV15ParameterValidationMode validationMode = TesV15ParameterValidationMode.RecommendedRange)
     {
         ValidateChannelAndTime(channelNumber, totalTimeMs);
-        ValidateDacValue(baselineLevel, nameof(baselineLevel));
-        ValidateDacValue(targetLevel, nameof(targetLevel));
+        ValidateDacValue(baselineLevel, nameof(baselineLevel), validationMode);
+        ValidateDacValue(targetLevel, nameof(targetLevel), validationMode);
         if (riseDurationUs == 0)
         {
             throw new ArgumentOutOfRangeException(
@@ -333,9 +337,13 @@ public static class TesV15StimulationRegisterCodec
         }
     }
 
-    private static void ValidateDacValue(uint value, string parameterName)
+    private static void ValidateDacValue(
+        uint value,
+        string parameterName,
+        TesV15ParameterValidationMode validationMode)
     {
-        if (value > 60000)
+        if (validationMode == TesV15ParameterValidationMode.RecommendedRange
+            && value > 60000)
         {
             throw new ArgumentOutOfRangeException(parameterName, "usbtest2刺激DAC值必须在0到60000之间。");
         }

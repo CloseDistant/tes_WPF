@@ -190,4 +190,48 @@ public sealed class TesV15StimulationRegisterCodecTests
                 dacCountsPerMilliampere: 0,
                 reversePolarity: false));
     }
+
+    [Fact]
+    public void RecommendedRange_StillRejectsCurrentAndDacAboveProductLimits()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TesV15EngineeringUnitConverter.DirectCurrentToDac(
+                currentMilliampere: 16M,
+                zeroCurrentDac: 30_000,
+                dacCountsPerMilliampere: 3_000M,
+                reversePolarity: false));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TesV15StimulationRegisterCodec.CreateDirectCurrent(
+                channelNumber: 1,
+                totalTimeMs: 1_000,
+                lowLevel: 60_001,
+                highLevel: 70_000,
+                risePermille: 100,
+                holdPermille: 800,
+                fallPermille: 100));
+    }
+
+    [Fact]
+    public void ProtocolRange_AllowsCurrentAndDacAboveProductLimits()
+    {
+        var dac = TesV15EngineeringUnitConverter.DirectCurrentToDac(
+            currentMilliampere: 20M,
+            zeroCurrentDac: 70_000,
+            dacCountsPerMilliampere: 3_000M,
+            reversePolarity: false,
+            validationMode: TesV15ParameterValidationMode.ProtocolRange);
+        var configuration = TesV15StimulationRegisterCodec.CreateDirectCurrent(
+            channelNumber: 1,
+            totalTimeMs: 1_000,
+            lowLevel: dac.BaselineDac,
+            highLevel: dac.TargetDac,
+            risePermille: 100,
+            holdPermille: 800,
+            fallPermille: 100,
+            validationMode: TesV15ParameterValidationMode.ProtocolRange);
+
+        Assert.Equal((70_000U, 130_000U), dac);
+        Assert.Equal(70_000U, configuration.Waveforms[0].LowLevelOrPositiveValue);
+        Assert.Equal(130_000U, configuration.Waveforms[0].HighLevelOrNegativeValue);
+    }
 }

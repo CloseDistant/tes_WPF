@@ -336,7 +336,8 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
             currentMilliampere,
             ParseUInt(ZeroCurrentDac, "零电流DAC值"),
             ParseDecimal(DacCountsPerMilliampere, "每mA对应DAC计数"),
-            ReversePolarity);
+            ReversePolarity,
+            TesV15ParameterValidationMode.ProtocolRange);
 
         if (IsDirectCurrent)
         {
@@ -363,7 +364,8 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
                 dacValues.TargetDac,
                 trapezoid.RisePermille,
                 trapezoid.HoldPermille,
-                trapezoid.FallPermille);
+                trapezoid.FallPermille,
+                TesV15ParameterValidationMode.ProtocolRange);
         }
 
         return TesV15StimulationRegisterCodec.CreatePulseCurrent(
@@ -379,7 +381,8 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
                 "脉冲宽度"),
             TesV15EngineeringUnitConverter.MillisecondsToMicroseconds(
                 ParseDecimal(PulseIntervalWidthMilliseconds, "间隔宽度"),
-                "间隔宽度"));
+                "间隔宽度"),
+            TesV15ParameterValidationMode.ProtocolRange);
     }
 
     private static uint ParseUInt(string text, string fieldName)

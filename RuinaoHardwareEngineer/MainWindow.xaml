@@ -393,9 +393,10 @@
                                                   IsChecked="{Binding ReversePolarity}" />
                                     </StackPanel>
                                 </UniformGrid>
-                                <TextBlock Text="“DAC计数/mA”必须填写硬件标定值；未填写时禁止下发任何刺激配置。"
+                                <TextBlock Text="工程联调模式已解除15mA与DAC 0～60000建议上限；仍须填写硬件标定值，并保留uint32协议边界。"
                                            Margin="0,10,0,0"
-                                           Foreground="#B42318" />
+                                           Foreground="#9A4E00"
+                                           TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
 
