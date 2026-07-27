@@ -1,4 +1,4 @@
-<UserControl x:Class="RuinaoSoftwareWpf.Views.DirectCurrentControlView"
+﻿<UserControl x:Class="RuinaoSoftwareWpf.Views.DirectCurrentControlView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:RuinaoSoftwareWpf"
@@ -170,6 +170,7 @@
                                                          SelectCommand="{Binding DataContext.SelectChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                          ShowCarrierFrequency="False"
                                                          ShowPolarity="True"
+                                                         ShowStatusMonitor="False"
                                                          EnableSimulatedWaveform="True"
                                                          ShowElectrodeDescription="False"
                                                          HighlightBorder="{Binding IsSelected}" />

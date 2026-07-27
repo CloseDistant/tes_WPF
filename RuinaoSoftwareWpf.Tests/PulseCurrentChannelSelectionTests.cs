@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System.Windows;
 
 namespace RuinaoSoftwareWpf.Tests;
@@ -6,18 +6,17 @@ namespace RuinaoSoftwareWpf.Tests;
 public sealed class PulseCurrentChannelSelectionTests
 {
     [Fact]
-    public void Constructor_CreatesEightPairsAndSelectsOnlyFirstChannel()
+    public void Constructor_CreatesSinglePairAndSelectsOnlyFirstChannel()
     {
         var viewModel = CreateViewModel();
 
-        Assert.Equal(16, viewModel.Channels.Count);
-        Assert.Equal(8, viewModel.ChannelPairs.Count);
+        Assert.Equal(2, viewModel.Channels.Count);
+        Assert.Single(viewModel.ChannelPairs);
         Assert.Same(viewModel.ChannelPairs[0], viewModel.SelectedChannelPair);
         Assert.Same(viewModel.Channels[0], viewModel.SelectedChannel);
         Assert.True(viewModel.Channels[0].IsSelected);
         Assert.False(viewModel.Channels[1].IsSelected);
         Assert.Equal(["CH 1", "CH 2"], viewModel.SelectedChannels.Select(channel => channel.Name));
-        Assert.Equal(["CH 15", "CH 16"], viewModel.ChannelPairs[7].Channels.Select(channel => channel.Name));
         Assert.All(
             viewModel.Channels,
             channel => Assert.Equal(PulseCurrentPolarities.NotReversed, channel.Polarity));
@@ -27,7 +26,7 @@ public sealed class PulseCurrentChannelSelectionTests
     public void SelectChannelCommand_SelectsOnlyClickedChannelAndDisplaysItsPair()
     {
         var viewModel = CreateViewModel();
-        var targetPair = viewModel.ChannelPairs[3];
+        var targetPair = viewModel.ChannelPairs[0];
 
         viewModel.SelectChannelCommand.Execute(targetPair.SecondChannel);
 
@@ -36,25 +35,25 @@ public sealed class PulseCurrentChannelSelectionTests
         Assert.False(targetPair.FirstChannel.IsSelected);
         Assert.True(targetPair.SecondChannel.IsSelected);
         Assert.Equal(1, viewModel.Channels.Count(channel => channel.IsSelected));
-        Assert.Equal(["CH 7", "CH 8"], viewModel.SelectedChannels.Select(channel => channel.Name));
+        Assert.Equal(["CH 1", "CH 2"], viewModel.SelectedChannels.Select(channel => channel.Name));
     }
 
     [Fact]
-    public void SwitchingPairs_PreservesEachChannelsIndependentParameters()
+    public void SwitchingChannels_PreservesEachChannelsIndependentParameters()
     {
         var viewModel = CreateViewModel();
         viewModel.Channels[0].CurrentMilliamp = "1";
-        viewModel.Channels[2].CurrentMilliamp = "2";
+        viewModel.Channels[1].CurrentMilliamp = "2";
 
-        viewModel.SelectChannelCommand.Execute(viewModel.ChannelPairs[1].FirstChannel);
+        viewModel.SelectChannelCommand.Execute(viewModel.ChannelPairs[0].SecondChannel);
         viewModel.SelectChannelCommand.Execute(viewModel.ChannelPairs[0].FirstChannel);
 
         Assert.Equal("1", viewModel.SelectedChannels[0].CurrentMilliamp);
-        Assert.Equal("2", viewModel.ChannelPairs[1].FirstChannel.CurrentMilliamp);
+        Assert.Equal("2", viewModel.ChannelPairs[0].SecondChannel.CurrentMilliamp);
     }
 
     [Fact]
-    public void SynchronizedStart_StartsAllSixteenChannels()
+    public void SynchronizedStart_StartsBothChannels()
     {
         using var viewModel = CreateViewModel();
         ConfigureValidPulseParameters(viewModel.Channels);
@@ -73,7 +72,7 @@ public sealed class PulseCurrentChannelSelectionTests
     {
         using var viewModel = CreateViewModel();
         ConfigureValidPulseParameters(viewModel.Channels);
-        viewModel.Channels[15].CurrentMilliamp = string.Empty;
+        viewModel.Channels[1].CurrentMilliamp = string.Empty;
 
         viewModel.SynchronizedStartCommand.Execute(null);
 

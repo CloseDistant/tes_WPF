@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using Xunit;
 
 namespace RuinaoSoftwareWpf.Tests;
@@ -6,25 +6,24 @@ namespace RuinaoSoftwareWpf.Tests;
 public sealed class DirectCurrentChannelSelectionTests
 {
     [Fact]
-    public void Constructor_CreatesEightPairsAndSelectsOnlyFirstChannel()
+    public void Constructor_CreatesSinglePairAndSelectsOnlyFirstChannel()
     {
         var viewModel = CreateViewModel();
 
-        Assert.Equal(16, viewModel.Channels.Count);
-        Assert.Equal(8, viewModel.ChannelPairs.Count);
+        Assert.Equal(2, viewModel.Channels.Count);
+        Assert.Single(viewModel.ChannelPairs);
         Assert.Same(viewModel.ChannelPairs[0], viewModel.SelectedChannelPair);
         Assert.Same(viewModel.Channels[0], viewModel.SelectedChannel);
         Assert.True(viewModel.Channels[0].IsSelected);
         Assert.False(viewModel.Channels[1].IsSelected);
         Assert.Equal(["CH 1", "CH 2"], viewModel.SelectedChannels.Select(channel => channel.Name));
-        Assert.Equal(["CH 15", "CH 16"], viewModel.ChannelPairs[7].Channels.Select(channel => channel.Name));
     }
 
     [Fact]
     public void SelectChannelCommand_SelectsOnlyClickedChannelAndDisplaysItsPair()
     {
         var viewModel = CreateViewModel();
-        var targetPair = viewModel.ChannelPairs[4];
+        var targetPair = viewModel.ChannelPairs[0];
         var targetChannel = targetPair.SecondChannel;
 
         viewModel.SelectChannelCommand.Execute(targetChannel);
@@ -34,25 +33,25 @@ public sealed class DirectCurrentChannelSelectionTests
         Assert.False(targetPair.FirstChannel.IsSelected);
         Assert.True(targetPair.SecondChannel.IsSelected);
         Assert.Equal(1, viewModel.Channels.Count(channel => channel.IsSelected));
-        Assert.Equal(["CH 9", "CH 10"], viewModel.SelectedChannels.Select(channel => channel.Name));
+        Assert.Equal(["CH 1", "CH 2"], viewModel.SelectedChannels.Select(channel => channel.Name));
     }
 
     [Fact]
-    public void SwitchingPairs_PreservesEachChannelsIndependentParameters()
+    public void SwitchingChannels_PreservesEachChannelsIndependentParameters()
     {
         var viewModel = CreateViewModel();
         viewModel.Channels[0].CurrentMA = "1.0";
-        viewModel.Channels[2].CurrentMA = "1.5";
+        viewModel.Channels[1].CurrentMA = "1.5";
 
-        viewModel.SelectChannelCommand.Execute(viewModel.ChannelPairs[1].FirstChannel);
+        viewModel.SelectChannelCommand.Execute(viewModel.ChannelPairs[0].SecondChannel);
         viewModel.SelectChannelCommand.Execute(viewModel.ChannelPairs[0].FirstChannel);
 
         Assert.Equal("1.0", viewModel.SelectedChannels[0].CurrentMA);
-        Assert.Equal("1.5", viewModel.ChannelPairs[1].FirstChannel.CurrentMA);
+        Assert.Equal("1.5", viewModel.ChannelPairs[0].SecondChannel.CurrentMA);
     }
 
     [Fact]
-    public void SynchronizedStart_StartsAllSixteenChannelsAfterEveryChannelPassesValidation()
+    public void SynchronizedStart_StartsBothChannelsAfterEveryChannelPassesValidation()
     {
         var engine = new NoopStimulationEngine();
         var viewModel = CreateViewModel(engine);
@@ -64,7 +63,7 @@ public sealed class DirectCurrentChannelSelectionTests
         viewModel.SynchronizedStartCommand.Execute(null);
 
         Assert.NotNull(engine.LastStartedDirectCurrentGroup);
-        Assert.Equal(16, engine.LastStartedDirectCurrentGroup.Channels.Count);
+        Assert.Equal(2, engine.LastStartedDirectCurrentGroup.Channels.Count);
         Assert.All(viewModel.Channels, channel => Assert.True(channel.DirectCurrentWaveform.IsRunning));
         Assert.All(viewModel.Channels, channel => Assert.True(channel.IsStimulating));
 
@@ -82,7 +81,7 @@ public sealed class DirectCurrentChannelSelectionTests
             channel.CurrentMA = "1";
         }
 
-        viewModel.Channels[15].CurrentMA = string.Empty;
+        viewModel.Channels[1].CurrentMA = string.Empty;
 
         viewModel.SynchronizedStartCommand.Execute(null);
 

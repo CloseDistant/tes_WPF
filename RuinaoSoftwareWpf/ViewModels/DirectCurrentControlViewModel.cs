@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Windows.Input;
@@ -11,6 +11,8 @@ namespace RuinaoSoftwareWpf;
 /// <summary>经颅直流电刺激页面状态和通道级控制命令。</summary>
 public sealed class DirectCurrentControlViewModel : ObservableObject
 {
+    private const int AvailableChannelCount = 2;
+
     private readonly IStimulationEngine stimulationEngine;
     private readonly IHardwareConnectionState hardwareConnectionState;
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
@@ -45,10 +47,10 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         var accent = new SolidColorBrush(Color.FromRgb(228, 232, 239));
         accent.Freeze();
         Channels = new ObservableCollection<ChannelConfig>(
-            Enumerable.Range(1, 16).Select(channelNumber =>
+            Enumerable.Range(1, AvailableChannelCount).Select(channelNumber =>
                 CreateChannel($"CH {channelNumber}", accent)));
         ChannelPairs = new ObservableCollection<DirectCurrentChannelPair>(
-            Enumerable.Range(0, 8).Select(pairIndex =>
+            Enumerable.Range(0, AvailableChannelCount / 2).Select(pairIndex =>
                 new DirectCurrentChannelPair(
                     pairIndex + 1,
                     Channels[pairIndex * 2],
@@ -265,9 +267,9 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         }
 
         var synchronizedChannels = Channels.ToArray();
-        if (synchronizedChannels.Length != 16)
+        if (synchronizedChannels.Length != AvailableChannelCount)
         {
-            toastService.ShowError("同步开始失败", "同步开始要求 16 个通道全部可用。");
+            toastService.ShowError("同步开始失败", "同步开始要求 CH1、CH2 两个通道全部可用。");
             return;
         }
 

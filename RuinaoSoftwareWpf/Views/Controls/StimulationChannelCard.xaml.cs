@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
@@ -40,6 +40,12 @@ public partial class StimulationChannelCard : UserControl
 
     public static readonly DependencyProperty ShowElectrodeDescriptionProperty = DependencyProperty.Register(
         nameof(ShowElectrodeDescription),
+        typeof(bool),
+        typeof(StimulationChannelCard),
+        new PropertyMetadata(true));
+
+    public static readonly DependencyProperty ShowStatusMonitorProperty = DependencyProperty.Register(
+        nameof(ShowStatusMonitor),
         typeof(bool),
         typeof(StimulationChannelCard),
         new PropertyMetadata(true));
@@ -101,6 +107,12 @@ public partial class StimulationChannelCard : UserControl
     {
         get => (bool)GetValue(ShowElectrodeDescriptionProperty);
         set => SetValue(ShowElectrodeDescriptionProperty, value);
+    }
+
+    public bool ShowStatusMonitor
+    {
+        get => (bool)GetValue(ShowStatusMonitorProperty);
+        set => SetValue(ShowStatusMonitorProperty, value);
     }
 
     public bool EnableSimulatedWaveform

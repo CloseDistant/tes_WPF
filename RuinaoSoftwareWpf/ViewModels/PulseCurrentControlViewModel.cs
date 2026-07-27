@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
@@ -12,6 +12,8 @@ namespace RuinaoSoftwareWpf;
 /// </summary>
 public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
 {
+    private const int AvailableChannelCount = 2;
+
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly IToastService toastService;
     private readonly ILoggingService logger;
@@ -37,14 +39,14 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         this.logger = logger;
         Localization = localization;
         Channels = new ObservableCollection<PulseCurrentChannelConfig>(
-            Enumerable.Range(1, 16).Select(channelNumber =>
+            Enumerable.Range(1, AvailableChannelCount).Select(channelNumber =>
                 new PulseCurrentChannelConfig
                 {
                     Name = $"CH {channelNumber}",
                     Polarity = PulseCurrentPolarities.NotReversed
                 }));
         ChannelPairs = new ObservableCollection<PulseCurrentChannelPair>(
-            Enumerable.Range(0, 8).Select(pairIndex =>
+            Enumerable.Range(0, AvailableChannelCount / 2).Select(pairIndex =>
                 new PulseCurrentChannelPair(
                     pairIndex + 1,
                     Channels[pairIndex * 2],
@@ -254,9 +256,9 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
     private void StartSynchronized()
     {
         var synchronizedChannels = Channels.ToArray();
-        if (synchronizedChannels.Length != 16)
+        if (synchronizedChannels.Length != AvailableChannelCount)
         {
-            toastService.ShowError("同步开始失败", "同步开始要求 16 个通道全部可用。");
+            toastService.ShowError("同步开始失败", "同步开始要求 CH1、CH2 两个通道全部可用。");
             return;
         }
 
@@ -272,7 +274,7 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
             snapshots[channel] = snapshot!;
         }
 
-        // 16 个通道全部校验成功后共享同一时间戳，避免出现部分启动。
+        // 两个可用通道全部校验成功后共享同一时间戳，避免出现部分启动。
         var sharedTimestamp = Stopwatch.GetTimestamp();
         foreach (var channel in synchronizedChannels)
         {
