@@ -40,8 +40,8 @@ public sealed class TesV15StimulationRegisterCodecTests
         var configuration = TesV15StimulationRegisterCodec.CreatePulseCurrent(
             channelNumber: 1,
             totalTimeMs: 120_000,
-            baselineLevel: 30_000,
-            targetLevel: 36_000,
+            lowLevel: 10_000,
+            highLevel: 50_000,
             riseDurationUs: 5_000,
             plateauDurationUs: 10_000,
             intervalDurationUs: 20_000);
@@ -56,15 +56,15 @@ public sealed class TesV15StimulationRegisterCodecTests
         Assert.Equal(15_000U, active.DurationUs);
         Assert.Equal(120_000U, configuration.TotalTimeMs);
         Assert.Equal(8U, activeRegisters[0].Value);
-        Assert.Equal(30_000U, activeRegisters[7].Value);
-        Assert.Equal(36_000U, activeRegisters[8].Value);
+        Assert.Equal(10_000U, activeRegisters[7].Value);
+        Assert.Equal(50_000U, activeRegisters[8].Value);
         Assert.Equal(333U, activeRegisters[9].Value);
         Assert.Equal(667U, activeRegisters[10].Value);
         Assert.Equal(0U, activeRegisters[11].Value);
         Assert.Equal(TesV15StimulationMode.Constant, interval.Mode);
         Assert.Equal(20_000U, interval.DurationUs);
         Assert.Equal(1U, intervalRegisters[0].Value);
-        Assert.Equal(30_000U, intervalRegisters[4].Value);
+        Assert.Equal(10_000U, intervalRegisters[4].Value);
         Assert.Equal(1U, configuration.ChannelFlags & 1U);
         Assert.DoesNotContain(configuration.Waveforms, waveform => (uint)waveform.Mode == 10U);
     }

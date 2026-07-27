@@ -272,10 +272,16 @@
                                            Margin="0,5,0,12"
                                            Foreground="#9A4E00"
                                            TextWrapping="Wrap" />
-                                <UniformGrid Columns="6">
+                                <UniformGrid Columns="4">
                                     <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="电流 mA" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding DirectCurrentMilliampere, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="LowLevel（原始值）" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding LowLevel, UpdateSourceTrigger=PropertyChanged}"
+                                                 Margin="0,5,0,0"
+                                                 FontFamily="Consolas" />
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,12,0">
+                                        <TextBlock Text="HighLevel（原始值）" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding HighLevel, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
@@ -291,6 +297,8 @@
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
+                                </UniformGrid>
+                                <UniformGrid Columns="3" Margin="0,12,0,0">
                                     <StackPanel Margin="0,0,12,0">
                                         <TextBlock Text="单次刺激时长 s" Foreground="{StaticResource MutedBrush}" />
                                         <TextBox Text="{Binding DirectSingleDurationSeconds, UpdateSourceTrigger=PropertyChanged}"
@@ -312,6 +320,10 @@
                                                   IsChecked="{Binding DirectIntervalMode}" />
                                     </StackPanel>
                                 </UniformGrid>
+                                <TextBlock Text="除时间换算外，类型8有效参数按usbtest2原始格式下发：LowLevel、HighLevel及上升/平台/渐降千分比。"
+                                           Margin="0,10,0,0"
+                                           Foreground="#0B6B3A"
+                                           TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
 
@@ -330,10 +342,16 @@
                                            Margin="0,5,0,12"
                                            Foreground="{StaticResource MutedBrush}"
                                            TextWrapping="Wrap" />
-                                <UniformGrid Columns="4">
+                                <UniformGrid Columns="5">
                                     <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="电流 mA" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding PulseCurrentMilliampere, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="LowLevel（原始值）" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding LowLevel, UpdateSourceTrigger=PropertyChanged}"
+                                                 Margin="0,5,0,0"
+                                                 FontFamily="Consolas" />
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,12,0">
+                                        <TextBlock Text="HighLevel（原始值）" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding HighLevel, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
@@ -359,44 +377,6 @@
                                 <TextBlock Text="DLL固定生成：上升 + 平台 + 0渐降；不会生成类型10。"
                                            Margin="0,10,0,0"
                                            Foreground="#0B6B3A" />
-                            </StackPanel>
-                        </Border>
-
-                        <Border Margin="0,14,0,0"
-                                Padding="16"
-                                CornerRadius="10"
-                                Background="#FFF8EC"
-                                BorderBrush="#F0D8A8"
-                                BorderThickness="1"
-                                IsEnabled="{Binding CanEditConfiguration}">
-                            <StackPanel>
-                                <TextBlock Text="共用电流标定"
-                                           FontSize="16"
-                                           FontWeight="SemiBold" />
-                                <UniformGrid Columns="3" Margin="0,12,0,0">
-                                    <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="零电流 DAC" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding ZeroCurrentDac, UpdateSourceTrigger=PropertyChanged}"
-                                                 Margin="0,5,0,0"
-                                                 FontFamily="Consolas" />
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="DAC计数 / mA" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding DacCountsPerMilliampere, UpdateSourceTrigger=PropertyChanged}"
-                                                 Margin="0,5,0,0"
-                                                 FontFamily="Consolas" />
-                                    </StackPanel>
-                                    <StackPanel>
-                                        <TextBlock Text="极性" Foreground="{StaticResource MutedBrush}" />
-                                        <CheckBox Content="调转"
-                                                  Margin="0,10,0,0"
-                                                  IsChecked="{Binding ReversePolarity}" />
-                                    </StackPanel>
-                                </UniformGrid>
-                                <TextBlock Text="工程联调模式已解除15mA与DAC 0～60000建议上限；仍须填写硬件标定值，并保留uint32协议边界。"
-                                           Margin="0,10,0,0"
-                                           Foreground="#9A4E00"
-                                           TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
 

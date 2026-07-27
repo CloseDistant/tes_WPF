@@ -111,16 +111,16 @@ public static class TesV15StimulationRegisterCodec
     public static TesV15StimulationConfiguration CreatePulseCurrent(
         byte channelNumber,
         uint totalTimeMs,
-        uint baselineLevel,
-        uint targetLevel,
+        uint lowLevel,
+        uint highLevel,
         uint riseDurationUs,
         uint plateauDurationUs,
         uint intervalDurationUs,
         TesV15ParameterValidationMode validationMode = TesV15ParameterValidationMode.RecommendedRange)
     {
         ValidateChannelAndTime(channelNumber, totalTimeMs);
-        ValidateDacValue(baselineLevel, nameof(baselineLevel), validationMode);
-        ValidateDacValue(targetLevel, nameof(targetLevel), validationMode);
+        ValidateDacValue(lowLevel, nameof(lowLevel), validationMode);
+        ValidateDacValue(highLevel, nameof(highLevel), validationMode);
         if (riseDurationUs == 0)
         {
             throw new ArgumentOutOfRangeException(
@@ -146,8 +146,8 @@ public static class TesV15StimulationRegisterCodec
             totalTimeMs,
             activeDurationUs,
             intervalDurationUs,
-            baselineLevel,
-            targetLevel,
+            lowLevel,
+            highLevel,
             risePermille,
             holdPermille,
             0);

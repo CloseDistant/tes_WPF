@@ -14,18 +14,15 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
     private int selectedBoardAddress = 1;
     private int selectedChannel = 1;
     private string totalDurationSeconds = "120";
-    private string zeroCurrentDac = "30000";
-    private string dacCountsPerMilliampere = string.Empty;
-    private bool reversePolarity;
+    private string lowLevel = "10000";
+    private string highLevel = "50000";
 
-    private string directCurrentMilliampere = "2";
     private string directRampUpSeconds = "10";
     private string directRampDownSeconds = "10";
     private bool directIntervalMode;
     private string directSingleDurationSeconds = "60";
     private string directIntervalSeconds = "5";
 
-    private string pulseCurrentMilliampere = "2";
     private string pulseRiseWidthMilliseconds = "5";
     private string pulseWidthMilliseconds = "10";
     private string pulseIntervalWidthMilliseconds = "20";
@@ -92,28 +89,16 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
         set => SetConfigurationProperty(ref totalDurationSeconds, value);
     }
 
-    public string ZeroCurrentDac
+    public string LowLevel
     {
-        get => zeroCurrentDac;
-        set => SetConfigurationProperty(ref zeroCurrentDac, value);
+        get => lowLevel;
+        set => SetConfigurationProperty(ref lowLevel, value);
     }
 
-    public string DacCountsPerMilliampere
+    public string HighLevel
     {
-        get => dacCountsPerMilliampere;
-        set => SetConfigurationProperty(ref dacCountsPerMilliampere, value);
-    }
-
-    public bool ReversePolarity
-    {
-        get => reversePolarity;
-        set => SetConfigurationProperty(ref reversePolarity, value);
-    }
-
-    public string DirectCurrentMilliampere
-    {
-        get => directCurrentMilliampere;
-        set => SetConfigurationProperty(ref directCurrentMilliampere, value);
+        get => highLevel;
+        set => SetConfigurationProperty(ref highLevel, value);
     }
 
     public string DirectRampUpSeconds
@@ -144,12 +129,6 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
     {
         get => directIntervalSeconds;
         set => SetConfigurationProperty(ref directIntervalSeconds, value);
-    }
-
-    public string PulseCurrentMilliampere
-    {
-        get => pulseCurrentMilliampere;
-        set => SetConfigurationProperty(ref pulseCurrentMilliampere, value);
     }
 
     public string PulseRiseWidthMilliseconds
@@ -185,7 +164,7 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
                     ? $"，间隔段={configuration.Waveforms[1].DurationUs}μs(type=1)"
                     : string.Empty;
                 return $"换算结果：type={(uint)active.Mode}，刺激段={active.DurationUs}μs，"
-                    + $"基线/目标DAC={active.LowLevelOrPositiveValue}/{active.HighLevelOrNegativeValue}，"
+                    + $"LowLevel/HighLevel={active.LowLevelOrPositiveValue}/{active.HighLevelOrNegativeValue}，"
                     + $"上升/平台/渐降={active.RisePermilleOrPositiveDurationUs}/"
                     + $"{active.HoldPermilleOrInterphaseIntervalUs}/"
                     + $"{active.FallPermilleOrNegativeDurationUs}‰，"
@@ -329,15 +308,8 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
         var totalTimeMs = TesV15EngineeringUnitConverter.SecondsToMilliseconds(
             totalSeconds,
             "总运行时间");
-        var currentMilliampere = ParseDecimal(
-            IsDirectCurrent ? DirectCurrentMilliampere : PulseCurrentMilliampere,
-            "电流");
-        var dacValues = TesV15EngineeringUnitConverter.DirectCurrentToDac(
-            currentMilliampere,
-            ParseUInt(ZeroCurrentDac, "零电流DAC值"),
-            ParseDecimal(DacCountsPerMilliampere, "每mA对应DAC计数"),
-            ReversePolarity,
-            TesV15ParameterValidationMode.ProtocolRange);
+        var configuredLowLevel = ParseUInt(LowLevel, "LowLevel");
+        var configuredHighLevel = ParseUInt(HighLevel, "HighLevel");
 
         if (IsDirectCurrent)
         {
@@ -360,8 +332,8 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
                 totalTimeMs,
                 TesV15EngineeringUnitConverter.SecondsToMicroseconds(activeSeconds, "单次时长"),
                 intervalUs,
-                dacValues.BaselineDac,
-                dacValues.TargetDac,
+                configuredLowLevel,
+                configuredHighLevel,
                 trapezoid.RisePermille,
                 trapezoid.HoldPermille,
                 trapezoid.FallPermille,
@@ -371,8 +343,8 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
         return TesV15StimulationRegisterCodec.CreatePulseCurrent(
             channel,
             totalTimeMs,
-            dacValues.BaselineDac,
-            dacValues.TargetDac,
+            configuredLowLevel,
+            configuredHighLevel,
             TesV15EngineeringUnitConverter.MillisecondsToMicroseconds(
                 ParseDecimal(PulseRiseWidthMilliseconds, "上升宽度"),
                 "上升宽度"),

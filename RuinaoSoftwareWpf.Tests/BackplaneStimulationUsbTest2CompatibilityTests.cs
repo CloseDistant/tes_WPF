@@ -19,8 +19,8 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
         var configuration = TesV15StimulationRegisterCodec.CreatePulseCurrent(
             channelNumber: 1,
             totalTimeMs: 120_000,
-            baselineLevel: 30_000,
-            targetLevel: 36_000,
+            lowLevel: 10_000,
+            highLevel: 50_000,
             riseDurationUs: 5_000,
             plateauDurationUs: 10_000,
             intervalDurationUs: 20_000);
