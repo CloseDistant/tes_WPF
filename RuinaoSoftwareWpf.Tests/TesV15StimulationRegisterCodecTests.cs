@@ -99,4 +99,56 @@ public sealed class TesV15StimulationRegisterCodecTests
                 500,
                 200));
     }
+
+    [Fact]
+    public void EngineeringUnits_PulseCurrent_ConvertMilliampereAndMilliseconds()
+    {
+        var currentMicroampere =
+            TesV15EngineeringUnitConverter.MilliampereToMicroampere(2.5M);
+        var durationMicroseconds =
+            TesV15EngineeringUnitConverter.MillisecondsToMicroseconds(5.25M, "正相宽度");
+
+        Assert.Equal(2500U, currentMicroampere);
+        Assert.Equal(5250U, durationMicroseconds);
+    }
+
+    [Fact]
+    public void EngineeringUnits_DirectCurrent_UseExplicitDacCalibration()
+    {
+        var dac = TesV15EngineeringUnitConverter.DirectCurrentToDac(
+            currentMilliampere: 2M,
+            zeroCurrentDac: 30_000,
+            dacCountsPerMilliampere: 3_000M,
+            reversePolarity: false);
+        var reversed = TesV15EngineeringUnitConverter.DirectCurrentToDac(
+            currentMilliampere: 2M,
+            zeroCurrentDac: 30_000,
+            dacCountsPerMilliampere: 3_000M,
+            reversePolarity: true);
+
+        Assert.Equal((30_000U, 36_000U), dac);
+        Assert.Equal((30_000U, 24_000U), reversed);
+    }
+
+    [Fact]
+    public void EngineeringUnits_TrapezoidTimesBecomePermille()
+    {
+        var values = TesV15EngineeringUnitConverter.ToTrapezoidPermille(
+            totalSeconds: 100M,
+            rampUpSeconds: 20M,
+            rampDownSeconds: 30M);
+
+        Assert.Equal((200U, 500U, 300U), values);
+    }
+
+    [Fact]
+    public void EngineeringUnits_DirectCurrentRejectsMissingCalibration()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TesV15EngineeringUnitConverter.DirectCurrentToDac(
+                currentMilliampere: 2M,
+                zeroCurrentDac: 30_000,
+                dacCountsPerMilliampere: 0,
+                reversePolarity: false));
+    }
 }

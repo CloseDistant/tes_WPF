@@ -14,19 +14,18 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
     private int selectedBoardAddress;
     private int selectedChannel = 1;
     private string totalDurationSeconds = "120";
-    private string directLowLevel = "10000";
-    private string directHighLevel = "50000";
-    private string directRisePermille = "200";
-    private string directHoldPermille = "500";
-    private string directFallPermille = "300";
-    private string pulsePositiveValue = "36000";
-    private string pulseNegativeValue = "24000";
-    private string pulsePositiveDurationUs = "5000";
-    private string pulseInterphaseIntervalUs = "2000";
-    private string pulseNegativeDurationUs = "5000";
-    private string pulsePeriodIntervalUs = "8000";
+    private string directCurrentMilliampere = "2";
+    private string directZeroCurrentDac = "30000";
+    private string directDacCountsPerMilliampere = string.Empty;
+    private string directRampUpSeconds = "10";
+    private string directRampDownSeconds = "10";
+    private bool directReversePolarity;
+    private string pulseCurrentMilliampere = "2";
+    private string pulsePositiveDurationMilliseconds = "5";
+    private string pulseInterphaseIntervalMilliseconds = "2";
+    private string pulseNegativeDurationMilliseconds = "5";
+    private string pulsePeriodIntervalMilliseconds = "8";
     private bool pulsePositiveFirst = true;
-    private bool pulseValuesAreMicroampere;
     private bool isConfigured;
     private bool isRunning;
     private string statusText = "尚未下发刺激配置";
@@ -53,6 +52,7 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
                 IsConfigured = false;
                 OnPropertyChanged(nameof(IsDirectCurrent));
                 OnPropertyChanged(nameof(IsPulseCurrent));
+                OnPropertyChanged(nameof(ConversionPreview));
             }
         }
     }
@@ -87,70 +87,70 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
         set => SetConfigurationProperty(ref totalDurationSeconds, value);
     }
 
-    public string DirectLowLevel
+    public string DirectCurrentMilliampere
     {
-        get => directLowLevel;
-        set => SetConfigurationProperty(ref directLowLevel, value);
+        get => directCurrentMilliampere;
+        set => SetConfigurationProperty(ref directCurrentMilliampere, value);
     }
 
-    public string DirectHighLevel
+    public string DirectZeroCurrentDac
     {
-        get => directHighLevel;
-        set => SetConfigurationProperty(ref directHighLevel, value);
+        get => directZeroCurrentDac;
+        set => SetConfigurationProperty(ref directZeroCurrentDac, value);
     }
 
-    public string DirectRisePermille
+    public string DirectDacCountsPerMilliampere
     {
-        get => directRisePermille;
-        set => SetConfigurationProperty(ref directRisePermille, value);
+        get => directDacCountsPerMilliampere;
+        set => SetConfigurationProperty(ref directDacCountsPerMilliampere, value);
     }
 
-    public string DirectHoldPermille
+    public string DirectRampUpSeconds
     {
-        get => directHoldPermille;
-        set => SetConfigurationProperty(ref directHoldPermille, value);
+        get => directRampUpSeconds;
+        set => SetConfigurationProperty(ref directRampUpSeconds, value);
     }
 
-    public string DirectFallPermille
+    public string DirectRampDownSeconds
     {
-        get => directFallPermille;
-        set => SetConfigurationProperty(ref directFallPermille, value);
+        get => directRampDownSeconds;
+        set => SetConfigurationProperty(ref directRampDownSeconds, value);
     }
 
-    public string PulsePositiveValue
+    public bool DirectReversePolarity
     {
-        get => pulsePositiveValue;
-        set => SetConfigurationProperty(ref pulsePositiveValue, value);
+        get => directReversePolarity;
+        set => SetConfigurationProperty(ref directReversePolarity, value);
     }
 
-    public string PulseNegativeValue
+    public string PulseCurrentMilliampere
     {
-        get => pulseNegativeValue;
-        set => SetConfigurationProperty(ref pulseNegativeValue, value);
+        get => pulseCurrentMilliampere;
+        set => SetConfigurationProperty(ref pulseCurrentMilliampere, value);
     }
 
-    public string PulsePositiveDurationUs
+    public string PulsePositiveDurationMilliseconds
     {
-        get => pulsePositiveDurationUs;
-        set => SetConfigurationProperty(ref pulsePositiveDurationUs, value);
+        get => pulsePositiveDurationMilliseconds;
+        set => SetConfigurationProperty(ref pulsePositiveDurationMilliseconds, value);
     }
 
-    public string PulseInterphaseIntervalUs
+    public string PulseInterphaseIntervalMilliseconds
     {
-        get => pulseInterphaseIntervalUs;
-        set => SetConfigurationProperty(ref pulseInterphaseIntervalUs, value);
+        get => pulseInterphaseIntervalMilliseconds;
+        set => SetConfigurationProperty(ref pulseInterphaseIntervalMilliseconds, value);
     }
 
-    public string PulseNegativeDurationUs
+    public string PulseNegativeDurationMilliseconds
     {
-        get => pulseNegativeDurationUs;
-        set => SetConfigurationProperty(ref pulseNegativeDurationUs, value);
+        get => pulseNegativeDurationMilliseconds;
+        set => SetConfigurationProperty(ref pulseNegativeDurationMilliseconds, value);
     }
 
-    public string PulsePeriodIntervalUs
+    public string PulsePeriodIntervalMilliseconds
     {
-        get => pulsePeriodIntervalUs;
-        set => SetConfigurationProperty(ref pulsePeriodIntervalUs, value);
+        get => pulsePeriodIntervalMilliseconds;
+        set => SetConfigurationProperty(ref pulsePeriodIntervalMilliseconds, value);
     }
 
     public bool PulsePositiveFirst
@@ -159,14 +159,34 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
         set => SetConfigurationProperty(ref pulsePositiveFirst, value);
     }
 
-    public bool PulseValuesAreMicroampere
-    {
-        get => pulseValuesAreMicroampere;
-        set => SetConfigurationProperty(ref pulseValuesAreMicroampere, value);
-    }
-
     public bool IsDirectCurrent => string.Equals(SelectedMode, DirectCurrentMode, StringComparison.Ordinal);
     public bool IsPulseCurrent => string.Equals(SelectedMode, PulseCurrentMode, StringComparison.Ordinal);
+
+    public string ConversionPreview
+    {
+        get
+        {
+            try
+            {
+                var configuration = BuildConfiguration();
+                var waveform = configuration.Waveforms[0];
+                return IsDirectCurrent
+                    ? $"换算结果：总时间={configuration.TotalTimeMs}ms，基线DAC={waveform.LowLevelOrPositiveValue}，"
+                        + $"目标DAC={waveform.HighLevelOrNegativeValue}，"
+                        + $"上升/平台/下降={waveform.RisePermilleOrPositiveDurationUs}/"
+                        + $"{waveform.HoldPermilleOrInterphaseIntervalUs}/"
+                        + $"{waveform.FallPermilleOrNegativeDurationUs}‰"
+                    : $"换算结果：电流={waveform.LowLevelOrPositiveValue}μA，单周期={waveform.DurationUs}μs，"
+                        + $"总时间={configuration.TotalTimeMs}ms，flags=0x{waveform.Flags:X8}";
+            }
+            catch (Exception exception) when (exception is FormatException
+                or ArgumentException
+                or OverflowException)
+            {
+                return $"换算待完善：{exception.Message}";
+            }
+        }
+    }
 
     public bool IsConfigured
     {
@@ -246,31 +266,53 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
     private TesV15StimulationConfiguration BuildConfiguration()
     {
         var channel = checked((byte)SelectedChannel);
-        var totalSeconds = ParseUInt(TotalDurationSeconds, "总运行时间");
-        var totalTimeMs = checked(totalSeconds * 1000U);
+        var totalSeconds = ParseDecimal(TotalDurationSeconds, "总运行时间");
+        var totalTimeMs = TesV15EngineeringUnitConverter.SecondsToMilliseconds(
+            totalSeconds,
+            "总运行时间");
         if (IsDirectCurrent)
         {
+            var currentMilliampere = ParseDecimal(DirectCurrentMilliampere, "电流");
+            var dacValues = TesV15EngineeringUnitConverter.DirectCurrentToDac(
+                currentMilliampere,
+                ParseUInt(DirectZeroCurrentDac, "零电流DAC值"),
+                ParseDecimal(DirectDacCountsPerMilliampere, "每mA对应DAC计数"),
+                DirectReversePolarity);
+            var trapezoid = TesV15EngineeringUnitConverter.ToTrapezoidPermille(
+                totalSeconds,
+                ParseDecimal(DirectRampUpSeconds, "渐升时间"),
+                ParseDecimal(DirectRampDownSeconds, "渐降时间"));
             return TesV15StimulationRegisterCodec.CreateDirectCurrent(
                 channel,
                 totalTimeMs,
-                ParseUInt(DirectLowLevel, "低电平DAC值"),
-                ParseUInt(DirectHighLevel, "高电平DAC值"),
-                ParseUInt(DirectRisePermille, "上升占比"),
-                ParseUInt(DirectHoldPermille, "平台占比"),
-                ParseUInt(DirectFallPermille, "下降占比"));
+                dacValues.BaselineDac,
+                dacValues.TargetDac,
+                trapezoid.RisePermille,
+                trapezoid.HoldPermille,
+                trapezoid.FallPermille);
         }
 
+        var pulseMicroampere = TesV15EngineeringUnitConverter.MilliampereToMicroampere(
+            ParseDecimal(PulseCurrentMilliampere, "电流"));
         return TesV15StimulationRegisterCodec.CreatePulseCurrent(
             channel,
             totalTimeMs,
             PulsePositiveFirst,
-            ParseUInt(PulsePositiveValue, "正相刺激值"),
-            ParseUInt(PulseNegativeValue, "负相刺激值"),
-            ParseUInt(PulsePositiveDurationUs, "正相持续时间"),
-            ParseUInt(PulseInterphaseIntervalUs, "相间隔"),
-            ParseUInt(PulseNegativeDurationUs, "负相持续时间"),
-            ParseUInt(PulsePeriodIntervalUs, "周期剩余间隔"),
-            valuesAreMicroampere: PulseValuesAreMicroampere);
+            pulseMicroampere,
+            pulseMicroampere,
+            TesV15EngineeringUnitConverter.MillisecondsToMicroseconds(
+                ParseDecimal(PulsePositiveDurationMilliseconds, "正相持续时间"),
+                "正相持续时间"),
+            TesV15EngineeringUnitConverter.MillisecondsToMicroseconds(
+                ParseDecimal(PulseInterphaseIntervalMilliseconds, "相间隔"),
+                "相间隔"),
+            TesV15EngineeringUnitConverter.MillisecondsToMicroseconds(
+                ParseDecimal(PulseNegativeDurationMilliseconds, "负相持续时间"),
+                "负相持续时间"),
+            TesV15EngineeringUnitConverter.MillisecondsToMicroseconds(
+                ParseDecimal(PulsePeriodIntervalMilliseconds, "周期剩余间隔"),
+                "周期剩余间隔"),
+            valuesAreMicroampere: true);
     }
 
     private static uint ParseUInt(string text, string fieldName)
@@ -278,6 +320,16 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
         if (!uint.TryParse(text.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var value))
         {
             throw new FormatException($"{fieldName}必须是0到{uint.MaxValue}之间的整数。");
+        }
+
+        return value;
+    }
+
+    private static decimal ParseDecimal(string text, string fieldName)
+    {
+        if (!decimal.TryParse(text.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var value))
+        {
+            throw new FormatException($"{fieldName}必须是有效数字，小数点请使用“.”。");
         }
 
         return value;
@@ -303,6 +355,7 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
         if (SetProperty(ref field, value, propertyName))
         {
             IsConfigured = false;
+            OnPropertyChanged(nameof(ConversionPreview));
         }
     }
 

@@ -266,42 +266,51 @@
                                 <TextBlock Text="tDCS · 梯形参数"
                                            FontSize="16"
                                            FontWeight="SemiBold" />
-                                <TextBlock Text="低/高电平暂按usbtest2原始DAC值下发；上升、平台、下降使用千分比，三项之和必须为1000。"
+                                <TextBlock Text="电流与时间使用产品界面单位。DLL根据硬件标定系数换算DAC，并把渐升/渐降时间换算为梯形千分比。"
                                            Margin="0,5,0,12"
                                            Foreground="#9A4E00"
                                            TextWrapping="Wrap" />
-                                <UniformGrid Columns="5">
+                                <UniformGrid Columns="6">
                                     <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="低电平 DAC" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding DirectLowLevel, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="电流 mA" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding DirectCurrentMilliampere, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
                                     <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="高电平 DAC" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding DirectHighLevel, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="渐升时间 s" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding DirectRampUpSeconds, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
                                     <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="上升占比 ‰" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding DirectRisePermille, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="渐降时间 s" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding DirectRampDownSeconds, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
                                     <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="平台占比 ‰" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding DirectHoldPermille, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="零电流 DAC" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding DirectZeroCurrentDac, UpdateSourceTrigger=PropertyChanged}"
+                                                 Margin="0,5,0,0"
+                                                 FontFamily="Consolas" />
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,12,0">
+                                        <TextBlock Text="DAC计数 / mA" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding DirectDacCountsPerMilliampere, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
                                     <StackPanel>
-                                        <TextBlock Text="下降占比 ‰" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding DirectFallPermille, UpdateSourceTrigger=PropertyChanged}"
-                                                 Margin="0,5,0,0"
-                                                 FontFamily="Consolas" />
+                                        <TextBlock Text="极性" Foreground="{StaticResource MutedBrush}" />
+                                        <CheckBox Content="调转"
+                                                  Margin="0,10,0,0"
+                                                  IsChecked="{Binding DirectReversePolarity}" />
                                     </StackPanel>
                                 </UniformGrid>
+                                <TextBlock Text="“DAC计数/mA”必须填写硬件标定值；未填写时禁止下发tDCS配置。"
+                                           Margin="0,10,0,0"
+                                           Foreground="#B42318" />
                             </StackPanel>
                         </Border>
 
@@ -319,58 +328,55 @@
                                            Margin="0,5,0,12"
                                            Foreground="{StaticResource MutedBrush}"
                                            TextWrapping="Wrap" />
-                                <UniformGrid Columns="4">
+                                <UniformGrid Columns="3">
                                     <StackPanel Margin="0,0,12,12">
-                                        <TextBlock Text="正相刺激值" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding PulsePositiveValue, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="电流 mA" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding PulseCurrentMilliampere, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
                                     <StackPanel Margin="0,0,12,12">
-                                        <TextBlock Text="负相刺激值" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding PulseNegativeValue, UpdateSourceTrigger=PropertyChanged}"
-                                                 Margin="0,5,0,0"
-                                                 FontFamily="Consolas" />
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,12,12">
-                                        <TextBlock Text="正相时长 μs" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding PulsePositiveDurationUs, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="正相宽度 ms" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding PulsePositiveDurationMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
                                     <StackPanel Margin="0,0,0,12">
-                                        <TextBlock Text="相间隔 μs" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding PulseInterphaseIntervalUs, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="正负相间隔 ms" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding PulseInterphaseIntervalMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
                                     <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="负相时长 μs" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding PulseNegativeDurationUs, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="负相宽度 ms" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding PulseNegativeDurationMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
                                     <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="周期剩余间隔 μs" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding PulsePeriodIntervalUs, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="周期剩余间隔 ms" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding PulsePeriodIntervalMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
-                                    <StackPanel Margin="0,0,12,0">
+                                    <StackPanel>
                                         <TextBlock Text="极性顺序" Foreground="{StaticResource MutedBrush}" />
                                         <CheckBox Content="正相在前"
                                                   Margin="0,10,0,0"
                                                   IsChecked="{Binding PulsePositiveFirst}" />
                                     </StackPanel>
-                                    <StackPanel>
-                                        <TextBlock Text="刺激值单位" Foreground="{StaticResource MutedBrush}" />
-                                        <CheckBox Content="按 μA 解释（flags bit0）"
-                                                  Margin="0,10,0,0"
-                                                  IsChecked="{Binding PulseValuesAreMicroampere}" />
-                                    </StackPanel>
                                 </UniformGrid>
+                                <TextBlock Text="DLL自动执行：mA→μA、ms→μs，并固定设置flags bit0=1。"
+                                           Margin="0,10,0,0"
+                                           Foreground="#0B6B3A" />
                             </StackPanel>
                         </Border>
+
+                        <TextBlock Margin="0,12,0,0"
+                                   Text="{Binding ConversionPreview}"
+                                   FontFamily="Consolas"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   TextWrapping="Wrap" />
 
                         <Border Margin="0,14,0,0"
                                 Padding="14"
