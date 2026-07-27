@@ -2,11 +2,11 @@
 
 namespace RuinaoTesProtocol.V15;
 
-/// <summary>V1.5 电刺激波形类型。工程师软件首版仅开放梯形与电刺激脉冲。</summary>
+/// <summary>V1.5 电刺激波形类型。两种产品刺激模式均由梯形和可选的零输出定值段组成。</summary>
 public enum TesV15StimulationMode : uint
 {
+    Constant = 1,
     DirectCurrentTrapezoid = 8,
-    PulseCurrent = 10,
 }
 
 /// <summary>V1.5 单段波形固定占用的 16 个 32-bit 寄存器。</summary>
@@ -29,7 +29,7 @@ public sealed record TesV15StimulationWaveform(
     uint Flags);
 
 /// <summary>
-/// V1.5 单通道刺激配置。协议层保留波形列表能力，临时工程师软件固定只传入一段波形。
+/// V1.5 单通道刺激配置。连续模式使用一段梯形；间隔模式使用梯形与零输出定值段。
 /// </summary>
 public sealed record TesV15StimulationConfiguration(
     uint EnableMask,
@@ -62,83 +62,91 @@ public static class TesV15StimulationRegisterCodec
         uint holdPermille,
         uint fallPermille)
     {
-        ValidateChannelAndTime(channelNumber, totalTimeMs);
-        ValidateDacValue(lowLevel, nameof(lowLevel));
-        ValidateDacValue(highLevel, nameof(highLevel));
-        ValidateTrapezoidPermille(risePermille, holdPermille, fallPermille);
-
-        var durationUs = checked(totalTimeMs * 1000U);
-        var waveform = new TesV15StimulationWaveform(
-            TesV15StimulationMode.DirectCurrentTrapezoid,
-            durationUs,
-            0,
-            0,
-            0,
-            0,
+        return CreateDirectCurrent(
+            channelNumber,
+            totalTimeMs,
+            checked(totalTimeMs * 1000U),
             0,
             lowLevel,
             highLevel,
             risePermille,
             holdPermille,
-            fallPermille,
-            0,
-            0,
-            1,
-            0);
-
-        return CreateSingleWaveformConfiguration(channelNumber, totalTimeMs, waveform);
+            fallPermille);
     }
 
+    public static TesV15StimulationConfiguration CreateDirectCurrent(
+        byte channelNumber,
+        uint totalTimeMs,
+        uint activeDurationUs,
+        uint intervalDurationUs,
+        uint lowLevel,
+        uint highLevel,
+        uint risePermille,
+        uint holdPermille,
+        uint fallPermille)
+    {
+        ValidateChannelAndTime(channelNumber, totalTimeMs);
+        ValidateDacValue(lowLevel, nameof(lowLevel));
+        ValidateDacValue(highLevel, nameof(highLevel));
+        ValidateTrapezoidPermille(risePermille, holdPermille, fallPermille);
+        return CreateTrapezoidProgram(
+            channelNumber,
+            totalTimeMs,
+            activeDurationUs,
+            intervalDurationUs,
+            lowLevel,
+            highLevel,
+            risePermille,
+            holdPermille,
+            fallPermille);
+    }
+
+    /// <summary>
+    /// tPCS 产品模式同样编码为梯形：渐升段 + 平台脉冲段 + 0时长渐降，
+    /// 并可追加一段零输出定值作为脉冲间隔；不再使用 waveform_type=10。
+    /// </summary>
     public static TesV15StimulationConfiguration CreatePulseCurrent(
         byte channelNumber,
         uint totalTimeMs,
-        bool positiveFirst,
-        uint positiveValue,
-        uint negativeValue,
-        uint positiveDurationUs,
-        uint interphaseIntervalUs,
-        uint negativeDurationUs,
-        uint periodIntervalUs,
-        uint sampleCount = 1024,
-        uint repeatCount = 0,
-        bool valuesAreMicroampere = false)
+        uint baselineLevel,
+        uint targetLevel,
+        uint riseDurationUs,
+        uint plateauDurationUs,
+        uint intervalDurationUs)
     {
         ValidateChannelAndTime(channelNumber, totalTimeMs);
-        if (positiveDurationUs == 0)
+        ValidateDacValue(baselineLevel, nameof(baselineLevel));
+        ValidateDacValue(targetLevel, nameof(targetLevel));
+        if (riseDurationUs == 0)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(positiveDurationUs),
-                "正相持续时间必须大于0微秒。");
+                nameof(riseDurationUs),
+                "tPCS上升宽度必须大于0微秒。");
         }
 
-        if (negativeDurationUs == 0)
+        if (plateauDurationUs == 0)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(negativeDurationUs),
-                "负相持续时间必须大于0微秒。");
+                nameof(plateauDurationUs),
+                "tPCS脉冲平台宽度必须大于0微秒。");
         }
 
-        var durationUs = checked(
-            positiveDurationUs + interphaseIntervalUs + negativeDurationUs + periodIntervalUs);
-        var waveform = new TesV15StimulationWaveform(
-            TesV15StimulationMode.PulseCurrent,
-            durationUs,
+        var activeDurationUs = checked(riseDurationUs + plateauDurationUs);
+        var risePermille = checked((uint)decimal.Round(
+            riseDurationUs * 1000M / activeDurationUs,
             0,
-            0,
-            30000,
-            0,
-            positiveFirst ? 1U : 0U,
-            positiveValue,
-            negativeValue,
-            positiveDurationUs,
-            interphaseIntervalUs,
-            negativeDurationUs,
-            periodIntervalUs,
-            sampleCount,
-            repeatCount,
-            valuesAreMicroampere ? 1U : 0U);
-
-        return CreateSingleWaveformConfiguration(channelNumber, totalTimeMs, waveform);
+            MidpointRounding.AwayFromZero));
+        var holdPermille = 1000U - risePermille;
+        return CreateTrapezoidProgram(
+            channelNumber,
+            totalTimeMs,
+            activeDurationUs,
+            intervalDurationUs,
+            baselineLevel,
+            targetLevel,
+            risePermille,
+            holdPermille,
+            0);
     }
 
     public static IReadOnlyList<TesV14RegisterValue> BuildControlRegisters(
@@ -201,11 +209,76 @@ public static class TesV15StimulationRegisterCodec
         return (ushort)(0x3000 + (channelNumber - 1) * 0x0200);
     }
 
-    private static TesV15StimulationConfiguration CreateSingleWaveformConfiguration(
+    private static TesV15StimulationConfiguration CreateTrapezoidProgram(
         byte channelNumber,
         uint totalTimeMs,
-        TesV15StimulationWaveform waveform)
+        uint activeDurationUs,
+        uint intervalDurationUs,
+        uint baselineLevel,
+        uint targetLevel,
+        uint risePermille,
+        uint holdPermille,
+        uint fallPermille)
     {
+        if (activeDurationUs == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(activeDurationUs), "梯形刺激段时长必须大于0微秒。");
+        }
+
+        var totalTimeUs = (ulong)totalTimeMs * 1000UL;
+        if (activeDurationUs > totalTimeUs)
+        {
+            throw new ArgumentException("单次刺激时长不能超过刺激总时间。");
+        }
+
+        var cycleDurationUs = (ulong)activeDurationUs + intervalDurationUs;
+        if (intervalDurationUs > 0 && cycleDurationUs > totalTimeUs)
+        {
+            throw new ArgumentException("单次刺激时长与间隔时长之和不能超过刺激总时间。");
+        }
+
+        var waveforms = new List<TesV15StimulationWaveform>(2)
+        {
+            new(
+                TesV15StimulationMode.DirectCurrentTrapezoid,
+                activeDurationUs,
+                0,
+                0,
+                0,
+                0,
+                0,
+                baselineLevel,
+                targetLevel,
+                risePermille,
+                holdPermille,
+                fallPermille,
+                0,
+                0,
+                1,
+                0),
+        };
+        if (intervalDurationUs > 0)
+        {
+            waveforms.Add(new TesV15StimulationWaveform(
+                TesV15StimulationMode.Constant,
+                intervalDurationUs,
+                0,
+                0,
+                baselineLevel,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                1,
+                0));
+        }
+
+        var requiresLoop = intervalDurationUs > 0 || totalTimeUs > activeDurationUs;
         return new TesV15StimulationConfiguration(
             1U << (channelNumber - 1),
             UsbTest2ConfigurationVersion,
@@ -213,8 +286,8 @@ public static class TesV15StimulationRegisterCodec
             0,
             0,
             totalTimeMs,
-            0,
-            [waveform]);
+            requiresLoop ? 1U : 0U,
+            waveforms);
     }
 
     private static void ValidateConfiguration(TesV15StimulationConfiguration configuration)

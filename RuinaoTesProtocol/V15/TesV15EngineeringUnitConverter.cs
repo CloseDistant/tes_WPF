@@ -22,6 +22,11 @@ public static class TesV15EngineeringUnitConverter
         return ConvertTime(seconds, 1000M, parameterName);
     }
 
+    public static uint SecondsToMicroseconds(decimal seconds, string parameterName)
+    {
+        return ConvertTime(seconds, 1_000_000M, parameterName);
+    }
+
     public static uint MillisecondsToMicroseconds(decimal milliseconds, string parameterName)
     {
         return ConvertTime(milliseconds, 1000M, parameterName);

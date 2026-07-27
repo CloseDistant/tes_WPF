@@ -266,7 +266,7 @@
                                 <TextBlock Text="tDCS · 梯形参数"
                                            FontSize="16"
                                            FontWeight="SemiBold" />
-                                <TextBlock Text="电流与时间使用产品界面单位。DLL根据硬件标定系数换算DAC，并把渐升/渐降时间换算为梯形千分比。"
+                                <TextBlock Text="连续模式生成一段类型8梯形；间隔模式生成类型8刺激段和类型1零电流间隔段，并按总时间循环。"
                                            Margin="0,5,0,12"
                                            Foreground="#9A4E00"
                                            TextWrapping="Wrap" />
@@ -290,27 +290,26 @@
                                                  FontFamily="Consolas" />
                                     </StackPanel>
                                     <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="零电流 DAC" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding DirectZeroCurrentDac, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="单次刺激时长 s" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding DirectSingleDurationSeconds, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
-                                                 FontFamily="Consolas" />
+                                                 FontFamily="Consolas"
+                                                 IsEnabled="{Binding DirectIntervalMode}" />
                                     </StackPanel>
                                     <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="DAC计数 / mA" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding DirectDacCountsPerMilliampere, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="间隔时长 s" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding DirectIntervalSeconds, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
-                                                 FontFamily="Consolas" />
+                                                 FontFamily="Consolas"
+                                                 IsEnabled="{Binding DirectIntervalMode}" />
                                     </StackPanel>
                                     <StackPanel>
-                                        <TextBlock Text="极性" Foreground="{StaticResource MutedBrush}" />
-                                        <CheckBox Content="调转"
+                                        <TextBlock Text="运行方式" Foreground="{StaticResource MutedBrush}" />
+                                        <CheckBox Content="间隔模式"
                                                   Margin="0,10,0,0"
-                                                  IsChecked="{Binding DirectReversePolarity}" />
+                                                  IsChecked="{Binding DirectIntervalMode}" />
                                     </StackPanel>
                                 </UniformGrid>
-                                <TextBlock Text="“DAC计数/mA”必须填写硬件标定值；未填写时禁止下发tDCS配置。"
-                                           Margin="0,10,0,0"
-                                           Foreground="#B42318" />
                             </StackPanel>
                         </Border>
 
@@ -321,54 +320,78 @@
                                 BorderThickness="1"
                                 Visibility="{Binding IsPulseCurrent, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel>
-                                <TextBlock Text="tPCS · 双相电刺激脉冲参数"
+                                <TextBlock Text="tPCS · 梯形脉冲参数"
                                            FontSize="16"
                                            FontWeight="SemiBold" />
-                                <TextBlock Text="完整脉冲周期由正相、相间隔、负相和周期剩余间隔自动相加；总运行时间独立控制整个刺激过程。"
+                                <TextBlock Text="tPCS也是类型8梯形：上升宽度后保持脉冲平台，渐降时间固定为0；间隔使用类型1零电流段。"
                                            Margin="0,5,0,12"
                                            Foreground="{StaticResource MutedBrush}"
                                            TextWrapping="Wrap" />
-                                <UniformGrid Columns="3">
-                                    <StackPanel Margin="0,0,12,12">
+                                <UniformGrid Columns="4">
+                                    <StackPanel Margin="0,0,12,0">
                                         <TextBlock Text="电流 mA" Foreground="{StaticResource MutedBrush}" />
                                         <TextBox Text="{Binding PulseCurrentMilliampere, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
-                                    <StackPanel Margin="0,0,12,12">
-                                        <TextBlock Text="正相宽度 ms" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding PulsePositiveDurationMilliseconds, UpdateSourceTrigger=PropertyChanged}"
-                                                 Margin="0,5,0,0"
-                                                 FontFamily="Consolas" />
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,0,12">
-                                        <TextBlock Text="正负相间隔 ms" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding PulseInterphaseIntervalMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                                    <StackPanel Margin="0,0,12,0">
+                                        <TextBlock Text="上升宽度 ms" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding PulseRiseWidthMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
                                     <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="负相宽度 ms" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding PulseNegativeDurationMilliseconds, UpdateSourceTrigger=PropertyChanged}"
-                                                 Margin="0,5,0,0"
-                                                 FontFamily="Consolas" />
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,12,0">
-                                        <TextBlock Text="周期剩余间隔 ms" Foreground="{StaticResource MutedBrush}" />
-                                        <TextBox Text="{Binding PulsePeriodIntervalMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBlock Text="脉冲宽度 ms" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding PulseWidthMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                                  Margin="0,5,0,0"
                                                  FontFamily="Consolas" />
                                     </StackPanel>
                                     <StackPanel>
-                                        <TextBlock Text="极性顺序" Foreground="{StaticResource MutedBrush}" />
-                                        <CheckBox Content="正相在前"
-                                                  Margin="0,10,0,0"
-                                                  IsChecked="{Binding PulsePositiveFirst}" />
+                                        <TextBlock Text="间隔宽度 ms" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding PulseIntervalWidthMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                                                 Margin="0,5,0,0"
+                                                 FontFamily="Consolas" />
                                     </StackPanel>
                                 </UniformGrid>
-                                <TextBlock Text="DLL自动执行：mA→μA、ms→μs，并固定设置flags bit0=1。"
+                                <TextBlock Text="DLL固定生成：上升 + 平台 + 0渐降；不会生成类型10。"
                                            Margin="0,10,0,0"
                                            Foreground="#0B6B3A" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,14,0,0"
+                                Padding="16"
+                                CornerRadius="10"
+                                Background="#FFF8EC"
+                                BorderBrush="#F0D8A8"
+                                BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="共用电流标定"
+                                           FontSize="16"
+                                           FontWeight="SemiBold" />
+                                <UniformGrid Columns="3" Margin="0,12,0,0">
+                                    <StackPanel Margin="0,0,12,0">
+                                        <TextBlock Text="零电流 DAC" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding ZeroCurrentDac, UpdateSourceTrigger=PropertyChanged}"
+                                                 Margin="0,5,0,0"
+                                                 FontFamily="Consolas" />
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,12,0">
+                                        <TextBlock Text="DAC计数 / mA" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding DacCountsPerMilliampere, UpdateSourceTrigger=PropertyChanged}"
+                                                 Margin="0,5,0,0"
+                                                 FontFamily="Consolas" />
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Text="极性" Foreground="{StaticResource MutedBrush}" />
+                                        <CheckBox Content="调转"
+                                                  Margin="0,10,0,0"
+                                                  IsChecked="{Binding ReversePolarity}" />
+                                    </StackPanel>
+                                </UniformGrid>
+                                <TextBlock Text="“DAC计数/mA”必须填写硬件标定值；未填写时禁止下发任何刺激配置。"
+                                           Margin="0,10,0,0"
+                                           Foreground="#B42318" />
                             </StackPanel>
                         </Border>
 
