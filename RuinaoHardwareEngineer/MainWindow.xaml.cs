@@ -113,22 +113,30 @@ public partial class MainWindow : Window
 
     private async void ConfigureStimulationButton_Click(object sender, RoutedEventArgs e)
     {
-        await RunUiActionAsync(() => Stimulation.ConfigureAsync(ReadOptions()));
+        await RunUiActionAsync(
+            () => Stimulation.ConfigureAsync(ReadOptions()),
+            exception => Stimulation.ReportOperationFailure("下发配置", exception));
     }
 
     private async void StartStimulationButton_Click(object sender, RoutedEventArgs e)
     {
-        await RunUiActionAsync(() => Stimulation.StartAsync(ReadOptions()));
+        await RunUiActionAsync(
+            () => Stimulation.StartAsync(ReadOptions()),
+            exception => Stimulation.ReportOperationFailure("开始刺激", exception));
     }
 
     private async void StopStimulationButton_Click(object sender, RoutedEventArgs e)
     {
-        await RunUiActionAsync(() => Stimulation.StopAsync(ReadOptions()));
+        await RunUiActionAsync(
+            () => Stimulation.StopAsync(ReadOptions()),
+            exception => Stimulation.ReportOperationFailure("停止刺激", exception));
     }
 
     private async void ReadStimulationStatusButton_Click(object sender, RoutedEventArgs e)
     {
-        await RunUiActionAsync(() => Stimulation.ReadStatusAsync(ReadOptions()));
+        await RunUiActionAsync(
+            () => Stimulation.ReadStatusAsync(ReadOptions()),
+            exception => Stimulation.ReportOperationFailure("读取状态", exception));
     }
 
     private async void ReadProductInfoTextButton_Click(object sender, RoutedEventArgs e)
@@ -618,7 +626,9 @@ public partial class MainWindow : Window
         return new BackplaneConnectionOptions(protocolVersion, TimeSpan.FromMilliseconds(timeoutMs));
     }
 
-    private async Task RunUiActionAsync(Func<Task> action)
+    private async Task RunUiActionAsync(
+        Func<Task> action,
+        Action<Exception>? onError = null)
     {
         if (isBusy)
         {
@@ -634,6 +644,7 @@ public partial class MainWindow : Window
         catch (Exception exception)
         {
             AddLog(new HardwareLogEntry(DateTimeOffset.Now, "ERROR", exception.Message));
+            onError?.Invoke(exception);
         }
         finally
         {
@@ -780,13 +791,14 @@ public partial class MainWindow : Window
         SequenceCycleButton.IsEnabled = canReadOrWriteProductInfo;
         StartBatchReadButton.IsEnabled = canReadOrWriteProductInfo;
         StopDiagnosticButton.IsEnabled = isDiagnosticRunning;
-        ConfigureStimulationButton.IsEnabled = canReadOrWriteProductInfo;
+        ConfigureStimulationButton.IsEnabled = canReadOrWriteProductInfo
+            && Stimulation.CanEditConfiguration;
         StartStimulationButton.IsEnabled = canReadOrWriteProductInfo
             && Stimulation.IsConfigurationSent
             && !Stimulation.IsRunning
             && !Stimulation.HasStartCommandBeenSent;
-        StopStimulationButton.IsEnabled = canReadOrWriteProductInfo
-            && (Stimulation.IsRunning || Stimulation.HasStartCommandBeenSent);
+        // 停止属于安全路径：联机后始终可用，不能因界面状态与硬件真实状态不同而被禁用。
+        StopStimulationButton.IsEnabled = canReadOrWriteProductInfo;
         ReadStimulationStatusButton.IsEnabled = canReadOrWriteProductInfo;
     }
 

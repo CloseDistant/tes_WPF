@@ -208,7 +208,8 @@
                         <Border Margin="0,16,0,0"
                                 Padding="16"
                                 CornerRadius="10"
-                                Background="#F6F8FC">
+                                Background="#F6F8FC"
+                                IsEnabled="{Binding CanEditConfiguration}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="160" />
@@ -261,6 +262,7 @@
                                 CornerRadius="10"
                                 BorderBrush="#DCE3EE"
                                 BorderThickness="1"
+                                IsEnabled="{Binding CanEditConfiguration}"
                                 Visibility="{Binding IsDirectCurrent, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel>
                                 <TextBlock Text="tDCS · 梯形参数"
@@ -318,6 +320,7 @@
                                 CornerRadius="10"
                                 BorderBrush="#DCE3EE"
                                 BorderThickness="1"
+                                IsEnabled="{Binding CanEditConfiguration}"
                                 Visibility="{Binding IsPulseCurrent, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel>
                                 <TextBlock Text="tPCS · 梯形脉冲参数"
@@ -364,7 +367,8 @@
                                 CornerRadius="10"
                                 Background="#FFF8EC"
                                 BorderBrush="#F0D8A8"
-                                BorderThickness="1">
+                                BorderThickness="1"
+                                IsEnabled="{Binding CanEditConfiguration}">
                             <StackPanel>
                                 <TextBlock Text="共用电流标定"
                                            FontSize="16"

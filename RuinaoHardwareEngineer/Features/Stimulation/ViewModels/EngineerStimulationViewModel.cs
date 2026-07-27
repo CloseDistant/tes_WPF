@@ -211,14 +211,28 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
     public bool IsRunning
     {
         get => isRunning;
-        private set => SetProperty(ref isRunning, value);
+        private set
+        {
+            if (SetProperty(ref isRunning, value))
+            {
+                OnPropertyChanged(nameof(CanEditConfiguration));
+            }
+        }
     }
 
     public bool HasStartCommandBeenSent
     {
         get => hasStartCommandBeenSent;
-        private set => SetProperty(ref hasStartCommandBeenSent, value);
+        private set
+        {
+            if (SetProperty(ref hasStartCommandBeenSent, value))
+            {
+                OnPropertyChanged(nameof(CanEditConfiguration));
+            }
+        }
     }
+
+    public bool CanEditConfiguration => !IsRunning && !HasStartCommandBeenSent;
 
     public string StatusText
     {
@@ -290,6 +304,19 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
         IsRunning = false;
         HasStartCommandBeenSent = false;
         StatusText = "设备已断联，需要重新下发刺激配置";
+    }
+
+    public void ReportOperationFailure(string operation, Exception exception)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operation);
+        ArgumentNullException.ThrowIfNull(exception);
+        if (string.Equals(operation, "下发配置", StringComparison.Ordinal))
+        {
+            IsConfigurationSent = false;
+            HasStartCommandBeenSent = false;
+        }
+
+        StatusText = $"{operation}失败 · {exception.Message}";
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
