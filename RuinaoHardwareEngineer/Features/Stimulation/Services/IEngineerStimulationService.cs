@@ -11,12 +11,12 @@ public interface IEngineerStimulationService
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default);
 
-    Task<BackplaneUsbSendResult> StartAsync(
+    Task<BackplaneRegisterOperationResult> StartAsync(
         byte targetAddress,
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default);
 
-    Task<BackplaneUsbSendResult> StopAsync(
+    Task<BackplaneRegisterOperationResult> StopAsync(
         byte targetAddress,
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default);

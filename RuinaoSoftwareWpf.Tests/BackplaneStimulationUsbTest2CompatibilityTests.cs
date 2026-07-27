@@ -12,9 +12,9 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
         TimeSpan.FromSeconds(5));
 
     [Fact]
-    public async Task ConfigurePulseCurrent_SendsEachWaveformThenControlWithoutWaitingForReply()
+    public async Task ConfigurePulseCurrent_MatchesEachWaveformAndControlResponse()
     {
-        var transport = new RecordingOneWayTransport();
+        var transport = new ReplyingTransport();
         await using var client = new BackplaneClient(new EmptyDiscovery(), transport);
         var configuration = TesV15StimulationRegisterCodec.CreatePulseCurrent(
             channelNumber: 1,
@@ -31,15 +31,17 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
             Options,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(3, transport.SentFrames.Count);
+        Assert.Equal(3, transport.ExchangeFrames.Count);
         Assert.Equal(2, result.WaveformWrites.Count);
-        Assert.Empty(transport.ExchangeFrames);
+        Assert.All(
+            result.WaveformWrites.Append(result.ControlWrite),
+            operation => Assert.Equal(operation.RequestSequence, operation.ResponseAckSequence));
 
-        var firstWaveform = ParseRegisters(transport.SentFrames[0]);
-        var intervalWaveform = ParseRegisters(transport.SentFrames[1]);
-        var control = ParseRegisters(transport.SentFrames[2]);
+        var firstWaveform = ParseRegisters(transport.ExchangeFrames[0]);
+        var intervalWaveform = ParseRegisters(transport.ExchangeFrames[1]);
+        var control = ParseRegisters(transport.ExchangeFrames[2]);
 
-        Assert.Equal(0x01, ParseFrame(transport.SentFrames[0]).DestinationAddress);
+        Assert.Equal(0x01, ParseFrame(transport.ExchangeFrames[0]).DestinationAddress);
         Assert.Equal(0x3020, firstWaveform[0].Address);
         Assert.Equal(8U, firstWaveform[0].Value);
         Assert.Equal(0x3030, intervalWaveform[0].Address);
@@ -49,9 +51,9 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
     }
 
     [Fact]
-    public async Task ConfigureDirectCurrent_SendsTrapezoidThenControlWithoutWaitingForReply()
+    public async Task ConfigureDirectCurrent_MatchesTrapezoidAndControlResponses()
     {
-        var transport = new RecordingOneWayTransport();
+        var transport = new ReplyingTransport();
         await using var client = new BackplaneClient(new EmptyDiscovery(), transport);
         var configuration = TesV15StimulationRegisterCodec.CreateDirectCurrent(
             channelNumber: 1,
@@ -68,38 +70,57 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
             Options,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(2, transport.SentFrames.Count);
+        Assert.Equal(2, transport.ExchangeFrames.Count);
         Assert.Single(result.WaveformWrites);
-        Assert.Empty(transport.ExchangeFrames);
-        Assert.Equal(8U, ParseRegisters(transport.SentFrames[0])[0].Value);
+        Assert.Equal(
+            result.WaveformWrites[0].RequestSequence,
+            result.WaveformWrites[0].ResponseAckSequence);
+        Assert.Equal(result.ControlWrite.RequestSequence, result.ControlWrite.ResponseAckSequence);
+        Assert.Equal(8U, ParseRegisters(transport.ExchangeFrames[0])[0].Value);
         Assert.Equal(
             TesV15StimulationRegisterCodec.EnableMaskRegister,
-            ParseRegisters(transport.SentFrames[1])[0].Address);
+            ParseRegisters(transport.ExchangeFrames[1])[0].Address);
     }
 
     [Fact]
-    public async Task StartAndStop_SendUsbTest2CommandRegistersWithoutExchange()
+    public async Task StartAndStop_RequireMatchingHardwareResponses()
     {
-        var transport = new RecordingOneWayTransport();
+        var transport = new ReplyingTransport();
         await using var client = new BackplaneClient(new EmptyDiscovery(), transport);
 
-        await client.StartStimulationAsync(
+        var start = await client.StartStimulationAsync(
             0x01,
             Options,
             TestContext.Current.CancellationToken);
-        await client.StopStimulationAsync(
+        var stop = await client.StopStimulationAsync(
             0x01,
             Options,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(2, transport.SentFrames.Count);
-        Assert.Empty(transport.ExchangeFrames);
+        Assert.Equal(2, transport.ExchangeFrames.Count);
+        Assert.Equal(start.RequestSequence, start.ResponseAckSequence);
+        Assert.Equal(stop.RequestSequence, stop.ResponseAckSequence);
         Assert.Equal(
             new TesV14RegisterValue(TesV15StimulationRegisterCodec.StartRegister, 0),
-            Assert.Single(ParseRegisters(transport.SentFrames[0])));
+            Assert.Single(ParseRegisters(transport.ExchangeFrames[0])));
         Assert.Equal(
             new TesV14RegisterValue(TesV15StimulationRegisterCodec.StopRegister, 0),
-            Assert.Single(ParseRegisters(transport.SentFrames[1])));
+            Assert.Single(ParseRegisters(transport.ExchangeFrames[1])));
+    }
+
+    [Fact]
+    public async Task Start_WhenResponseAcknowledgesAnotherSequence_Throws()
+    {
+        var transport = new ReplyingTransport(ackSequenceOffset: 1);
+        await using var client = new BackplaneClient(new EmptyDiscovery(), transport);
+
+        var exception = await Assert.ThrowsAsync<BackplaneConnectionException>(
+            () => client.StartStimulationAsync(
+                0x01,
+                Options,
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("ACK序列不匹配", exception.Message);
     }
 
     private static TesV14Frame ParseFrame(byte[] bytes)
@@ -125,10 +146,11 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
             Task.FromResult<UsbBackplaneDevice?>(null);
     }
 
-    private sealed class RecordingOneWayTransport : IBackplaneTransport, IBackplaneOneWayTransport
+    private sealed class ReplyingTransport(int ackSequenceOffset = 0) : IBackplaneTransport
     {
+        private ushort responseSequence = 100;
+
         public bool IsOpen => true;
-        public List<byte[]> SentFrames { get; } = [];
         public List<byte[]> ExchangeFrames { get; } = [];
 
         public Task OpenAsync(
@@ -137,20 +159,24 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
-        public Task SendAsync(
-            ReadOnlyMemory<byte> request,
-            CancellationToken cancellationToken = default)
-        {
-            SentFrames.Add(request.ToArray());
-            return Task.CompletedTask;
-        }
-
         public Task<byte[]> ExchangeAsync(
             ReadOnlyMemory<byte> request,
             CancellationToken cancellationToken = default)
         {
-            ExchangeFrames.Add(request.ToArray());
-            throw new InvalidOperationException("刺激写命令不应进入请求—应答交换。");
+            var requestBytes = request.ToArray();
+            ExchangeFrames.Add(requestBytes);
+            var requestFrame = ParseFrame(requestBytes);
+            var ackSequence = unchecked((ushort)(requestFrame.SendSequence + ackSequenceOffset));
+            var response = TesV14ProtocolCodec.BuildFrame(
+                TesV14FrameControl.None,
+                TesV14Command.Response,
+                requestFrame.DestinationAddress,
+                TesV14ProtocolConstants.HostAddress,
+                responseSequence++,
+                ackSequence,
+                requestFrame.Payload,
+                requestFrame.Version);
+            return Task.FromResult(response);
         }
 
         public Task CloseAsync(CancellationToken cancellationToken = default) =>

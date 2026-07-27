@@ -677,9 +677,9 @@ public partial class MainWindow : Window
 
     private void Stimulation_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(EngineerStimulationViewModel.IsConfigurationSent)
+        if (e.PropertyName is nameof(EngineerStimulationViewModel.IsConfigurationConfirmed)
             or nameof(EngineerStimulationViewModel.IsRunning)
-            or nameof(EngineerStimulationViewModel.HasStartCommandBeenSent))
+            or nameof(EngineerStimulationViewModel.IsStartCommandConfirmed))
         {
             UpdateButtons();
         }
@@ -794,9 +794,9 @@ public partial class MainWindow : Window
         ConfigureStimulationButton.IsEnabled = canReadOrWriteProductInfo
             && Stimulation.CanEditConfiguration;
         StartStimulationButton.IsEnabled = canReadOrWriteProductInfo
-            && Stimulation.IsConfigurationSent
+            && Stimulation.IsConfigurationConfirmed
             && !Stimulation.IsRunning
-            && !Stimulation.HasStartCommandBeenSent;
+            && !Stimulation.IsStartCommandConfirmed;
         // 停止属于安全路径：联机后始终可用，不能因界面状态与硬件真实状态不同而被禁用。
         StopStimulationButton.IsEnabled = canReadOrWriteProductInfo;
         ReadStimulationStatusButton.IsEnabled = canReadOrWriteProductInfo;

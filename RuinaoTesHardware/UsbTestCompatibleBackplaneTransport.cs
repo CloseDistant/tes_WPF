@@ -12,7 +12,6 @@ namespace RuinaoTesHardware;
 /// </summary>
 public sealed class UsbTestCompatibleBackplaneTransport :
     IBackplaneTransport,
-    IBackplaneOneWayTransport,
     IBackplaneTransferDiagnostics
 {
     private readonly SemaphoreSlim exchangeGate = new(1, 1);
@@ -155,27 +154,6 @@ public sealed class UsbTestCompatibleBackplaneTransport :
             {
                 ClearPending(pending);
             }
-        }
-        finally
-        {
-            exchangeGate.Release();
-        }
-    }
-
-    public async Task SendAsync(
-        ReadOnlyMemory<byte> request,
-        CancellationToken cancellationToken = default)
-    {
-        if (!IsOpen)
-        {
-            throw new BackplaneConnectionException("usbtest兼容USB链路尚未打开。");
-        }
-
-        await exchangeGate.WaitAsync(cancellationToken);
-        try
-        {
-            var requestBytes = request.ToArray();
-            await Task.Run(() => WriteCore(requestBytes), cancellationToken);
         }
         finally
         {
@@ -402,8 +380,7 @@ public sealed class UsbTestCompatibleBackplaneTransport :
                 && frame.DestinationAddress == pending.ExpectedDestinationAddress)
             {
                 var terminalCommand = IsTerminalResponse(pending.RequestCommand, frame.Command);
-                var sequenceMatches = frame.AckSequence == pending.SendSequence
-                    || (frame.AckSequence == 0 && terminalCommand);
+                var sequenceMatches = frame.AckSequence == pending.SendSequence;
                 if (terminalCommand && sequenceMatches)
                 {
                     matched = pending.Completion.TrySetResult(frameBytes);
