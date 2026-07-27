@@ -1,5 +1,8 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Threading;
+using RuinaoHardwareEngineer.Features.Stimulation.Services;
+using RuinaoHardwareEngineer.Features.Stimulation.ViewModels;
+using RuinaoTesHardware;
 
 namespace RuinaoHardwareEngineer;
 
@@ -12,7 +15,12 @@ public partial class App : Application
 
         try
         {
-            MainWindow = new MainWindow();
+            var client = new BackplaneClient(
+                new WindowsUsbBackplaneDiscovery(),
+                new UsbTestCompatibleBackplaneTransport());
+            var stimulationService = new EngineerStimulationService(client);
+            var stimulation = new EngineerStimulationViewModel(stimulationService);
+            MainWindow = new MainWindow(client, stimulation);
             MainWindow.Show();
         }
         catch (Exception exception)

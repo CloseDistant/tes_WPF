@@ -1,5 +1,6 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using RuinaoTesProtocol.V14;
+using RuinaoTesProtocol.V15;
 
 namespace RuinaoTesHardware;
 
@@ -261,6 +262,97 @@ public sealed class BackplaneClient : IAsyncDisposable
 
         return await ExchangeRegistersAsync(
             request, requestSequence, targetAddress, true, cancellationToken, registers);
+    }
+
+    /// <summary>
+    /// 按 usbtest2 顺序逐段下发 V1.5 波形，最后写通道总控制。
+    /// 每一帧都必须收到有效回复后才会继续，避免把“USB写入完成”误判为配置成功。
+    /// </summary>
+    public async Task<BackplaneStimulationConfigurationResult> ConfigureStimulationAsync(
+        byte targetAddress,
+        TesV15StimulationConfiguration configuration,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var waveformWrites = new List<BackplaneRegisterOperationResult>(configuration.Waveforms.Count);
+        for (var waveformIndex = 0; waveformIndex < configuration.Waveforms.Count; waveformIndex++)
+        {
+            var registers = TesV15StimulationRegisterCodec.BuildWaveformRegisters(
+                configuration,
+                waveformIndex);
+            waveformWrites.Add(await WriteRegistersAsync(
+                targetAddress,
+                registers,
+                options,
+                cancellationToken));
+        }
+
+        var controlWrite = await WriteRegistersAsync(
+            targetAddress,
+            TesV15StimulationRegisterCodec.BuildControlRegisters(configuration),
+            options,
+            cancellationToken);
+        var mode = configuration.Waveforms[0].Mode;
+        WriteLog(
+            "STIM_CONFIG",
+            $"电刺激配置已收到硬件回复：target=0x{targetAddress:X2} channel={configuration.ChannelNumber} "
+                + $"mode={mode} waveformCount={configuration.Waveforms.Count} "
+                + $"totalTimeMs={configuration.TotalTimeMs}。");
+        return new BackplaneStimulationConfigurationResult(
+            targetAddress,
+            configuration.ChannelNumber,
+            mode,
+            waveformWrites,
+            controlWrite);
+    }
+
+    /// <summary>
+    /// 完全复现 usbtest2：向业务板写 0x0002=0，由 0x2E00 的使能掩码决定启动通道。
+    /// </summary>
+    public Task<BackplaneRegisterOperationResult> StartStimulationAsync(
+        byte targetAddress,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        return WriteRegistersAsync(
+            targetAddress,
+            [new TesV14RegisterValue(TesV15StimulationRegisterCodec.StartRegister, 0)],
+            options,
+            cancellationToken);
+    }
+
+    /// <summary>完全复现 usbtest2：向业务板写 0x0003=0，停止当前刺激输出。</summary>
+    public Task<BackplaneRegisterOperationResult> StopStimulationAsync(
+        byte targetAddress,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        return WriteRegistersAsync(
+            targetAddress,
+            [new TesV14RegisterValue(TesV15StimulationRegisterCodec.StopRegister, 0)],
+            options,
+            cancellationToken);
+    }
+
+    /// <summary>读取配置错误码 0x2E02 与通道运行位 0x2E03，仅用于工程联调诊断。</summary>
+    public async Task<BackplaneStimulationStatusResult> ReadStimulationStatusAsync(
+        byte targetAddress,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        var read = await ReadRegistersAsync(
+            targetAddress,
+            [
+                TesV15StimulationRegisterCodec.ConfigurationStatusRegister,
+                TesV15StimulationRegisterCodec.RunStateRegister,
+            ],
+            options,
+            cancellationToken);
+        return new BackplaneStimulationStatusResult(
+            read.Registers[0].Value,
+            read.Registers[1].Value,
+            read);
     }
 
     /// <summary>按16组或32组布局读取一个字符串组，内部每批固定读取8个寄存器。</summary>

@@ -1,4 +1,4 @@
-namespace RuinaoTesHardware;
+﻿namespace RuinaoTesHardware;
 
 public enum BackplaneConnectionState
 {
@@ -61,6 +61,20 @@ public sealed record BackplaneProductInfoTextWriteResult(
     int Utf8ByteCount,
     TimeSpan Elapsed,
     IReadOnlyList<BackplaneRegisterOperationResult> BatchResults);
+
+/// <summary>一次 V1.5 电刺激配置下发的逐帧真实回复。</summary>
+public sealed record BackplaneStimulationConfigurationResult(
+    byte TargetAddress,
+    byte ChannelNumber,
+    RuinaoTesProtocol.V15.TesV15StimulationMode Mode,
+    IReadOnlyList<BackplaneRegisterOperationResult> WaveformWrites,
+    BackplaneRegisterOperationResult ControlWrite);
+
+/// <summary>V1.5 电刺激配置状态与运行状态寄存器快照。</summary>
+public sealed record BackplaneStimulationStatusResult(
+    uint ConfigurationStatus,
+    uint RunStateMask,
+    BackplaneRegisterOperationResult RegisterRead);
 
 public sealed record HardwareLogEntry(
     DateTimeOffset Timestamp,

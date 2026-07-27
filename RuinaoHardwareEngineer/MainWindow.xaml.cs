@@ -1,10 +1,11 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using RuinaoHardwareEngineer.Features.Stimulation.ViewModels;
 using RuinaoTesHardware;
 using RuinaoTesProtocol.V14;
 
@@ -26,11 +27,16 @@ public partial class MainWindow : Window
     public ObservableCollection<LogItem> LogItems { get; } = new();
     public ObservableCollection<RawFrameItem> RawFrameItems { get; } = new();
     public ObservableCollection<BatchRegisterItem> BatchRegisterItems { get; } = new();
+    public EngineerStimulationViewModel Stimulation { get; }
     public IReadOnlyList<int> ProductInfoGroups { get; } =
         Enumerable.Range(0, 32).ToArray();
 
-    public MainWindow()
+    public MainWindow(
+        BackplaneClient client,
+        EngineerStimulationViewModel stimulation)
     {
+        this.client = client;
+        Stimulation = stimulation;
         InitializeComponent();
         DataContext = this;
         ProductInfoGroupComboBox.SelectedIndex = 0;
@@ -39,13 +45,11 @@ public partial class MainWindow : Window
             Array.Empty<object>(),
             Array.Empty<object>()));
 
-        client = new BackplaneClient(
-            new WindowsUsbBackplaneDiscovery(),
-            new UsbTestCompatibleBackplaneTransport());
         client.Log += Client_Log;
         client.StateChanged += Client_StateChanged;
         client.RawFrameSent += Client_RawFrameSent;
         client.RawFrameReceived += Client_RawFrameReceived;
+        Stimulation.PropertyChanged += Stimulation_PropertyChanged;
 
         diagnosticRefreshTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background,
             (_, _) => RefreshDiagnosticSnapshot(), Dispatcher);
@@ -71,6 +75,7 @@ public partial class MainWindow : Window
         diagnosticRefreshTimer.Stop();
         client.RawFrameSent -= Client_RawFrameSent;
         client.RawFrameReceived -= Client_RawFrameReceived;
+        Stimulation.PropertyChanged -= Stimulation_PropertyChanged;
         await client.DisposeAsync();
     }
 
@@ -104,6 +109,26 @@ public partial class MainWindow : Window
     private async void DisconnectButton_Click(object sender, RoutedEventArgs e)
     {
         await RunUiActionAsync(() => client.DisconnectAsync());
+    }
+
+    private async void ConfigureStimulationButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunUiActionAsync(() => Stimulation.ConfigureAsync(ReadOptions()));
+    }
+
+    private async void StartStimulationButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunUiActionAsync(() => Stimulation.StartAsync(ReadOptions()));
+    }
+
+    private async void StopStimulationButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunUiActionAsync(() => Stimulation.StopAsync(ReadOptions()));
+    }
+
+    private async void ReadStimulationStatusButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunUiActionAsync(() => Stimulation.ReadStatusAsync(ReadOptions()));
     }
 
     private async void ReadProductInfoTextButton_Click(object sender, RoutedEventArgs e)
@@ -631,11 +656,21 @@ public partial class MainWindow : Window
             {
                 handshakeSucceeded = false;
                 diagnosticCancellation?.Cancel();
+                Stimulation.ResetConnectionState();
             }
 
             UpdateConnectionStateBadge();
             UpdateButtons();
         });
+    }
+
+    private void Stimulation_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(EngineerStimulationViewModel.IsConfigured)
+            or nameof(EngineerStimulationViewModel.IsRunning))
+        {
+            UpdateButtons();
+        }
     }
 
     private void UpdateConnectionStateBadge()
@@ -744,6 +779,13 @@ public partial class MainWindow : Window
         SequenceCycleButton.IsEnabled = canReadOrWriteProductInfo;
         StartBatchReadButton.IsEnabled = canReadOrWriteProductInfo;
         StopDiagnosticButton.IsEnabled = isDiagnosticRunning;
+        ConfigureStimulationButton.IsEnabled = canReadOrWriteProductInfo;
+        StartStimulationButton.IsEnabled = canReadOrWriteProductInfo
+            && Stimulation.IsConfigured
+            && !Stimulation.IsRunning;
+        StopStimulationButton.IsEnabled = canReadOrWriteProductInfo
+            && Stimulation.IsRunning;
+        ReadStimulationStatusButton.IsEnabled = canReadOrWriteProductInfo;
     }
 
     public sealed class BatchRegisterItem
