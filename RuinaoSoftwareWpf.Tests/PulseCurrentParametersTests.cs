@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace RuinaoSoftwareWpf.Tests;
 
@@ -18,6 +18,22 @@ public sealed class PulseCurrentParametersTests
         Assert.Equal(
             ["不掉转", "调转"],
             PulseCurrentPolarities.All);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("未知")]
+    public void ChannelConfig_InvalidTransientPolarity_DoesNotClearExistingSelection(string? transientValue)
+    {
+        var channel = new PulseCurrentChannelConfig
+        {
+            Polarity = PulseCurrentPolarities.Reversed
+        };
+
+        channel.Polarity = transientValue!;
+
+        Assert.Equal(PulseCurrentPolarities.Reversed, channel.Polarity);
     }
 
     [Fact]
