@@ -226,7 +226,7 @@
                                             <DataTemplate>
                                                 <TextBlock FontFamily="Consolas">
                                                     <Run Text="0x" />
-                                                    <Run Text="{Binding StringFormat={}{0:X2}}" />
+                                                    <Run Text="{Binding Path=., Mode=OneWay, StringFormat={}{0:X2}}" />
                                                 </TextBlock>
                                             </DataTemplate>
                                         </ComboBox.ItemTemplate>
