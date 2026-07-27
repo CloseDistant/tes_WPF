@@ -265,8 +265,8 @@ public sealed class BackplaneClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// 按 usbtest2 顺序逐段下发 V1.5 波形，最后写通道总控制。
-    /// 每一帧都必须收到有效回复后才会继续，避免把“USB写入完成”误判为配置成功。
+    /// 按 usbtest2 顺序逐段发送 V1.5 波形，最后发送通道总控制。
+    /// usbtest2 的写命令不等待回复，因此这里只确认每帧已完整写入 USB Bulk OUT。
     /// </summary>
     public async Task<BackplaneStimulationConfigurationResult> ConfigureStimulationAsync(
         byte targetAddress,
@@ -275,20 +275,20 @@ public sealed class BackplaneClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        var waveformWrites = new List<BackplaneRegisterOperationResult>(configuration.Waveforms.Count);
+        var waveformWrites = new List<BackplaneUsbSendResult>(configuration.Waveforms.Count);
         for (var waveformIndex = 0; waveformIndex < configuration.Waveforms.Count; waveformIndex++)
         {
             var registers = TesV15StimulationRegisterCodec.BuildWaveformRegisters(
                 configuration,
                 waveformIndex);
-            waveformWrites.Add(await WriteRegistersAsync(
+            waveformWrites.Add(await SendRegistersWithoutReplyAsync(
                 targetAddress,
                 registers,
                 options,
                 cancellationToken));
         }
 
-        var controlWrite = await WriteRegistersAsync(
+        var controlWrite = await SendRegistersWithoutReplyAsync(
             targetAddress,
             TesV15StimulationRegisterCodec.BuildControlRegisters(configuration),
             options,
@@ -296,9 +296,9 @@ public sealed class BackplaneClient : IAsyncDisposable
         var mode = configuration.Waveforms[0].Mode;
         WriteLog(
             "STIM_CONFIG",
-            $"电刺激配置已收到硬件回复：target=0x{targetAddress:X2} channel={configuration.ChannelNumber} "
+            $"电刺激配置已按usbtest2顺序完成USB发送：target=0x{targetAddress:X2} channel={configuration.ChannelNumber} "
                 + $"mode={mode} waveformCount={configuration.Waveforms.Count} "
-                + $"totalTimeMs={configuration.TotalTimeMs}。");
+                + $"totalTimeMs={configuration.TotalTimeMs}；未等待写命令ACK。");
         return new BackplaneStimulationConfigurationResult(
             targetAddress,
             configuration.ChannelNumber,
@@ -310,12 +310,12 @@ public sealed class BackplaneClient : IAsyncDisposable
     /// <summary>
     /// 完全复现 usbtest2：向业务板写 0x0002=0，由 0x2E00 的使能掩码决定启动通道。
     /// </summary>
-    public Task<BackplaneRegisterOperationResult> StartStimulationAsync(
+    public Task<BackplaneUsbSendResult> StartStimulationAsync(
         byte targetAddress,
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)
     {
-        return WriteRegistersAsync(
+        return SendRegistersWithoutReplyAsync(
             targetAddress,
             [new TesV14RegisterValue(TesV15StimulationRegisterCodec.StartRegister, 0)],
             options,
@@ -323,16 +323,60 @@ public sealed class BackplaneClient : IAsyncDisposable
     }
 
     /// <summary>完全复现 usbtest2：向业务板写 0x0003=0，停止当前刺激输出。</summary>
-    public Task<BackplaneRegisterOperationResult> StopStimulationAsync(
+    public Task<BackplaneUsbSendResult> StopStimulationAsync(
         byte targetAddress,
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)
     {
-        return WriteRegistersAsync(
+        return SendRegistersWithoutReplyAsync(
             targetAddress,
             [new TesV14RegisterValue(TesV15StimulationRegisterCodec.StopRegister, 0)],
             options,
             cancellationToken);
+    }
+
+    private async Task<BackplaneUsbSendResult> SendRegistersWithoutReplyAsync(
+        byte targetAddress,
+        IReadOnlyList<TesV14RegisterValue> registers,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(registers);
+        if (transport is not IBackplaneOneWayTransport oneWayTransport)
+        {
+            throw new BackplaneConnectionException(
+                "当前USB传输实现不支持usbtest2单向写入模式。");
+        }
+
+        byte[] request;
+        ushort requestSequence;
+        lock (protocolLock)
+        {
+            protocolApi.ProtocolVersion = options.ProtocolVersion;
+            protocolApi.DestinationAddress = targetAddress;
+            request = protocolApi.BuildWriteRegisters(registers, out requestSequence);
+        }
+
+        WriteLog(
+            "REG_SEND",
+            $"usbtest2单向写帧已生成：target=0x{targetAddress:X2} seq={requestSequence} "
+                + $"registers={registers.Count} bytes={request.Length}",
+            request);
+
+        var stopwatch = Stopwatch.StartNew();
+        await oneWayTransport.SendAsync(request, cancellationToken);
+        stopwatch.Stop();
+        WriteLog(
+            "DECISION",
+            $"usbtest2单向写已完成USB发送：target=0x{targetAddress:X2} "
+                + $"seq={requestSequence} registers={registers.Count} "
+                + $"耗时={stopwatch.Elapsed.TotalMilliseconds:F1}ms；未等待硬件ACK。");
+        return new BackplaneUsbSendResult(
+            requestSequence,
+            stopwatch.Elapsed,
+            targetAddress,
+            registers.ToArray(),
+            request);
     }
 
     /// <summary>读取配置错误码 0x2E02 与通道运行位 0x2E03，仅用于工程联调诊断。</summary>

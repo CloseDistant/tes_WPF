@@ -11,7 +11,7 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
 {
     private readonly IEngineerStimulationService service;
     private string selectedMode = DirectCurrentMode;
-    private int selectedBoardAddress;
+    private int selectedBoardAddress = 1;
     private int selectedChannel = 1;
     private string totalDurationSeconds = "120";
     private string zeroCurrentDac = "30000";
@@ -30,8 +30,9 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
     private string pulseWidthMilliseconds = "10";
     private string pulseIntervalWidthMilliseconds = "20";
 
-    private bool isConfigured;
+    private bool isConfigurationSent;
     private bool isRunning;
+    private bool hasStartCommandBeenSent;
     private string statusText = "尚未下发刺激配置";
 
     public const string DirectCurrentMode = "tDCS · 梯形";
@@ -199,16 +200,24 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool IsConfigured
+    /// <summary>配置帧是否已按 usbtest2 顺序完整写入 USB；不表示硬件已经确认配置。</summary>
+    public bool IsConfigurationSent
     {
-        get => isConfigured;
-        private set => SetProperty(ref isConfigured, value);
+        get => isConfigurationSent;
+        private set => SetProperty(ref isConfigurationSent, value);
     }
 
+    /// <summary>仅由状态寄存器回读更新，不根据开始命令的USB发送结果推断。</summary>
     public bool IsRunning
     {
         get => isRunning;
         private set => SetProperty(ref isRunning, value);
+    }
+
+    public bool HasStartCommandBeenSent
+    {
+        get => hasStartCommandBeenSent;
+        private set => SetProperty(ref hasStartCommandBeenSent, value);
     }
 
     public string StatusText
@@ -229,24 +238,27 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
 
         var targetAddress = checked((byte)SelectedBoardAddress);
         var result = await service.ConfigureAsync(targetAddress, configuration, options, cancellationToken);
-        IsConfigured = true;
+        IsConfigurationSent = true;
         IsRunning = false;
-        StatusText = $"配置成功 · 业务板0x{targetAddress:X2} · 通道{result.ChannelNumber} · {SelectedMode}";
+        HasStartCommandBeenSent = false;
+        StatusText = $"配置帧已按usbtest2顺序完成USB发送 · 业务板0x{targetAddress:X2} "
+            + $"· 通道{result.ChannelNumber} · {SelectedMode} · 未等待硬件ACK";
     }
 
     public async Task StartAsync(
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)
     {
-        if (!IsConfigured)
+        if (!IsConfigurationSent)
         {
-            throw new InvalidOperationException("请先下发当前刺激配置并收到硬件回复。");
+            throw new InvalidOperationException("请先按usbtest2顺序发送当前刺激配置。");
         }
 
         var targetAddress = checked((byte)SelectedBoardAddress);
         await service.StartAsync(targetAddress, options, cancellationToken);
-        IsRunning = true;
-        StatusText = $"开始命令已收到硬件回复 · 业务板0x{targetAddress:X2} · 通道{SelectedChannel}";
+        HasStartCommandBeenSent = true;
+        StatusText = $"开始命令0x0002已完成USB发送 · 业务板0x{targetAddress:X2} "
+            + $"· 通道{SelectedChannel} · 实际运行状态尚未回读确认";
     }
 
     public async Task StopAsync(
@@ -255,8 +267,9 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
     {
         var targetAddress = checked((byte)SelectedBoardAddress);
         await service.StopAsync(targetAddress, options, cancellationToken);
-        IsRunning = false;
-        StatusText = $"停止命令已收到硬件回复 · 业务板0x{targetAddress:X2}";
+        HasStartCommandBeenSent = false;
+        StatusText = $"停止命令0x0003已完成USB发送 · 业务板0x{targetAddress:X2} "
+            + "· 实际停止状态尚未回读确认";
     }
 
     public async Task ReadStatusAsync(
@@ -267,13 +280,15 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
         var status = await service.ReadStatusAsync(targetAddress, options, cancellationToken);
         var channelMask = 1U << (SelectedChannel - 1);
         IsRunning = (status.RunStateMask & channelMask) != 0;
+        HasStartCommandBeenSent = IsRunning;
         StatusText = $"配置状态=0x{status.ConfigurationStatus:X8} · 运行掩码=0x{status.RunStateMask:X8}";
     }
 
     public void ResetConnectionState()
     {
-        IsConfigured = false;
+        IsConfigurationSent = false;
         IsRunning = false;
+        HasStartCommandBeenSent = false;
         StatusText = "设备已断联，需要重新下发刺激配置";
     }
 
@@ -384,7 +399,8 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
 
     private void InvalidateConfiguration()
     {
-        IsConfigured = false;
+        IsConfigurationSent = false;
+        HasStartCommandBeenSent = false;
         OnPropertyChanged(nameof(ConversionPreview));
     }
 

@@ -666,8 +666,9 @@ public partial class MainWindow : Window
 
     private void Stimulation_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(EngineerStimulationViewModel.IsConfigured)
-            or nameof(EngineerStimulationViewModel.IsRunning))
+        if (e.PropertyName is nameof(EngineerStimulationViewModel.IsConfigurationSent)
+            or nameof(EngineerStimulationViewModel.IsRunning)
+            or nameof(EngineerStimulationViewModel.HasStartCommandBeenSent))
         {
             UpdateButtons();
         }
@@ -781,10 +782,11 @@ public partial class MainWindow : Window
         StopDiagnosticButton.IsEnabled = isDiagnosticRunning;
         ConfigureStimulationButton.IsEnabled = canReadOrWriteProductInfo;
         StartStimulationButton.IsEnabled = canReadOrWriteProductInfo
-            && Stimulation.IsConfigured
-            && !Stimulation.IsRunning;
+            && Stimulation.IsConfigurationSent
+            && !Stimulation.IsRunning
+            && !Stimulation.HasStartCommandBeenSent;
         StopStimulationButton.IsEnabled = canReadOrWriteProductInfo
-            && Stimulation.IsRunning;
+            && (Stimulation.IsRunning || Stimulation.HasStartCommandBeenSent);
         ReadStimulationStatusButton.IsEnabled = canReadOrWriteProductInfo;
     }
 

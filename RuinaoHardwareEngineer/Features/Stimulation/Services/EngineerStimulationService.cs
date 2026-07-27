@@ -14,7 +14,7 @@ public sealed class EngineerStimulationService(BackplaneClient client) : IEngine
         return client.ConfigureStimulationAsync(targetAddress, configuration, options, cancellationToken);
     }
 
-    public Task<BackplaneRegisterOperationResult> StartAsync(
+    public Task<BackplaneUsbSendResult> StartAsync(
         byte targetAddress,
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)
@@ -22,7 +22,7 @@ public sealed class EngineerStimulationService(BackplaneClient client) : IEngine
         return client.StartStimulationAsync(targetAddress, options, cancellationToken);
     }
 
-    public Task<BackplaneRegisterOperationResult> StopAsync(
+    public Task<BackplaneUsbSendResult> StopAsync(
         byte targetAddress,
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)

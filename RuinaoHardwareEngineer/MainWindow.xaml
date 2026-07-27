@@ -425,7 +425,7 @@
                                     Click="StopStimulationButton_Click"
                                     Background="#FFE2E4" />
                             <Button x:Name="ReadStimulationStatusButton"
-                                    Content="读取配置/运行状态"
+                                    Content="读取状态寄存器（诊断）"
                                     Click="ReadStimulationStatusButton_Click"
                                     Margin="0" />
                         </WrapPanel>

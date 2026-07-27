@@ -41,6 +41,17 @@ public sealed record BackplaneRegisterOperationResult(
     byte ResponseCommand,
     ushort ResponseAckSequence);
 
+/// <summary>
+/// 一次按 usbtest2 方式完成的单向协议帧发送。
+/// 该结果只证明完整帧已写入 USB Bulk OUT，不代表业务板已经解析或执行。
+/// </summary>
+public sealed record BackplaneUsbSendResult(
+    ushort RequestSequence,
+    TimeSpan Elapsed,
+    byte TargetAddress,
+    IReadOnlyList<RuinaoTesProtocol.V14.TesV14RegisterValue> Registers,
+    byte[] RequestFrame);
+
 /// <summary>背板产品信息区一个字符串分组的完整读取结果。</summary>
 public sealed record BackplaneProductInfoTextResult(
     RuinaoTesProtocol.V14.TesV14ProductInfoGrouping Grouping,
@@ -62,13 +73,13 @@ public sealed record BackplaneProductInfoTextWriteResult(
     TimeSpan Elapsed,
     IReadOnlyList<BackplaneRegisterOperationResult> BatchResults);
 
-/// <summary>一次 V1.5 电刺激配置下发的逐帧真实回复。</summary>
+/// <summary>一次按 usbtest2 顺序完成的 V1.5 电刺激配置单向发送结果。</summary>
 public sealed record BackplaneStimulationConfigurationResult(
     byte TargetAddress,
     byte ChannelNumber,
     RuinaoTesProtocol.V15.TesV15StimulationMode Mode,
-    IReadOnlyList<BackplaneRegisterOperationResult> WaveformWrites,
-    BackplaneRegisterOperationResult ControlWrite);
+    IReadOnlyList<BackplaneUsbSendResult> WaveformWrites,
+    BackplaneUsbSendResult ControlWrite);
 
 /// <summary>V1.5 电刺激配置状态与运行状态寄存器快照。</summary>
 public sealed record BackplaneStimulationStatusResult(
@@ -159,6 +170,15 @@ public interface IBackplaneTransport : IAsyncDisposable
 
     /// <summary>释放USB句柄，断开软件与设备之间的通信链路。</summary>
     Task CloseAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// usbtest2 使用的单向写能力。实现必须与请求应答交换共用串行门，
+/// 并且只在完整写入 Bulk OUT 后返回，不等待 Bulk IN 回复。
+/// </summary>
+public interface IBackplaneOneWayTransport
+{
+    Task SendAsync(ReadOnlyMemory<byte> request, CancellationToken cancellationToken = default);
 }
 
 public sealed class BackplaneConnectionException : Exception
