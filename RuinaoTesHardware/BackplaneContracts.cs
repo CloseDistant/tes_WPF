@@ -39,7 +39,8 @@ public sealed record BackplaneRegisterOperationResult(
     byte[] RequestFrame,
     byte[] ResponseFrame,
     byte ResponseCommand,
-    ushort ResponseAckSequence);
+    ushort ResponseAckSequence,
+    uint? ResponseStatusCode = null);
 
 /// <summary>背板产品信息区一个字符串分组的完整读取结果。</summary>
 public sealed record BackplaneProductInfoTextResult(

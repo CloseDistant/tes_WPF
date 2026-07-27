@@ -35,7 +35,11 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
         Assert.Equal(2, result.WaveformWrites.Count);
         Assert.All(
             result.WaveformWrites.Append(result.ControlWrite),
-            operation => Assert.Equal(operation.RequestSequence, operation.ResponseAckSequence));
+            operation =>
+            {
+                Assert.Equal(operation.RequestSequence, operation.ResponseAckSequence);
+                Assert.Equal(0U, operation.ResponseStatusCode);
+            });
 
         var firstWaveform = ParseRegisters(transport.ExchangeFrames[0]);
         var intervalWaveform = ParseRegisters(transport.ExchangeFrames[1]);
@@ -76,6 +80,8 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
             result.WaveformWrites[0].RequestSequence,
             result.WaveformWrites[0].ResponseAckSequence);
         Assert.Equal(result.ControlWrite.RequestSequence, result.ControlWrite.ResponseAckSequence);
+        Assert.Equal(0U, result.WaveformWrites[0].ResponseStatusCode);
+        Assert.Equal(0U, result.ControlWrite.ResponseStatusCode);
         Assert.Equal(8U, ParseRegisters(transport.ExchangeFrames[0])[0].Value);
         Assert.Equal(
             TesV15StimulationRegisterCodec.EnableMaskRegister,
@@ -100,6 +106,8 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
         Assert.Equal(2, transport.ExchangeFrames.Count);
         Assert.Equal(start.RequestSequence, start.ResponseAckSequence);
         Assert.Equal(stop.RequestSequence, stop.ResponseAckSequence);
+        Assert.Equal(0U, start.ResponseStatusCode);
+        Assert.Equal(0U, stop.ResponseStatusCode);
         Assert.Equal(
             new TesV14RegisterValue(TesV15StimulationRegisterCodec.StartRegister, 0),
             Assert.Single(ParseRegisters(transport.ExchangeFrames[0])));
@@ -121,6 +129,21 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
                 TestContext.Current.CancellationToken));
 
         Assert.Contains("ACK序列不匹配", exception.Message);
+    }
+
+    [Fact]
+    public async Task Start_WhenHardwareReturnsNonzeroStatus_Throws()
+    {
+        var transport = new ReplyingTransport(responseStatusCode: 2);
+        await using var client = new BackplaneClient(new EmptyDiscovery(), transport);
+
+        var exception = await Assert.ThrowsAsync<BackplaneConnectionException>(
+            () => client.StartStimulationAsync(
+                0x01,
+                Options,
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("status=0x00000002", exception.Message);
     }
 
     private static TesV14Frame ParseFrame(byte[] bytes)
@@ -146,7 +169,9 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
             Task.FromResult<UsbBackplaneDevice?>(null);
     }
 
-    private sealed class ReplyingTransport(int ackSequenceOffset = 0) : IBackplaneTransport
+    private sealed class ReplyingTransport(
+        int ackSequenceOffset = 0,
+        uint responseStatusCode = 0) : IBackplaneTransport
     {
         private ushort responseSequence = 100;
 
@@ -167,6 +192,10 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
             ExchangeFrames.Add(requestBytes);
             var requestFrame = ParseFrame(requestBytes);
             var ackSequence = unchecked((ushort)(requestFrame.SendSequence + ackSequenceOffset));
+            Span<byte> responsePayload = stackalloc byte[TesV14OperationStatusCodec.PayloadLength];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(
+                responsePayload,
+                responseStatusCode);
             var response = TesV14ProtocolCodec.BuildFrame(
                 TesV14FrameControl.None,
                 TesV14Command.Response,
@@ -174,7 +203,7 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
                 TesV14ProtocolConstants.HostAddress,
                 responseSequence++,
                 ackSequence,
-                requestFrame.Payload,
+                responsePayload,
                 requestFrame.Version);
             return Task.FromResult(response);
         }

@@ -508,7 +508,23 @@ public sealed class BackplaneClient : IAsyncDisposable
         }
 
         IReadOnlyList<TesV14RegisterValue> registers;
-        if (frame.Payload.Length == 0 && isWrite && frame.Command == TesV14Command.Acknowledgement)
+        uint? responseStatusCode = null;
+        if (isWrite
+            && frame.Command == TesV14Command.Response
+            && TesV14OperationStatusCodec.TryDecode(frame.Payload, out var statusCode))
+        {
+            responseStatusCode = statusCode;
+            if (statusCode != 0)
+            {
+                throw new BackplaneConnectionException(
+                    $"{operation}被硬件拒绝：status=0x{statusCode:X8}。");
+            }
+
+            // 实物业务板对写命令返回4字节状态码，不回显寄存器列表。
+            // 状态码0只确认硬件已接受本次写操作，不代表已经回读校验寄存器值。
+            registers = requestedValues ?? Array.Empty<TesV14RegisterValue>();
+        }
+        else if (frame.Payload.Length == 0 && isWrite && frame.Command == TesV14Command.Acknowledgement)
         {
             // 有些固件写成功只返回空ACK；保留请求值用于界面显示，但不冒充“回读验证”。
             registers = requestedValues ?? Array.Empty<TesV14RegisterValue>();
@@ -520,7 +536,9 @@ public sealed class BackplaneClient : IAsyncDisposable
 
         WriteLog("DECISION",
             $"{operation}回复有效：target=0x{targetAddress:X2} count={registers.Count} "
-                + $"ackSeq={frame.AckSequence} 耗时={stopwatch.Elapsed.TotalMilliseconds:F1}ms。");
+                + $"ackSeq={frame.AckSequence} status="
+                + $"{(responseStatusCode.HasValue ? $"0x{responseStatusCode.Value:X8}" : "寄存器数据")} "
+                + $"耗时={stopwatch.Elapsed.TotalMilliseconds:F1}ms。");
         return new BackplaneRegisterOperationResult(
             requestSequence,
             stopwatch.Elapsed,
@@ -530,7 +548,8 @@ public sealed class BackplaneClient : IAsyncDisposable
             request,
             response,
             (byte)frame.Command,
-            frame.AckSequence);
+            frame.AckSequence,
+            responseStatusCode);
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
