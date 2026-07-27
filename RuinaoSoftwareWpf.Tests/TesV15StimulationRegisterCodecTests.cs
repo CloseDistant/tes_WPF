@@ -1,5 +1,6 @@
 ﻿namespace RuinaoSoftwareWpf.Tests;
 
+using RuinaoTesProtocol.V14;
 using RuinaoTesProtocol.V15;
 using Xunit;
 
@@ -88,9 +89,16 @@ public sealed class TesV15StimulationRegisterCodecTests
             interval =>
             {
                 Assert.Equal(TesV15StimulationMode.Constant, interval.Mode);
+                Assert.Equal(5_000_000U, interval.DurationUs);
                 Assert.Equal(30_000U, interval.Offset);
             });
+        var intervalRegisters = TesV15StimulationRegisterCodec.BuildWaveformRegisters(configuration, 1);
+        var controlRegisters = TesV15StimulationRegisterCodec.BuildControlRegisters(configuration);
+        Assert.Equal(new TesV14RegisterValue(0x3030, 1), intervalRegisters[0]);
+        Assert.Equal(new TesV14RegisterValue(0x3031, 5_000_000), intervalRegisters[1]);
+        Assert.Equal(new TesV14RegisterValue(0x3004, 2), controlRegisters[6]);
         Assert.Equal(1U, configuration.ChannelFlags & 1U);
+        Assert.Equal(new TesV14RegisterValue(0x3005, 1), controlRegisters[7]);
         Assert.DoesNotContain(configuration.Waveforms, waveform => (uint)waveform.Mode == 10U);
     }
 
