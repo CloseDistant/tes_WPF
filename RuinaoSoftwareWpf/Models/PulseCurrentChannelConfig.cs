@@ -17,6 +17,7 @@ public sealed class PulseCurrentChannelConfig : ObservableObject
     private string plannedTotalCount = "—";
     private string remainingTime = "00:00:00";
     private bool isParameterEditingEnabled = true;
+    private bool isStimulating;
     private bool isSelected;
 
     public string Name { get => name; set => SetProperty(ref name, value); }
@@ -77,6 +78,13 @@ public sealed class PulseCurrentChannelConfig : ObservableObject
     {
         get => isParameterEditingEnabled;
         set => SetProperty(ref isParameterEditingEnabled, value);
+    }
+
+    /// <summary>当前通道是否正在执行电刺激，用于驱动运行状态指示灯。</summary>
+    public bool IsStimulating
+    {
+        get => isStimulating;
+        set => SetProperty(ref isStimulating, value);
     }
 
     public PulseCurrentWaveformState Waveform { get; } = new();

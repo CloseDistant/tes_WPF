@@ -253,15 +253,15 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
 
     private void StartSynchronized()
     {
-        var selectedChannels = SelectedChannels.ToArray();
-        if (selectedChannels.Length != 2)
+        var synchronizedChannels = Channels.ToArray();
+        if (synchronizedChannels.Length != 16)
         {
-            toastService.ShowError("同步开始失败", "请先选择一组完整的双通道。");
+            toastService.ShowError("同步开始失败", "同步开始要求 16 个通道全部可用。");
             return;
         }
 
         var snapshots = new Dictionary<PulseCurrentChannelConfig, PulseCurrentParameters>();
-        foreach (var channel in selectedChannels)
+        foreach (var channel in synchronizedChannels)
         {
             if (!PulseCurrentParameters.TryCreate(channel, out var snapshot, out var error))
             {
@@ -272,14 +272,14 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
             snapshots[channel] = snapshot!;
         }
 
-        // 两个通道全部校验成功后共享同一时间戳，避免出现部分启动。
+        // 16 个通道全部校验成功后共享同一时间戳，避免出现部分启动。
         var sharedTimestamp = Stopwatch.GetTimestamp();
-        foreach (var channel in selectedChannels)
+        foreach (var channel in synchronizedChannels)
         {
             BeginChannelRuntime(channel, snapshots[channel], sharedTimestamp);
         }
 
-        logger.Info($"tPCS DEBUG 模拟同步开始：{string.Join(" + ", selectedChannels.Select(channel => channel.Name))}");
+        logger.Info($"tPCS DEBUG 模拟同步开始：{string.Join(" + ", synchronizedChannels.Select(channel => channel.Name))}");
     }
 
     private void StartChannel(PulseCurrentChannelConfig channel)
@@ -308,6 +308,7 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         channel.Waveform.Start(snapshot);
         channel.RemainingTime = FormatRemaining(snapshot.TreatmentDurationSeconds);
         channel.IsParameterEditingEnabled = false;
+        channel.IsStimulating = true;
         activeChannels[channel] = new ChannelRuntime(startTimestamp, snapshot);
         if (!waveformTimer.IsEnabled)
         {
@@ -333,6 +334,7 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
                 Stopwatch.GetElapsedTime(runtime.StartTimestamp, stoppedAt).TotalSeconds);
             channel.RemainingTime = "00:00:00";
             channel.IsParameterEditingEnabled = true;
+            channel.IsStimulating = false;
             activeChannels.Remove(channel);
             logger.Info(
                 $"tPCS DEBUG 模拟急停：{channel.Name}，完成次数 {channel.Waveform.CompletedPulseCount}/{runtime.Parameters.PlannedTotalCount}");
@@ -368,6 +370,7 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
             channel.Waveform.Complete();
             channel.RemainingTime = "00:00:00";
             channel.IsParameterEditingEnabled = true;
+            channel.IsStimulating = false;
             completedChannels.Add(channel);
         }
 

@@ -158,8 +158,8 @@
                                                     CornerRadius="2"
                                                     Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}" />
                                             <DockPanel Margin="3,0,0,0">
-                                                <Ellipse Width="7" Height="7" Fill="{StaticResource Green}"
-                                                         DockPanel.Dock="Right" VerticalAlignment="Center" />
+                                                <Ellipse Style="{StaticResource StimulationChannelStatusIndicator}"
+                                                         DockPanel.Dock="Right" />
                                                 <TextBlock Text="{Binding Name}"
                                                            FontSize="12" FontWeight="SemiBold" />
                                             </DockPanel>
@@ -181,8 +181,8 @@
                                                     CornerRadius="2"
                                                     Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}" />
                                             <DockPanel Margin="3,0,0,0">
-                                                <Ellipse Width="7" Height="7" Fill="{StaticResource Green}"
-                                                         DockPanel.Dock="Right" VerticalAlignment="Center" />
+                                                <Ellipse Style="{StaticResource StimulationChannelStatusIndicator}"
+                                                         DockPanel.Dock="Right" />
                                                 <TextBlock Text="{Binding Name}"
                                                            FontSize="12" FontWeight="SemiBold" />
                                             </DockPanel>

@@ -52,6 +52,63 @@ public sealed class DirectCurrentChannelSelectionTests
     }
 
     [Fact]
+    public void SynchronizedStart_StartsAllSixteenChannelsAfterEveryChannelPassesValidation()
+    {
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine);
+        foreach (var channel in viewModel.Channels)
+        {
+            channel.CurrentMA = "1";
+        }
+
+        viewModel.SynchronizedStartCommand.Execute(null);
+
+        Assert.NotNull(engine.LastStartedDirectCurrentGroup);
+        Assert.Equal(16, engine.LastStartedDirectCurrentGroup.Channels.Count);
+        Assert.All(viewModel.Channels, channel => Assert.True(channel.DirectCurrentWaveform.IsRunning));
+        Assert.All(viewModel.Channels, channel => Assert.True(channel.IsStimulating));
+
+        viewModel.EmergencyStopCommand.Execute(null);
+        Assert.All(viewModel.Channels, channel => Assert.False(channel.IsStimulating));
+    }
+
+    [Fact]
+    public void SynchronizedStart_WhenAnyChannelIsInvalid_StartsNoChannels()
+    {
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine);
+        foreach (var channel in viewModel.Channels)
+        {
+            channel.CurrentMA = "1";
+        }
+
+        viewModel.Channels[15].CurrentMA = string.Empty;
+
+        viewModel.SynchronizedStartCommand.Execute(null);
+
+        Assert.Null(engine.LastStartedDirectCurrentGroup);
+        Assert.All(viewModel.Channels, channel => Assert.False(channel.DirectCurrentWaveform.IsRunning));
+        Assert.All(viewModel.Channels, channel => Assert.False(channel.IsStimulating));
+    }
+
+    [Fact]
+    public void StartChannel_ChangesOnlyTargetIndicatorToRunning()
+    {
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine);
+        var target = viewModel.Channels[0];
+        target.CurrentMA = "1";
+
+        viewModel.StartChannelCommand.Execute(target);
+
+        Assert.True(target.IsStimulating);
+        Assert.All(viewModel.Channels.Skip(1), channel => Assert.False(channel.IsStimulating));
+
+        viewModel.EmergencyStopCommand.Execute(null);
+        Assert.False(target.IsStimulating);
+    }
+
+    [Fact]
     public void ApplyPrescription_PreservesEachChannelsPolarity()
     {
         var viewModel = CreateViewModel();
@@ -85,10 +142,11 @@ public sealed class DirectCurrentChannelSelectionTests
         EvidenceGrade: string.Empty,
         IsBuiltin: false);
 
-    private static DirectCurrentControlViewModel CreateViewModel()
+    private static DirectCurrentControlViewModel CreateViewModel(
+        NoopStimulationEngine? stimulationEngine = null)
     {
         return new DirectCurrentControlViewModel(
-            new NoopStimulationEngine(),
+            stimulationEngine ?? new NoopStimulationEngine(),
             new ConnectedHardwareState(),
             new DebugHardwareSimulationService(),
             new NoopLoggingService(),
@@ -109,6 +167,8 @@ public sealed class DirectCurrentChannelSelectionTests
 
     private sealed class NoopStimulationEngine : IStimulationEngine
     {
+        public TiGroup? LastStartedDirectCurrentGroup { get; private set; }
+
         public StimulationExecutionState CurrentState => StimulationExecutionState.Idle;
 
         public Task<HardwareOperationResult> StartTiGroupAsync(
@@ -121,7 +181,11 @@ public sealed class DirectCurrentChannelSelectionTests
             TiGroup group,
             string selectedChannelNames,
             string prescriptionName,
-            CancellationToken cancellationToken = default) => NotUsed();
+            CancellationToken cancellationToken = default)
+        {
+            LastStartedDirectCurrentGroup = group;
+            return Success();
+        }
 
         public Task<HardwareOperationResult> PauseTiGroupAsync(
             TiGroup group,
@@ -136,7 +200,7 @@ public sealed class DirectCurrentChannelSelectionTests
         public Task<HardwareOperationResult> EmergencyStopDirectCurrentGroupAsync(
             TiGroup group,
             string reason,
-            CancellationToken cancellationToken = default) => NotUsed();
+            CancellationToken cancellationToken = default) => Success();
 
         public Task<HardwareOperationResult> CompleteGroupAsync(
             TiGroup group,
@@ -146,6 +210,9 @@ public sealed class DirectCurrentChannelSelectionTests
 
         private static Task<HardwareOperationResult> NotUsed() =>
             throw new InvalidOperationException("Selection tests must not execute stimulation commands.");
+
+        private static Task<HardwareOperationResult> Success() =>
+            Task.FromResult(new HardwareOperationResult(true, "test"));
     }
 
     private sealed class NoopLoggingService : ILoggingService

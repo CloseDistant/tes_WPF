@@ -264,15 +264,15 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             return;
         }
 
-        var selectedChannels = SelectedChannels.ToArray();
-        if (selectedChannels.Length != 2)
+        var synchronizedChannels = Channels.ToArray();
+        if (synchronizedChannels.Length != 16)
         {
-            toastService.ShowError("同步开始失败", "请先选择一组完整的双通道。");
+            toastService.ShowError("同步开始失败", "同步开始要求 16 个通道全部可用。");
             return;
         }
 
         var snapshots = new Dictionary<ChannelConfig, DirectCurrentWaveformParameters>();
-        foreach (var channel in selectedChannels)
+        foreach (var channel in synchronizedChannels)
         {
             if (!DirectCurrentWaveformParameters.TryCreate(channel, out var snapshot, out var error))
             {
@@ -283,13 +283,13 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             snapshots[channel] = snapshot!;
         }
 
-        var group = CreateExecutionGroup(selectedChannels);
+        var group = CreateExecutionGroup(synchronizedChannels);
         var result = await stimulationEngine.StartDirectCurrentGroupAsync(
             group,
-            string.Join(" + ", selectedChannels.Select(channel => channel.Name)),
+            string.Join(" + ", synchronizedChannels.Select(channel => channel.Name)),
             AppliedPrescriptionName);
         var sharedTimestamp = Stopwatch.GetTimestamp();
-        foreach (var channel in selectedChannels)
+        foreach (var channel in synchronizedChannels)
         {
             BeginChannelRuntime(channel, snapshots[channel], sharedTimestamp);
         }
@@ -344,6 +344,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             channel.DirectCurrentWaveform.EmergencyStop(Stopwatch.GetElapsedTime(runtime.StartTimestamp, stoppedAt).TotalSeconds);
             channel.RemainingTime = "00:00:00";
             channel.IsParameterEditingEnabled = true;
+            channel.IsStimulating = false;
         }
 
         StopTimerWhenIdle();
@@ -359,6 +360,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         channel.DirectCurrentWaveform.Start(snapshot);
         channel.RemainingTime = FormatRemaining(snapshot.TotalDurationSeconds);
         channel.IsParameterEditingEnabled = false;
+        channel.IsStimulating = true;
         activeChannels[channel] = new ChannelRuntime(startTimestamp, snapshot);
         if (!waveformTimer.IsEnabled)
         {
@@ -394,6 +396,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             channel.DirectCurrentWaveform.Complete();
             channel.RemainingTime = "00:00:00";
             channel.IsParameterEditingEnabled = true;
+            channel.IsStimulating = false;
             completed.Add(channel);
         }
 

@@ -57,8 +57,8 @@ public sealed class TiControlViewModel : ObservableObject
         });
 
         startCommand = new AsyncRelayCommand(
-            (_, _) => StartSelectedGroupAsync(),
-            _ => CanStartStimulation,
+            (_, _) => StartAllChannelsAsync(),
+            _ => CanStartStimulation && !countdown.HasActiveChannels,
             HandleStartFailure);
         StartCommand = startCommand;
         startChannelCommand = new AsyncRelayCommand(
@@ -73,7 +73,7 @@ public sealed class TiControlViewModel : ObservableObject
             onError: HandleStartFailure);
         StartChannelCommand = startChannelCommand;
         PauseCommand = CreateHardwareCommand(_ => PauseSelectedGroupAsync());
-        EmergencyStopCommand = CreateHardwareCommand(_ => EmergencyStopSelectedGroupAsync());
+        EmergencyStopCommand = CreateHardwareCommand(_ => EmergencyStopAllChannelsAsync());
         usePrescriptionCommand = new RelayCommand(
             _ => RequestPrescription(StimulationPrescriptionApplyScope.AllChannels),
             _ => !countdown.HasActiveChannels);
@@ -275,21 +275,49 @@ public sealed class TiControlViewModel : ObservableObject
         useChannelPrescriptionCommand.RaiseCanExecuteChanged();
     }
 
-    private async Task StartSelectedGroupAsync()
+    private async Task StartAllChannelsAsync()
     {
-        if (SelectedGroup is null)
+        var synchronizedChannels = Groups
+            .SelectMany(group => group.Channels)
+            .ToArray();
+        if (synchronizedChannels.Length != 16)
         {
-            logger.Debug("PROTO START skipped: no TI group selected");
+            toastService.ShowError("同步开始失败", "同步开始要求 16 个通道全部可用。");
             return;
         }
 
+        foreach (var channel in synchronizedChannels)
+        {
+            if (!DirectCurrentWaveformParameters.TryCreate(channel, out _, out var error))
+            {
+                toastService.ShowError("参数校验失败", error);
+                return;
+            }
+
+            if (!double.TryParse(
+                    channel.FrequencyHz,
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var frequencyHz)
+                || !double.IsFinite(frequencyHz)
+                || frequencyHz < 0)
+            {
+                toastService.ShowError("参数校验失败", $"{channel.Name}：载波频率必须是大于或等于 0 的数字。");
+                return;
+            }
+        }
+
+        var synchronizedGroup = CreateExecutionGroup(
+            "TI 全通道同步刺激",
+            synchronizedChannels);
         var result = await stimulationEngine.StartTiGroupAsync(
-            SelectedGroup,
-            SelectedChannelNames,
+            synchronizedGroup,
+            string.Join(" + ", synchronizedChannels.Select(channel => channel.Name)),
             AppliedPrescriptionName);
-        foreach (var channel in SelectedGroup.Channels)
+        foreach (var channel in synchronizedChannels)
         {
             channel.IsParameterEditingEnabled = false;
+            channel.IsStimulating = true;
             countdown.Start(channel);
         }
         RefreshStartCommandStates();
@@ -317,6 +345,7 @@ public sealed class TiControlViewModel : ObservableObject
             AppliedPrescriptionName);
         countdown.Start(channel);
         channel.IsParameterEditingEnabled = false;
+        channel.IsStimulating = true;
         RefreshStartCommandStates();
         HardwareOperationCompleted?.Invoke(this, result);
     }
@@ -334,27 +363,47 @@ public sealed class TiControlViewModel : ObservableObject
         foreach (var channel in SelectedGroup.Channels)
         {
             channel.IsParameterEditingEnabled = true;
+            channel.IsStimulating = false;
         }
         RefreshStartCommandStates();
         HardwareOperationCompleted?.Invoke(this, result);
     }
 
-    private async Task EmergencyStopSelectedGroupAsync()
+    private async Task EmergencyStopAllChannelsAsync()
     {
-        if (SelectedGroup is null)
+        var runningChannels = Groups
+            .SelectMany(group => group.Channels)
+            .Where(countdown.IsActive)
+            .ToArray();
+        if (runningChannels.Length == 0)
         {
-            logger.Debug("PROTO EMERGENCY skipped: no TI group selected");
+            logger.Debug("PROTO EMERGENCY skipped: no active TI channels");
             return;
         }
 
-        var result = await stimulationEngine.EmergencyStopTiGroupAsync(SelectedGroup, "用户点击急停");
+        var runningGroup = CreateExecutionGroup("TI 运行通道", runningChannels);
+        var result = await stimulationEngine.EmergencyStopTiGroupAsync(runningGroup, "用户点击急停");
         countdown.CancelAll(Groups.SelectMany(group => group.Channels), reset: true);
         foreach (var channel in Groups.SelectMany(group => group.Channels))
         {
             channel.IsParameterEditingEnabled = true;
+            channel.IsStimulating = false;
         }
         RefreshStartCommandStates();
         HardwareOperationCompleted?.Invoke(this, result);
+    }
+
+    private static TiGroup CreateExecutionGroup(
+        string title,
+        IEnumerable<ChannelConfig> channels)
+    {
+        var group = new TiGroup { Title = title };
+        foreach (var channel in channels)
+        {
+            group.Channels.Add(channel);
+        }
+
+        return group;
     }
 
     private async Task CompleteChannelAsync(ChannelConfig channel)
@@ -374,6 +423,7 @@ public sealed class TiControlViewModel : ObservableObject
                 channel.Name,
                 "TI");
             channel.IsParameterEditingEnabled = true;
+            channel.IsStimulating = false;
             RefreshStartCommandStatesOnUiThread();
             HardwareOperationCompleted?.Invoke(this, result);
         }

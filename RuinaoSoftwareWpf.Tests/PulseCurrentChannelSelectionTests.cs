@@ -54,6 +54,50 @@ public sealed class PulseCurrentChannelSelectionTests
     }
 
     [Fact]
+    public void SynchronizedStart_StartsAllSixteenChannels()
+    {
+        using var viewModel = CreateViewModel();
+        ConfigureValidPulseParameters(viewModel.Channels);
+
+        viewModel.SynchronizedStartCommand.Execute(null);
+
+        Assert.All(viewModel.Channels, channel => Assert.True(channel.Waveform.IsRunning));
+        Assert.All(viewModel.Channels, channel => Assert.True(channel.IsStimulating));
+
+        viewModel.EmergencyStopCommand.Execute(null);
+        Assert.All(viewModel.Channels, channel => Assert.False(channel.IsStimulating));
+    }
+
+    [Fact]
+    public void SynchronizedStart_WhenAnyChannelIsInvalid_StartsNoChannels()
+    {
+        using var viewModel = CreateViewModel();
+        ConfigureValidPulseParameters(viewModel.Channels);
+        viewModel.Channels[15].CurrentMilliamp = string.Empty;
+
+        viewModel.SynchronizedStartCommand.Execute(null);
+
+        Assert.All(viewModel.Channels, channel => Assert.False(channel.Waveform.IsRunning));
+        Assert.All(viewModel.Channels, channel => Assert.False(channel.IsStimulating));
+    }
+
+    [Fact]
+    public void StartChannel_ChangesOnlyTargetIndicatorToRunning()
+    {
+        using var viewModel = CreateViewModel();
+        var target = viewModel.Channels[0];
+        ConfigureValidPulseParameters([target]);
+
+        viewModel.StartChannelCommand.Execute(target);
+
+        Assert.True(target.IsStimulating);
+        Assert.All(viewModel.Channels.Skip(1), channel => Assert.False(channel.IsStimulating));
+
+        viewModel.EmergencyStopCommand.Execute(null);
+        Assert.False(target.IsStimulating);
+    }
+
+    [Fact]
     public void TryApplyPrescription_AppliesPulseCurrentParametersToAllChannels()
     {
         var viewModel = CreateViewModel();
@@ -123,6 +167,19 @@ public sealed class PulseCurrentChannelSelectionTests
             new LocalizationViewModel(new AppLocalizationService()),
             new NoopToastService(),
             new NoopLoggingService());
+    }
+
+    private static void ConfigureValidPulseParameters(
+        IEnumerable<PulseCurrentChannelConfig> channels)
+    {
+        foreach (var channel in channels)
+        {
+            channel.CurrentMilliamp = "2";
+            channel.PulseWidthMilliseconds = "10";
+            channel.RiseWidthMilliseconds = "5";
+            channel.IntervalWidthMilliseconds = "20";
+            channel.TreatmentDurationSeconds = "1200";
+        }
     }
 
     private sealed class ConnectedDebugSimulation : IDebugHardwareSimulationService

@@ -9,10 +9,23 @@
         <SolidColorBrush x:Key="Text" Color="#E4E8EF" />
         <SolidColorBrush x:Key="SubText" Color="#8E96A8" />
         <SolidColorBrush x:Key="Green" Color="#5DDA77" />
+        <SolidColorBrush x:Key="RunningBlue" Color="#5A9FF2" />
         <SolidColorBrush x:Key="Yellow" Color="#FFD84D" />
         <SolidColorBrush x:Key="Danger" Color="#E84E4F" />
         <FontFamily x:Key="UiFontFamily">Microsoft YaHei UI</FontFamily>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+
+        <Style x:Key="StimulationChannelStatusIndicator" TargetType="Ellipse">
+            <Setter Property="Width" Value="7" />
+            <Setter Property="Height" Value="7" />
+            <Setter Property="Fill" Value="{StaticResource Green}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsStimulating}" Value="True">
+                    <Setter Property="Fill" Value="{StaticResource RunningBlue}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
         <!-- 普通界面统一使用微软雅黑 UI；局部显式字体（如 EEG 的 Consolas）继续优先。 -->
         <Style TargetType="Window">
@@ -569,7 +582,7 @@
                         Padding="6,1"
                         Margin="0,0,6,0">
                     <DockPanel>
-                        <Ellipse Width="7" Height="7" Fill="{StaticResource Green}" DockPanel.Dock="Right" VerticalAlignment="Center" />
+                        <Ellipse Style="{StaticResource StimulationChannelStatusIndicator}" DockPanel.Dock="Right" />
                         <TextBlock FontSize="12" VerticalAlignment="Center">
                             <Run Text="+ " Foreground="{StaticResource Gold}" />
                             <Run Text="{Binding Anode}" />
@@ -581,7 +594,7 @@
                         CornerRadius="4"
                         Padding="6,1">
                     <DockPanel>
-                        <Ellipse Width="7" Height="7" Fill="{StaticResource Green}" DockPanel.Dock="Right" VerticalAlignment="Center" />
+                        <Ellipse Style="{StaticResource StimulationChannelStatusIndicator}" DockPanel.Dock="Right" />
                         <TextBlock FontSize="12" VerticalAlignment="Center">
                             <Run Text="- " Foreground="#7EB2FF" />
                             <Run Text="{Binding Cathode}" />

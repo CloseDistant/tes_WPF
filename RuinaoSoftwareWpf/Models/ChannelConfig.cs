@@ -25,6 +25,7 @@ public sealed class ChannelConfig : ObservableObject
     private string remainingTime = "00:00:00";
     private Brush accentBrush = Brushes.White;
     private bool isParameterEditingEnabled = true;
+    private bool isStimulating;
     private bool isSelected;
 
     /// <summary>通道名称，例如 "CH 13"。</summary>
@@ -170,6 +171,13 @@ public sealed class ChannelConfig : ObservableObject
                 OnPropertyChanged(nameof(AreIntervalFieldsEditable));
             }
         }
+    }
+
+    /// <summary>当前通道是否正在执行电刺激，用于驱动运行状态指示灯。</summary>
+    public bool IsStimulating
+    {
+        get => isStimulating;
+        set => SetProperty(ref isStimulating, value);
     }
 
     public DirectCurrentWaveformState DirectCurrentWaveform { get; } = new();
