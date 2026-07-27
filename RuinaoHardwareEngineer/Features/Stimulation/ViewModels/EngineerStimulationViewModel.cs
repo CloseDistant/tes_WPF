@@ -160,16 +160,14 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
             {
                 var configuration = BuildConfiguration();
                 var active = configuration.Waveforms[0];
-                var intervalDescription = configuration.Waveforms.Count == 2
-                    ? $"，间隔段={configuration.Waveforms[1].DurationUs}μs(type=1)"
-                    : string.Empty;
-                return $"换算结果：type={(uint)active.Mode}，刺激段={active.DurationUs}μs，"
+                return $"换算结果：type={(uint)active.Mode}，完整周期={active.DurationUs}μs，"
                     + $"LowLevel/HighLevel={active.LowLevelOrPositiveValue}/{active.HighLevelOrNegativeValue}，"
-                    + $"上升/平台/渐降={active.RisePermilleOrPositiveDurationUs}/"
+                    + $"上升/高平台/渐降/低平台间隔={active.RisePermilleOrPositiveDurationUs}/"
                     + $"{active.HoldPermilleOrInterphaseIntervalUs}/"
-                    + $"{active.FallPermilleOrNegativeDurationUs}‰，"
+                    + $"{active.FallPermilleOrNegativeDurationUs}/"
+                    + $"{active.CustomIdOrSeedOrPeriodIntervalUs}‰，"
                     + $"波形数={configuration.Waveforms.Count}，循环标志={configuration.ChannelFlags & 1U}"
-                    + intervalDescription;
+                    + "。";
             }
             catch (Exception exception) when (exception is FormatException
                 or ArgumentException
@@ -318,25 +316,27 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
                 : totalSeconds;
             var rampUpSeconds = ParseDecimal(DirectRampUpSeconds, "渐升时间");
             var rampDownSeconds = ParseDecimal(DirectRampDownSeconds, "渐降时间");
-            var trapezoid = TesV15EngineeringUnitConverter.ToTrapezoidPermille(
-                activeSeconds,
+            var highHoldSeconds = activeSeconds - rampUpSeconds - rampDownSeconds;
+            var intervalSeconds = DirectIntervalMode
+                ? ParseDecimal(DirectIntervalSeconds, "间隔时间")
+                : 0M;
+            var trapezoid = TesV15EngineeringUnitConverter.ToTrapezoidCyclePermille(
                 rampUpSeconds,
-                rampDownSeconds);
-            var intervalUs = DirectIntervalMode
-                ? TesV15EngineeringUnitConverter.SecondsToMicroseconds(
-                    ParseDecimal(DirectIntervalSeconds, "间隔时间"),
-                    "间隔时间")
-                : 0U;
-            return TesV15StimulationRegisterCodec.CreateDirectCurrent(
+                highHoldSeconds,
+                rampDownSeconds,
+                intervalSeconds);
+            return TesV15StimulationRegisterCodec.CreateDirectCurrentCycle(
                 channel,
                 totalTimeMs,
-                TesV15EngineeringUnitConverter.SecondsToMicroseconds(activeSeconds, "单次时长"),
-                intervalUs,
+                TesV15EngineeringUnitConverter.SecondsToMicroseconds(
+                    activeSeconds + intervalSeconds,
+                    "完整周期"),
                 configuredLowLevel,
                 configuredHighLevel,
                 trapezoid.RisePermille,
-                trapezoid.HoldPermille,
+                trapezoid.HighHoldPermille,
                 trapezoid.FallPermille,
+                trapezoid.LowHoldPermille,
                 TesV15ParameterValidationMode.ProtocolRange);
         }
 

@@ -38,6 +38,7 @@ public sealed class EngineerStimulationViewModelTests
         Assert.Equal(100U, waveform.RisePermilleOrPositiveDurationUs);
         Assert.Equal(750U, waveform.HoldPermilleOrInterphaseIntervalUs);
         Assert.Equal(150U, waveform.FallPermilleOrNegativeDurationUs);
+        Assert.Equal(0U, waveform.CustomIdOrSeedOrPeriodIntervalUs);
     }
 
     [Fact]
@@ -60,23 +61,50 @@ public sealed class EngineerStimulationViewModelTests
 
         var configuration = Assert.IsType<TesV15StimulationConfiguration>(service.Configuration);
         Assert.Equal(2_000U, configuration.TotalTimeMs);
-        Assert.Collection(
-            configuration.Waveforms,
-            active =>
-            {
-                Assert.Equal(4_000U, active.DurationUs);
-                Assert.Equal(11_111U, active.LowLevelOrPositiveValue);
-                Assert.Equal(55_555U, active.HighLevelOrNegativeValue);
-                Assert.Equal(375U, active.RisePermilleOrPositiveDurationUs);
-                Assert.Equal(625U, active.HoldPermilleOrInterphaseIntervalUs);
-                Assert.Equal(0U, active.FallPermilleOrNegativeDurationUs);
-            },
-            interval =>
-            {
-                Assert.Equal(TesV15StimulationMode.Constant, interval.Mode);
-                Assert.Equal(3_000U, interval.DurationUs);
-                Assert.Equal(11_111U, interval.Offset);
-            });
+        var active = Assert.Single(configuration.Waveforms);
+        Assert.Equal(7_000U, active.DurationUs);
+        Assert.Equal(11_111U, active.LowLevelOrPositiveValue);
+        Assert.Equal(55_555U, active.HighLevelOrNegativeValue);
+        Assert.Equal(214U, active.RisePermilleOrPositiveDurationUs);
+        Assert.Equal(357U, active.HoldPermilleOrInterphaseIntervalUs);
+        Assert.Equal(0U, active.FallPermilleOrNegativeDurationUs);
+        Assert.Equal(429U, active.CustomIdOrSeedOrPeriodIntervalUs);
+        Assert.Equal(
+            1000U,
+            active.RisePermilleOrPositiveDurationUs
+                + active.HoldPermilleOrInterphaseIntervalUs
+                + active.FallPermilleOrNegativeDurationUs
+                + active.CustomIdOrSeedOrPeriodIntervalUs);
+    }
+
+    [Fact]
+    public async Task DirectCurrentInterval_UsesLowHoldInSameType8Waveform()
+    {
+        var service = new CapturingStimulationService();
+        var viewModel = new EngineerStimulationViewModel(service)
+        {
+            LowLevel = "10000",
+            HighLevel = "50000",
+            TotalDurationSeconds = "120",
+            DirectIntervalMode = true,
+            DirectSingleDurationSeconds = "60",
+            DirectRampUpSeconds = "10",
+            DirectRampDownSeconds = "10",
+            DirectIntervalSeconds = "5",
+        };
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => viewModel.ConfigureAsync(Options, TestContext.Current.CancellationToken));
+
+        var configuration = Assert.IsType<TesV15StimulationConfiguration>(service.Configuration);
+        var waveform = Assert.Single(configuration.Waveforms);
+        Assert.Equal(TesV15StimulationMode.DirectCurrentTrapezoid, waveform.Mode);
+        Assert.Equal(65_000_000U, waveform.DurationUs);
+        Assert.Equal(154U, waveform.RisePermilleOrPositiveDurationUs);
+        Assert.Equal(615U, waveform.HoldPermilleOrInterphaseIntervalUs);
+        Assert.Equal(154U, waveform.FallPermilleOrNegativeDurationUs);
+        Assert.Equal(77U, waveform.CustomIdOrSeedOrPeriodIntervalUs);
+        Assert.Equal(1U, configuration.ChannelFlags & 1U);
     }
 
     private sealed class CapturingStimulationService : IEngineerStimulationService

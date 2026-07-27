@@ -199,7 +199,7 @@
                                     Padding="12,7"
                                     CornerRadius="14"
                                     Background="#FFF1DD">
-                                <TextBlock Text="usbtest2 临时兼容"
+                                <TextBlock Text="usbtest3 间隔兼容"
                                            Foreground="#9A4E00"
                                            FontWeight="SemiBold" />
                             </Border>
@@ -268,7 +268,7 @@
                                 <TextBlock Text="tDCS · 梯形参数"
                                            FontSize="16"
                                            FontWeight="SemiBold" />
-                                <TextBlock Text="连续模式生成一段类型8梯形；间隔模式生成类型8刺激段和类型1零电流间隔段，并按总时间循环。"
+                                <TextBlock Text="连续和间隔模式都只生成一段类型8梯形；间隔时长写入类型8的低平台阶段（+0x0C）。"
                                            Margin="0,5,0,12"
                                            Foreground="#9A4E00"
                                            TextWrapping="Wrap" />
@@ -320,7 +320,7 @@
                                                   IsChecked="{Binding DirectIntervalMode}" />
                                     </StackPanel>
                                 </UniformGrid>
-                                <TextBlock Text="除时间换算外，类型8有效参数按usbtest2原始格式下发：LowLevel、HighLevel及上升/平台/渐降千分比。"
+                                <TextBlock Text="完整周期=渐升+高平台+渐降+低平台间隔；四段换算为usbtest3千分比并保证合计1000。"
                                            Margin="0,10,0,0"
                                            Foreground="#0B6B3A"
                                            TextWrapping="Wrap" />
@@ -338,7 +338,7 @@
                                 <TextBlock Text="tPCS · 梯形脉冲参数"
                                            FontSize="16"
                                            FontWeight="SemiBold" />
-                                <TextBlock Text="tPCS也是类型8梯形：上升宽度后保持脉冲平台，渐降时间固定为0；间隔使用类型1零电流段。"
+                                <TextBlock Text="tPCS也是一段类型8梯形：上升后保持高平台，渐降固定为0，间隔写入同一波形的低平台阶段。"
                                            Margin="0,5,0,12"
                                            Foreground="{StaticResource MutedBrush}"
                                            TextWrapping="Wrap" />
@@ -374,7 +374,7 @@
                                                  FontFamily="Consolas" />
                                     </StackPanel>
                                 </UniformGrid>
-                                <TextBlock Text="DLL固定生成：上升 + 平台 + 0渐降；不会生成类型10。"
+                                <TextBlock Text="DLL固定生成：上升 + 高平台 + 0渐降 + 低平台间隔；不会生成类型1或类型10。"
                                            Margin="0,10,0,0"
                                            Foreground="#0B6B3A" />
                             </StackPanel>

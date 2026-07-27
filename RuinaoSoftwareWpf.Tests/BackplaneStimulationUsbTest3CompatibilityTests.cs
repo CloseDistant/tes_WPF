@@ -5,7 +5,7 @@ using RuinaoTesProtocol.V14;
 using RuinaoTesProtocol.V15;
 using Xunit;
 
-public sealed class BackplaneStimulationUsbTest2CompatibilityTests
+public sealed class BackplaneStimulationUsbTest3CompatibilityTests
 {
     private static readonly BackplaneConnectionOptions Options = new(
         TesV14ProtocolConstants.UsbTestProtocolVersion,
@@ -31,9 +31,9 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
             Options,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(3, transport.ExchangeFrames.Count);
+        Assert.Equal(2, transport.ExchangeFrames.Count);
         Assert.Equal(1, transport.BatchCallCount);
-        Assert.Equal(2, result.WaveformWrites.Count);
+        Assert.Single(result.WaveformWrites);
         Assert.All(
             result.WaveformWrites.Append(result.ControlWrite),
             operation =>
@@ -43,14 +43,12 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
             });
 
         var firstWaveform = ParseRegisters(transport.ExchangeFrames[0]);
-        var intervalWaveform = ParseRegisters(transport.ExchangeFrames[1]);
-        var control = ParseRegisters(transport.ExchangeFrames[2]);
+        var control = ParseRegisters(transport.ExchangeFrames[1]);
 
         Assert.Equal(0x01, ParseFrame(transport.ExchangeFrames[0]).DestinationAddress);
         Assert.Equal(0x3020, firstWaveform[0].Address);
         Assert.Equal(8U, firstWaveform[0].Value);
-        Assert.Equal(0x3030, intervalWaveform[0].Address);
-        Assert.Equal(1U, intervalWaveform[0].Value);
+        Assert.Equal(new TesV14RegisterValue(0x302C, 571), firstWaveform[12]);
         Assert.Equal(TesV15StimulationRegisterCodec.EnableMaskRegister, control[0].Address);
         Assert.Equal(TesV15StimulationRegisterCodec.ConfigurationVersionRegister, control[1].Address);
     }

@@ -2,14 +2,17 @@
 
 namespace RuinaoTesProtocol.V15;
 
-/// <summary>V1.5 电刺激波形类型。两种产品刺激模式均由梯形和可选的零输出定值段组成。</summary>
+/// <summary>V1.5 电刺激波形类型。两种产品刺激模式均使用类型8梯形。</summary>
 public enum TesV15StimulationMode : uint
 {
     Constant = 1,
     DirectCurrentTrapezoid = 8,
 }
 
-/// <summary>V1.5 单段波形固定占用的 16 个 32-bit 寄存器。</summary>
+/// <summary>
+/// V1.5 单段波形固定占用的 16 个 32-bit 寄存器。
+/// 类型8使用 CustomIdOrSeedOrPeriodIntervalUs 字段承载低平台阶段的千分比。
+/// </summary>
 public sealed record TesV15StimulationWaveform(
     TesV15StimulationMode Mode,
     uint DurationUs,
@@ -29,7 +32,7 @@ public sealed record TesV15StimulationWaveform(
     uint Flags);
 
 /// <summary>
-/// V1.5 单通道刺激配置。连续模式使用一段梯形；间隔模式使用梯形与零输出定值段。
+/// V1.5 单通道刺激配置。类型8内部包含上升、高平台、下降和低平台四个阶段。
 /// </summary>
 public sealed record TesV15StimulationConfiguration(
     uint EnableMask,
@@ -41,10 +44,10 @@ public sealed record TesV15StimulationConfiguration(
     uint ChannelFlags,
     IReadOnlyList<TesV15StimulationWaveform> Waveforms);
 
-/// <summary>按 V1.5 文档与 usbtest2 实际代码生成电刺激寄存器。</summary>
+/// <summary>按 V1.5 文档与 usbtest3 实际代码生成电刺激寄存器。</summary>
 public static class TesV15StimulationRegisterCodec
 {
-    public const uint UsbTest2ConfigurationVersion = 0x15;
+    public const uint UsbTestConfigurationVersion = 0x15;
     public const ushort EnableMaskRegister = 0x2E00;
     public const ushort ConfigurationVersionRegister = 0x2E01;
     public const ushort ConfigurationStatusRegister = 0x2E02;
@@ -63,50 +66,54 @@ public static class TesV15StimulationRegisterCodec
         uint fallPermille,
         TesV15ParameterValidationMode validationMode = TesV15ParameterValidationMode.RecommendedRange)
     {
-        return CreateDirectCurrent(
+        return CreateDirectCurrentCycle(
             channelNumber,
             totalTimeMs,
             checked(totalTimeMs * 1000U),
-            0,
             lowLevel,
             highLevel,
             risePermille,
             holdPermille,
             fallPermille,
+            0,
             validationMode);
     }
 
-    public static TesV15StimulationConfiguration CreateDirectCurrent(
+    public static TesV15StimulationConfiguration CreateDirectCurrentCycle(
         byte channelNumber,
         uint totalTimeMs,
-        uint activeDurationUs,
-        uint intervalDurationUs,
+        uint cycleDurationUs,
         uint lowLevel,
         uint highLevel,
         uint risePermille,
-        uint holdPermille,
+        uint highHoldPermille,
         uint fallPermille,
+        uint lowHoldPermille,
         TesV15ParameterValidationMode validationMode = TesV15ParameterValidationMode.RecommendedRange)
     {
         ValidateChannelAndTime(channelNumber, totalTimeMs);
         ValidateDacValue(lowLevel, nameof(lowLevel), validationMode);
         ValidateDacValue(highLevel, nameof(highLevel), validationMode);
-        ValidateTrapezoidPermille(risePermille, holdPermille, fallPermille);
+        ValidateTrapezoidCyclePermille(
+            risePermille,
+            highHoldPermille,
+            fallPermille,
+            lowHoldPermille);
         return CreateTrapezoidProgram(
             channelNumber,
             totalTimeMs,
-            activeDurationUs,
-            intervalDurationUs,
+            cycleDurationUs,
             lowLevel,
             highLevel,
             risePermille,
-            holdPermille,
-            fallPermille);
+            highHoldPermille,
+            fallPermille,
+            lowHoldPermille);
     }
 
     /// <summary>
-    /// tPCS 产品模式同样编码为梯形：渐升段 + 平台脉冲段 + 0时长渐降，
-    /// 并可追加一段零输出定值作为脉冲间隔；不再使用 waveform_type=10。
+    /// tPCS 产品模式同样编码为梯形：渐升段 + 平台脉冲段 + 0时长渐降 + 低平台间隔；
+    /// 不再使用 waveform_type=10，也不再为间隔追加类型1波形。
     /// </summary>
     public static TesV15StimulationConfiguration CreatePulseCurrent(
         byte channelNumber,
@@ -135,22 +142,22 @@ public static class TesV15StimulationRegisterCodec
                 "tPCS脉冲平台宽度必须大于0微秒。");
         }
 
-        var activeDurationUs = checked(riseDurationUs + plateauDurationUs);
-        var risePermille = checked((uint)decimal.Round(
-            riseDurationUs * 1000M / activeDurationUs,
+        var cycleDurationUs = checked(riseDurationUs + plateauDurationUs + intervalDurationUs);
+        var cyclePermille = TesV15EngineeringUnitConverter.ToTrapezoidCyclePermille(
+            riseDurationUs,
+            plateauDurationUs,
             0,
-            MidpointRounding.AwayFromZero));
-        var holdPermille = 1000U - risePermille;
+            intervalDurationUs);
         return CreateTrapezoidProgram(
             channelNumber,
             totalTimeMs,
-            activeDurationUs,
-            intervalDurationUs,
+            cycleDurationUs,
             lowLevel,
             highLevel,
-            risePermille,
-            holdPermille,
-            0);
+            cyclePermille.RisePermille,
+            cyclePermille.HighHoldPermille,
+            cyclePermille.FallPermille,
+            cyclePermille.LowHoldPermille);
     }
 
     public static IReadOnlyList<TesV14RegisterValue> BuildControlRegisters(
@@ -216,36 +223,30 @@ public static class TesV15StimulationRegisterCodec
     private static TesV15StimulationConfiguration CreateTrapezoidProgram(
         byte channelNumber,
         uint totalTimeMs,
-        uint activeDurationUs,
-        uint intervalDurationUs,
+        uint cycleDurationUs,
         uint baselineLevel,
         uint targetLevel,
         uint risePermille,
-        uint holdPermille,
-        uint fallPermille)
+        uint highHoldPermille,
+        uint fallPermille,
+        uint lowHoldPermille)
     {
-        if (activeDurationUs == 0)
+        if (cycleDurationUs == 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(activeDurationUs), "梯形刺激段时长必须大于0微秒。");
+            throw new ArgumentOutOfRangeException(nameof(cycleDurationUs), "梯形完整周期必须大于0微秒。");
         }
 
         var totalTimeUs = (ulong)totalTimeMs * 1000UL;
-        if (activeDurationUs > totalTimeUs)
+        if (cycleDurationUs > totalTimeUs)
         {
-            throw new ArgumentException("单次刺激时长不能超过刺激总时间。");
+            throw new ArgumentException("完整刺激周期不能超过刺激总时间。");
         }
 
-        var cycleDurationUs = (ulong)activeDurationUs + intervalDurationUs;
-        if (intervalDurationUs > 0 && cycleDurationUs > totalTimeUs)
-        {
-            throw new ArgumentException("单次刺激时长与间隔时长之和不能超过刺激总时间。");
-        }
-
-        var waveforms = new List<TesV15StimulationWaveform>(2)
-        {
+        IReadOnlyList<TesV15StimulationWaveform> waveforms =
+        [
             new(
                 TesV15StimulationMode.DirectCurrentTrapezoid,
-                activeDurationUs,
+                cycleDurationUs,
                 0,
                 0,
                 0,
@@ -254,38 +255,18 @@ public static class TesV15StimulationRegisterCodec
                 baselineLevel,
                 targetLevel,
                 risePermille,
-                holdPermille,
+                highHoldPermille,
                 fallPermille,
-                0,
+                lowHoldPermille,
                 0,
                 1,
                 0),
-        };
-        if (intervalDurationUs > 0)
-        {
-            waveforms.Add(new TesV15StimulationWaveform(
-                TesV15StimulationMode.Constant,
-                intervalDurationUs,
-                0,
-                0,
-                baselineLevel,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1,
-                0));
-        }
+        ];
 
-        var requiresLoop = intervalDurationUs > 0 || totalTimeUs > activeDurationUs;
+        var requiresLoop = totalTimeUs > cycleDurationUs;
         return new TesV15StimulationConfiguration(
             1U << (channelNumber - 1),
-            UsbTest2ConfigurationVersion,
+            UsbTestConfigurationVersion,
             channelNumber,
             0,
             0,
@@ -345,15 +326,25 @@ public static class TesV15StimulationRegisterCodec
         if (validationMode == TesV15ParameterValidationMode.RecommendedRange
             && value > 60000)
         {
-            throw new ArgumentOutOfRangeException(parameterName, "usbtest2刺激DAC值必须在0到60000之间。");
+            throw new ArgumentOutOfRangeException(parameterName, "usbtest兼容刺激DAC值必须在0到60000之间。");
         }
     }
 
-    private static void ValidateTrapezoidPermille(uint rise, uint hold, uint fall)
+    private static void ValidateTrapezoidCyclePermille(
+        uint rise,
+        uint highHold,
+        uint fall,
+        uint lowHold)
     {
-        if (rise > 1000 || hold > 1000 || fall > 1000 || rise + hold + fall != 1000)
+        var sum = (ulong)rise + highHold + fall + lowHold;
+        if (rise > 1000
+            || highHold > 1000
+            || fall > 1000
+            || lowHold > 1000
+            || sum != 1000)
         {
-            throw new ArgumentException("梯形的上升、平台和下降占比必须各在0到1000之间且总和等于1000。");
+            throw new ArgumentException(
+                "类型8的上升、高平台、下降和低平台占比必须各在0到1000之间且总和等于1000。");
         }
     }
 }

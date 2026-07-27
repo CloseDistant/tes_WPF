@@ -32,10 +32,11 @@ public sealed class TesV15StimulationRegisterCodecTests
         Assert.Equal(200U, registers[9].Value);
         Assert.Equal(500U, registers[10].Value);
         Assert.Equal(300U, registers[11].Value);
+        Assert.Equal(0U, registers[12].Value);
     }
 
     [Fact]
-    public void PulseCurrent_UsesTrapezoidWithZeroFallAndConstantInterval()
+    public void PulseCurrent_UsesOneUsbTest3TrapezoidWithLowHoldInterval()
     {
         var configuration = TesV15StimulationRegisterCodec.CreatePulseCurrent(
             channelNumber: 1,
@@ -46,64 +47,57 @@ public sealed class TesV15StimulationRegisterCodecTests
             plateauDurationUs: 10_000,
             intervalDurationUs: 20_000);
 
-        Assert.Equal(2, configuration.Waveforms.Count);
-        var active = configuration.Waveforms[0];
-        var interval = configuration.Waveforms[1];
+        var active = Assert.Single(configuration.Waveforms);
         var activeRegisters = TesV15StimulationRegisterCodec.BuildWaveformRegisters(configuration, 0);
-        var intervalRegisters = TesV15StimulationRegisterCodec.BuildWaveformRegisters(configuration, 1);
 
         Assert.Equal(TesV15StimulationMode.DirectCurrentTrapezoid, active.Mode);
-        Assert.Equal(15_000U, active.DurationUs);
+        Assert.Equal(35_000U, active.DurationUs);
         Assert.Equal(120_000U, configuration.TotalTimeMs);
         Assert.Equal(8U, activeRegisters[0].Value);
         Assert.Equal(10_000U, activeRegisters[7].Value);
         Assert.Equal(50_000U, activeRegisters[8].Value);
-        Assert.Equal(333U, activeRegisters[9].Value);
-        Assert.Equal(667U, activeRegisters[10].Value);
+        Assert.Equal(143U, activeRegisters[9].Value);
+        Assert.Equal(286U, activeRegisters[10].Value);
         Assert.Equal(0U, activeRegisters[11].Value);
-        Assert.Equal(TesV15StimulationMode.Constant, interval.Mode);
-        Assert.Equal(20_000U, interval.DurationUs);
-        Assert.Equal(1U, intervalRegisters[0].Value);
-        Assert.Equal(10_000U, intervalRegisters[4].Value);
+        Assert.Equal(571U, activeRegisters[12].Value);
         Assert.Equal(1U, configuration.ChannelFlags & 1U);
+        Assert.Equal(1000U, activeRegisters.Skip(9).Take(4).Sum(register => register.Value));
+        Assert.DoesNotContain(configuration.Waveforms, waveform => waveform.Mode == TesV15StimulationMode.Constant);
         Assert.DoesNotContain(configuration.Waveforms, waveform => (uint)waveform.Mode == 10U);
     }
 
     [Fact]
-    public void DirectCurrentInterval_UsesTrapezoidAndConstantBaseline()
+    public void DirectCurrentInterval_UsesUsbTest3LowHoldInSingleTrapezoid()
     {
-        var configuration = TesV15StimulationRegisterCodec.CreateDirectCurrent(
+        var configuration = TesV15StimulationRegisterCodec.CreateDirectCurrentCycle(
             channelNumber: 1,
             totalTimeMs: 120_000,
-            activeDurationUs: 10_000_000,
-            intervalDurationUs: 5_000_000,
+            cycleDurationUs: 15_000_000,
             lowLevel: 30_000,
             highLevel: 36_000,
-            risePermille: 100,
-            holdPermille: 800,
-            fallPermille: 100);
+            risePermille: 67,
+            highHoldPermille: 533,
+            fallPermille: 67,
+            lowHoldPermille: 333);
 
-        Assert.Collection(
-            configuration.Waveforms,
-            active => Assert.Equal(TesV15StimulationMode.DirectCurrentTrapezoid, active.Mode),
-            interval =>
-            {
-                Assert.Equal(TesV15StimulationMode.Constant, interval.Mode);
-                Assert.Equal(5_000_000U, interval.DurationUs);
-                Assert.Equal(30_000U, interval.Offset);
-            });
-        var intervalRegisters = TesV15StimulationRegisterCodec.BuildWaveformRegisters(configuration, 1);
+        var active = Assert.Single(configuration.Waveforms);
+        var waveformRegisters = TesV15StimulationRegisterCodec.BuildWaveformRegisters(configuration, 0);
         var controlRegisters = TesV15StimulationRegisterCodec.BuildControlRegisters(configuration);
-        Assert.Equal(new TesV14RegisterValue(0x3030, 1), intervalRegisters[0]);
-        Assert.Equal(new TesV14RegisterValue(0x3031, 5_000_000), intervalRegisters[1]);
-        Assert.Equal(new TesV14RegisterValue(0x3004, 2), controlRegisters[6]);
+        Assert.Equal(TesV15StimulationMode.DirectCurrentTrapezoid, active.Mode);
+        Assert.Equal(15_000_000U, active.DurationUs);
+        Assert.Equal(new TesV14RegisterValue(0x3029, 67), waveformRegisters[9]);
+        Assert.Equal(new TesV14RegisterValue(0x302A, 533), waveformRegisters[10]);
+        Assert.Equal(new TesV14RegisterValue(0x302B, 67), waveformRegisters[11]);
+        Assert.Equal(new TesV14RegisterValue(0x302C, 333), waveformRegisters[12]);
+        Assert.Equal(new TesV14RegisterValue(0x3004, 1), controlRegisters[6]);
         Assert.Equal(1U, configuration.ChannelFlags & 1U);
         Assert.Equal(new TesV14RegisterValue(0x3005, 1), controlRegisters[7]);
+        Assert.DoesNotContain(configuration.Waveforms, waveform => waveform.Mode == TesV15StimulationMode.Constant);
         Assert.DoesNotContain(configuration.Waveforms, waveform => (uint)waveform.Mode == 10U);
     }
 
     [Fact]
-    public void ControlRegisters_UseUsbTest2V15Addresses()
+    public void ControlRegisters_UseUsbTest3V15Addresses()
     {
         var configuration = TesV15StimulationRegisterCodec.CreateDirectCurrent(
             8,
@@ -178,6 +172,18 @@ public sealed class TesV15StimulationRegisterCodecTests
             rampDownSeconds: 30M);
 
         Assert.Equal((200U, 500U, 300U), values);
+    }
+
+    [Fact]
+    public void EngineeringUnits_UsbTest3FourEqualPhasesBecomeFourEqualPermille()
+    {
+        var values = TesV15EngineeringUnitConverter.ToTrapezoidCyclePermille(
+            rampUpDuration: 0.5M,
+            highHoldDuration: 0.5M,
+            rampDownDuration: 0.5M,
+            lowHoldDuration: 0.5M);
+
+        Assert.Equal((250U, 250U, 250U, 250U), values);
     }
 
     [Fact]

@@ -73,21 +73,65 @@ public static class TesV15EngineeringUnitConverter
             throw new ArgumentException("渐升时间与渐降时间之和不能超过总运行时间。");
         }
 
-        var rise = checked((uint)decimal.Round(
-            rampUpSeconds * 1000M / totalSeconds,
-            0,
-            MidpointRounding.AwayFromZero));
-        var fall = checked((uint)decimal.Round(
-            rampDownSeconds * 1000M / totalSeconds,
-            0,
-            MidpointRounding.AwayFromZero));
-        if (rise + fall > 1000)
+        var cycle = ToTrapezoidCyclePermille(
+            rampUpSeconds,
+            totalSeconds - rampUpSeconds - rampDownSeconds,
+            rampDownSeconds,
+            0);
+        return (cycle.RisePermille, cycle.HighHoldPermille, cycle.FallPermille);
+    }
+
+    public static (
+        uint RisePermille,
+        uint HighHoldPermille,
+        uint FallPermille,
+        uint LowHoldPermille) ToTrapezoidCyclePermille(
+            decimal rampUpDuration,
+            decimal highHoldDuration,
+            decimal rampDownDuration,
+            decimal lowHoldDuration)
+    {
+        decimal[] durations =
+        [
+            rampUpDuration,
+            highHoldDuration,
+            rampDownDuration,
+            lowHoldDuration,
+        ];
+        if (durations.Any(duration => duration < 0))
         {
-            // 两次独立四舍五入最多产生1个千分点的进位误差，优先保留渐升比例。
-            fall = 1000 - rise;
+            throw new ArgumentOutOfRangeException(
+                nameof(rampUpDuration),
+                "梯形四个阶段的时间都不能小于0。");
         }
 
-        return (rise, 1000 - rise - fall, fall);
+        var totalDuration = durations.Sum();
+        if (totalDuration <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(rampUpDuration),
+                "梯形完整周期必须大于0。");
+        }
+
+        var exactValues = durations
+            .Select(duration => duration * 1000M / totalDuration)
+            .ToArray();
+        var values = exactValues
+            .Select(value => (uint)decimal.Floor(value))
+            .ToArray();
+        var assigned = values.Aggregate(0U, (sum, value) => sum + value);
+        var remaining = checked((int)(1000U - assigned));
+        foreach (var index in exactValues
+            .Select((value, index) => new { Index = index, Fraction = value - decimal.Floor(value) })
+            .OrderByDescending(item => item.Fraction)
+            .ThenBy(item => item.Index)
+            .Take(remaining)
+            .Select(item => item.Index))
+        {
+            values[index]++;
+        }
+
+        return (values[0], values[1], values[2], values[3]);
     }
 
     public static (uint BaselineDac, uint TargetDac) DirectCurrentToDac(
