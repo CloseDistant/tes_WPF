@@ -251,17 +251,14 @@ public sealed class BackplaneClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(registers);
-        byte[] request;
-        ushort requestSequence;
-        lock (protocolLock)
-        {
-            protocolApi.ProtocolVersion = options.ProtocolVersion;
-            protocolApi.DestinationAddress = targetAddress;
-            request = protocolApi.BuildWriteRegisters(registers, out requestSequence);
-        }
-
+        var pendingWrite = BuildRegisterWrite(targetAddress, registers, options);
         return await ExchangeRegistersAsync(
-            request, requestSequence, targetAddress, true, cancellationToken, registers);
+            pendingWrite.RequestFrame,
+            pendingWrite.RequestSequence,
+            targetAddress,
+            true,
+            cancellationToken,
+            registers);
     }
 
     /// <summary>
@@ -275,24 +272,67 @@ public sealed class BackplaneClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        var waveformWrites = new List<BackplaneRegisterOperationResult>(configuration.Waveforms.Count);
+        if (transport is not IBackplaneBatchTransport batchTransport)
+        {
+            throw new BackplaneConnectionException(
+                "当前USB传输实现不支持usbtest2连续批量发送模式。");
+        }
+
+        var pendingWrites = new List<PendingRegisterWrite>(configuration.Waveforms.Count + 1);
         for (var waveformIndex = 0; waveformIndex < configuration.Waveforms.Count; waveformIndex++)
         {
             var registers = TesV15StimulationRegisterCodec.BuildWaveformRegisters(
                 configuration,
                 waveformIndex);
-            waveformWrites.Add(await WriteRegistersAsync(
+            pendingWrites.Add(BuildRegisterWrite(
                 targetAddress,
                 registers,
-                options,
-                cancellationToken));
+                options));
         }
 
-        var controlWrite = await WriteRegistersAsync(
+        pendingWrites.Add(BuildRegisterWrite(
             targetAddress,
             TesV15StimulationRegisterCodec.BuildControlRegisters(configuration),
-            options,
+            options));
+
+        foreach (var pendingWrite in pendingWrites)
+        {
+            WriteLog(
+                "REG_WRITE",
+                $"usbtest2批量写帧已生成：target=0x{targetAddress:X2} "
+                    + $"seq={pendingWrite.RequestSequence} bytes={pendingWrite.RequestFrame.Length}",
+                pendingWrite.RequestFrame);
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        var responses = await batchTransport.ExchangeBatchAsync(
+            pendingWrites
+                .Select(write => (ReadOnlyMemory<byte>)write.RequestFrame)
+                .ToArray(),
             cancellationToken);
+        stopwatch.Stop();
+        if (responses.Count != pendingWrites.Count)
+        {
+            throw new BackplaneConnectionException(
+                $"刺激配置回复数量不一致：expected={pendingWrites.Count}, actual={responses.Count}。");
+        }
+
+        var operations = new BackplaneRegisterOperationResult[pendingWrites.Count];
+        for (var index = 0; index < pendingWrites.Count; index++)
+        {
+            var pendingWrite = pendingWrites[index];
+            operations[index] = ParseRegisterOperationResponse(
+                pendingWrite.RequestFrame,
+                pendingWrite.RequestSequence,
+                targetAddress,
+                true,
+                pendingWrite.Registers,
+                responses[index],
+                stopwatch.Elapsed);
+        }
+
+        var waveformWrites = operations[..configuration.Waveforms.Count];
+        var controlWrite = operations[^1];
         var mode = configuration.Waveforms[0].Mode;
         WriteLog(
             "STIM_CONFIG",
@@ -305,6 +345,23 @@ public sealed class BackplaneClient : IAsyncDisposable
             mode,
             waveformWrites,
             controlWrite);
+    }
+
+    private PendingRegisterWrite BuildRegisterWrite(
+        byte targetAddress,
+        IReadOnlyList<TesV14RegisterValue> registers,
+        BackplaneConnectionOptions options)
+    {
+        byte[] request;
+        ushort requestSequence;
+        lock (protocolLock)
+        {
+            protocolApi.ProtocolVersion = options.ProtocolVersion;
+            protocolApi.DestinationAddress = targetAddress;
+            request = protocolApi.BuildWriteRegisters(registers, out requestSequence);
+        }
+
+        return new PendingRegisterWrite(requestSequence, registers.ToArray(), request);
     }
 
     /// <summary>
@@ -476,6 +533,26 @@ public sealed class BackplaneClient : IAsyncDisposable
         var stopwatch = Stopwatch.StartNew();
         var response = await transport.ExchangeAsync(request, cancellationToken);
         stopwatch.Stop();
+        return ParseRegisterOperationResponse(
+            request,
+            requestSequence,
+            targetAddress,
+            isWrite,
+            requestedValues,
+            response,
+            stopwatch.Elapsed);
+    }
+
+    private BackplaneRegisterOperationResult ParseRegisterOperationResponse(
+        byte[] request,
+        ushort requestSequence,
+        byte targetAddress,
+        bool isWrite,
+        IReadOnlyList<TesV14RegisterValue>? requestedValues,
+        byte[] response,
+        TimeSpan elapsed)
+    {
+        var operation = isWrite ? "写寄存器" : "读寄存器";
         WriteLog("RX", $"{operation} response bytes={response.Length}", response);
 
         if (!TesV14ProtocolCodec.TryParseFrame(response, out var frame, out var error) || frame is null)
@@ -538,10 +615,10 @@ public sealed class BackplaneClient : IAsyncDisposable
             $"{operation}回复有效：target=0x{targetAddress:X2} count={registers.Count} "
                 + $"ackSeq={frame.AckSequence} status="
                 + $"{(responseStatusCode.HasValue ? $"0x{responseStatusCode.Value:X8}" : "寄存器数据")} "
-                + $"耗时={stopwatch.Elapsed.TotalMilliseconds:F1}ms。");
+                + $"耗时={elapsed.TotalMilliseconds:F1}ms。");
         return new BackplaneRegisterOperationResult(
             requestSequence,
-            stopwatch.Elapsed,
+            elapsed,
             targetAddress,
             isWrite,
             registers,
@@ -551,6 +628,11 @@ public sealed class BackplaneClient : IAsyncDisposable
             frame.AckSequence,
             responseStatusCode);
     }
+
+    private sealed record PendingRegisterWrite(
+        ushort RequestSequence,
+        IReadOnlyList<TesV14RegisterValue> Registers,
+        byte[] RequestFrame);
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {

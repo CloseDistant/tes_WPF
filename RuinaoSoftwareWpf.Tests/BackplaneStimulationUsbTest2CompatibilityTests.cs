@@ -32,6 +32,7 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
             TestContext.Current.CancellationToken);
 
         Assert.Equal(3, transport.ExchangeFrames.Count);
+        Assert.Equal(1, transport.BatchCallCount);
         Assert.Equal(2, result.WaveformWrites.Count);
         Assert.All(
             result.WaveformWrites.Append(result.ControlWrite),
@@ -75,6 +76,7 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
             TestContext.Current.CancellationToken);
 
         Assert.Equal(2, transport.ExchangeFrames.Count);
+        Assert.Equal(1, transport.BatchCallCount);
         Assert.Single(result.WaveformWrites);
         Assert.Equal(
             result.WaveformWrites[0].RequestSequence,
@@ -171,12 +173,13 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
 
     private sealed class ReplyingTransport(
         int ackSequenceOffset = 0,
-        uint responseStatusCode = 0) : IBackplaneTransport
+        uint responseStatusCode = 0) : IBackplaneTransport, IBackplaneBatchTransport
     {
         private ushort responseSequence = 100;
 
         public bool IsOpen => true;
         public List<byte[]> ExchangeFrames { get; } = [];
+        public int BatchCallCount { get; private set; }
 
         public Task OpenAsync(
             UsbBackplaneDevice device,
@@ -190,13 +193,29 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
         {
             var requestBytes = request.ToArray();
             ExchangeFrames.Add(requestBytes);
+            return Task.FromResult(BuildResponse(requestBytes));
+        }
+
+        public Task<IReadOnlyList<byte[]>> ExchangeBatchAsync(
+            IReadOnlyList<ReadOnlyMemory<byte>> requests,
+            CancellationToken cancellationToken = default)
+        {
+            BatchCallCount++;
+            var requestBytes = requests.Select(request => request.ToArray()).ToArray();
+            ExchangeFrames.AddRange(requestBytes);
+            IReadOnlyList<byte[]> responses = requestBytes.Select(BuildResponse).ToArray();
+            return Task.FromResult(responses);
+        }
+
+        private byte[] BuildResponse(byte[] requestBytes)
+        {
             var requestFrame = ParseFrame(requestBytes);
             var ackSequence = unchecked((ushort)(requestFrame.SendSequence + ackSequenceOffset));
             Span<byte> responsePayload = stackalloc byte[TesV14OperationStatusCodec.PayloadLength];
             System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(
                 responsePayload,
                 responseStatusCode);
-            var response = TesV14ProtocolCodec.BuildFrame(
+            return TesV14ProtocolCodec.BuildFrame(
                 TesV14FrameControl.None,
                 TesV14Command.Response,
                 requestFrame.DestinationAddress,
@@ -205,7 +224,6 @@ public sealed class BackplaneStimulationUsbTest2CompatibilityTests
                 ackSequence,
                 responsePayload,
                 requestFrame.Version);
-            return Task.FromResult(response);
         }
 
         public Task CloseAsync(CancellationToken cancellationToken = default) =>

@@ -44,7 +44,8 @@ public sealed class EngineerStimulationViewModel : INotifyPropertyChanged
     }
 
     public IReadOnlyList<string> Modes { get; } = [DirectCurrentMode, PulseCurrentMode];
-    public IReadOnlyList<int> BoardAddresses { get; } = [0, 1];
+    // 当前实物业务板使用0x01；放在首项可避免ComboBox初始化期间短暂选中0x00并回写。
+    public IReadOnlyList<int> BoardAddresses { get; } = [1, 0];
     public IReadOnlyList<int> Channels { get; } = Enumerable.Range(1, 8).ToArray();
 
     public string SelectedMode

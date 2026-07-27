@@ -582,6 +582,60 @@ public partial class MainWindow : Window
         LogItems.Clear();
     }
 
+    private async void CopyAllLogsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button)
+        {
+            return;
+        }
+
+        var originalContent = button.Content;
+        button.IsEnabled = false;
+        try
+        {
+            var logText = ReadCompleteSessionLog();
+            if (string.IsNullOrWhiteSpace(logText))
+            {
+                button.Content = "暂无日志";
+                await Task.Delay(1200);
+                return;
+            }
+
+            Clipboard.SetText(logText, TextDataFormat.UnicodeText);
+            button.Content = $"已复制 · {logText.Length:N0}字符";
+            await Task.Delay(1500);
+        }
+        catch (Exception exception)
+        {
+            button.Content = "复制失败";
+            AddLog(new HardwareLogEntry(
+                DateTimeOffset.Now,
+                "ERROR",
+                $"复制完整日志失败：{exception.Message}"));
+            await Task.Delay(1500);
+        }
+        finally
+        {
+            button.Content = originalContent;
+            button.IsEnabled = true;
+        }
+    }
+
+    private string ReadCompleteSessionLog()
+    {
+        if (!string.IsNullOrEmpty(logFilePath) && File.Exists(logFilePath))
+        {
+            lock (logFileLock)
+            {
+                return File.ReadAllText(logFilePath, Encoding.UTF8);
+            }
+        }
+
+        return string.Join(
+            Environment.NewLine,
+            LogItems.Select(item => item.ToCopyText()));
+    }
+
     private async Task RefreshDeviceAsync()
     {
         var device = await client.RefreshDeviceAsync();
@@ -870,6 +924,8 @@ public partial class MainWindow : Window
 
     public sealed class LogItem
     {
+        private readonly DateTimeOffset timestamp;
+
         public string Time { get; }
         public string Category { get; }
         public string Message { get; }
@@ -878,12 +934,21 @@ public partial class MainWindow : Window
 
         public LogItem(HardwareLogEntry entry)
         {
+            timestamp = entry.Timestamp;
             Time = entry.Timestamp.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
             Category = entry.Category;
             Message = entry.Message;
             Hex = entry.Bytes is null
                 ? string.Empty
                 : string.Join(' ', entry.Bytes.Select(value => value.ToString("X2", CultureInfo.InvariantCulture)));
+        }
+
+        public string ToCopyText()
+        {
+            var text = $"{timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Category}] {Message}";
+            return string.IsNullOrEmpty(Hex)
+                ? text
+                : text + Environment.NewLine + Hex;
         }
     }
 }

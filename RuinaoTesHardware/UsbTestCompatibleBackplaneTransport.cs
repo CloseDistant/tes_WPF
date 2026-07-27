@@ -12,6 +12,7 @@ namespace RuinaoTesHardware;
 /// </summary>
 public sealed class UsbTestCompatibleBackplaneTransport :
     IBackplaneTransport,
+    IBackplaneBatchTransport,
     IBackplaneTransferDiagnostics
 {
     private readonly SemaphoreSlim exchangeGate = new(1, 1);
@@ -24,7 +25,7 @@ public sealed class UsbTestCompatibleBackplaneTransport :
     private CancellationTokenSource? receiveCancellation;
     private Task? receiveTask;
     private TaskCompletionSource<bool>? receiveLoopReady;
-    private PendingExchange? pendingExchange;
+    private readonly List<PendingExchange> pendingExchanges = [];
     private long transmittedFrameCount;
     private long receivedFrameCount;
     private long receivedByteCount;
@@ -49,7 +50,9 @@ public sealed class UsbTestCompatibleBackplaneTransport :
         ushort? pendingSequence;
         lock (pendingLock)
         {
-            pendingSequence = pendingExchange?.SendSequence;
+            pendingSequence = pendingExchanges
+                .FirstOrDefault(pending => !pending.Completion.Task.IsCompleted)
+                ?.SendSequence;
         }
 
         return new UsbTransportDiagnosticSnapshot(
@@ -153,6 +156,67 @@ public sealed class UsbTestCompatibleBackplaneTransport :
             finally
             {
                 ClearPending(pending);
+            }
+        }
+        finally
+        {
+            exchangeGate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<byte[]>> ExchangeBatchAsync(
+        IReadOnlyList<ReadOnlyMemory<byte>> requests,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsOpen)
+        {
+            throw new BackplaneConnectionException("usbtest兼容USB链路尚未打开。");
+        }
+
+        ArgumentNullException.ThrowIfNull(requests);
+        if (requests.Count == 0)
+        {
+            throw new ArgumentException("批量交换至少需要一帧请求。", nameof(requests));
+        }
+
+        await exchangeGate.WaitAsync(cancellationToken);
+        try
+        {
+            var requestBytes = requests.Select(request => request.ToArray()).ToArray();
+            var pendings = requestBytes.Select(CreatePendingExchange).ToArray();
+            RegisterPendings(pendings);
+            try
+            {
+                // 与usbtest2的SendProtocolFrames保持一致：连续写出所有配置帧，中间不等待回复。
+                await Task.Run(
+                    () =>
+                    {
+                        foreach (var request in requestBytes)
+                        {
+                            WriteCore(request);
+                        }
+                    },
+                    cancellationToken);
+
+                try
+                {
+                    return await Task.WhenAll(pendings.Select(pending => pending.Completion.Task))
+                        .WaitAsync(TimeSpan.FromMilliseconds(timeoutMilliseconds), cancellationToken);
+                }
+                catch (TimeoutException)
+                {
+                    Interlocked.Increment(ref exchangeTimeoutCount);
+                    var missingSequences = pendings
+                        .Where(pending => !pending.Completion.Task.IsCompletedSuccessfully)
+                        .Select(pending => pending.SendSequence);
+                    throw new TimeoutException(
+                        $"Endpoint 0x01已连续发送{requests.Count}帧，但在{timeoutMilliseconds}ms内未收到"
+                            + $"ackSeq={string.Join(',', missingSequences)}的匹配回复。");
+                }
+            }
+            finally
+            {
+                ClearPendings(pendings);
             }
         }
         finally
@@ -368,31 +432,37 @@ public sealed class UsbTestCompatibleBackplaneTransport :
 
     private void DispatchFrame(TesV14Frame frame, byte[] frameBytes)
     {
-        PendingExchange? pending;
+        PendingExchange? pending = null;
         var matched = false;
         var intermediateAcknowledgement = false;
         lock (pendingLock)
         {
-            pending = pendingExchange;
-            if (pending is not null
-                && !pending.Completion.Task.IsCompleted
-                && frame.SourceAddress == pending.ExpectedSourceAddress
-                && frame.DestinationAddress == pending.ExpectedDestinationAddress)
+            foreach (var candidate in pendingExchanges)
             {
-                var terminalCommand = IsTerminalResponse(pending.RequestCommand, frame.Command);
-                var sequenceMatches = frame.AckSequence == pending.SendSequence;
-                if (terminalCommand && sequenceMatches)
+                if (candidate.Completion.Task.IsCompleted
+                    || frame.SourceAddress != candidate.ExpectedSourceAddress
+                    || frame.DestinationAddress != candidate.ExpectedDestinationAddress
+                    || frame.AckSequence != candidate.SendSequence)
                 {
-                    matched = pending.Completion.TrySetResult(frameBytes);
+                    continue;
                 }
-                else if (pending.RequestCommand == TesV14Command.Read
+
+                pending = candidate;
+                var terminalCommand = IsTerminalResponse(candidate.RequestCommand, frame.Command);
+                if (terminalCommand)
+                {
+                    matched = candidate.Completion.TrySetResult(frameBytes);
+                }
+                else if (candidate.RequestCommand == TesV14Command.Read
                     && frame.Command == TesV14Command.Acknowledgement
-                    && frame.AckSequence == pending.SendSequence)
+                    && frame.AckSequence == candidate.SendSequence)
                 {
                     // 固件会先用ACK表示“读取请求已受理”，随后再返回包含寄存器内容的0x04响应。
                     // 这帧不能结束Exchange，否则4字节ACK状态会被误当成寄存器载荷。
                     intermediateAcknowledgement = true;
                 }
+
+                break;
             }
         }
 
@@ -508,24 +578,34 @@ public sealed class UsbTestCompatibleBackplaneTransport :
 
     private void RegisterPending(PendingExchange pending)
     {
+        RegisterPendings([pending]);
+    }
+
+    private void RegisterPendings(IReadOnlyList<PendingExchange> pendings)
+    {
         lock (pendingLock)
         {
-            if (pendingExchange is not null)
+            if (pendingExchanges.Count != 0)
             {
                 throw new InvalidOperationException("已有USB请求正在等待回复。");
             }
 
-            pendingExchange = pending;
+            pendingExchanges.AddRange(pendings);
         }
     }
 
     private void ClearPending(PendingExchange pending)
     {
+        ClearPendings([pending]);
+    }
+
+    private void ClearPendings(IReadOnlyList<PendingExchange> pendings)
+    {
         lock (pendingLock)
         {
-            if (ReferenceEquals(pendingExchange, pending))
+            foreach (var pending in pendings)
             {
-                pendingExchange = null;
+                pendingExchanges.Remove(pending);
             }
         }
     }
@@ -534,7 +614,10 @@ public sealed class UsbTestCompatibleBackplaneTransport :
     {
         lock (pendingLock)
         {
-            pendingExchange?.Completion.TrySetException(exception);
+            foreach (var pending in pendingExchanges)
+            {
+                pending.Completion.TrySetException(exception);
+            }
         }
     }
 

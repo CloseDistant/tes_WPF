@@ -222,7 +222,7 @@
                                                Foreground="{StaticResource MutedBrush}"
                                                Margin="0,0,0,5" />
                                     <ComboBox ItemsSource="{Binding BoardAddresses}"
-                                              SelectedItem="{Binding SelectedBoardAddress}">
+                                              SelectedItem="{Binding SelectedBoardAddress, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                                         <ComboBox.ItemTemplate>
                                             <DataTemplate>
                                                 <TextBlock FontFamily="Consolas">
@@ -647,12 +647,19 @@
                 </Grid.RowDefinitions>
                 <Grid Grid.Row="0" Margin="18,14,18,10">
                     <TextBlock Text="通信日志" FontSize="16" FontWeight="SemiBold" />
-                    <Button Content="清空"
-                            HorizontalAlignment="Right"
-                            MinHeight="28"
-                            Padding="12,3"
-                            Margin="0"
-                            Click="ClearLogButton_Click" />
+                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                        <Button Content="复制全部"
+                                MinHeight="28"
+                                Padding="12,3"
+                                Margin="0,0,8,0"
+                                ToolTip="复制本次运行的完整日志，包含全部十六进制收发帧"
+                                Click="CopyAllLogsButton_Click" />
+                        <Button Content="清空"
+                                MinHeight="28"
+                                Padding="12,3"
+                                Margin="0"
+                                Click="ClearLogButton_Click" />
+                    </StackPanel>
                 </Grid>
                 <ListBox Grid.Row="1"
                          x:Name="LogList"

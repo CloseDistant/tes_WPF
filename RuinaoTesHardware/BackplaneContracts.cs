@@ -162,6 +162,17 @@ public interface IBackplaneTransport : IAsyncDisposable
     Task CloseAsync(CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// 连续写出一组协议帧后，再按各帧发送序号收集回复。
+/// 用于复现usbtest2“先发送全部刺激配置帧、随后异步接收回复”的行为。
+/// </summary>
+public interface IBackplaneBatchTransport
+{
+    Task<IReadOnlyList<byte[]>> ExchangeBatchAsync(
+        IReadOnlyList<ReadOnlyMemory<byte>> requests,
+        CancellationToken cancellationToken = default);
+}
+
 public sealed class BackplaneConnectionException : Exception
 {
     public BackplaneConnectionException(string message) : base(message)
