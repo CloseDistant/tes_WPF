@@ -22,3 +22,33 @@ public sealed record IntegrityCheckResult(
     long VerifiedCount,
     string Message,
     DateTimeOffset CompletedAt);
+
+public enum ReleaseIntegrityStatusKind
+{
+    NeverChecked,
+    Passed,
+    Failed,
+    ReleaseChanged
+}
+
+public sealed record ReleaseIntegrityStatus(
+    ReleaseIntegrityStatusKind Kind,
+    IntegrityCheckResult? LastResult);
+
+internal sealed record ReleaseIntegritySnapshot(
+    bool IsValid,
+    long VerifiedCount,
+    string Message,
+    DateTimeOffset CompletedAt,
+    string? ManifestIdentity)
+{
+    public IntegrityCheckResult ToResult()
+    {
+        return new IntegrityCheckResult(
+            IntegrityCheckKind.ReleaseFiles,
+            IsValid,
+            VerifiedCount,
+            Message,
+            CompletedAt);
+    }
+}

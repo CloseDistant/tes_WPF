@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using OpenCvSharp;
 
 /// <summary>
 /// 采集工作台 ViewModel。
@@ -23,6 +24,8 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private readonly IUnifiedSessionService unifiedSessionService;
     private readonly IPatientService patientService;
     private readonly AssessmentWorkbenchCoordinator workbenchCoordinator;
+    private readonly ICameraCaptureService cameraCaptureService;
+    private readonly ICaptureMediaRecorder captureMediaRecorder;
     private readonly DispatcherTimer calibrationTimer = new();
     private readonly DispatcherTimer pictureBrowseTimer = new();
     private readonly DispatcherTimer videoBrowseTimer = new();
@@ -121,6 +124,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public AssessmentCaptureViewModel(
         ICaptureMediaRecorder captureMediaRecorder,
+        ICameraCaptureService cameraCaptureService,
         ILocalizationService localization,
         IUserDialogService userDialogService,
         IModuleEventRecorder moduleEventRecorder,
@@ -128,7 +132,8 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         IPatientService patientService,
         AssessmentWorkbenchCoordinator workbenchCoordinator)
     {
-        CaptureMediaRecorder = captureMediaRecorder;
+        this.captureMediaRecorder = captureMediaRecorder;
+        this.cameraCaptureService = cameraCaptureService;
         this.localization = localization;
         this.userDialogService = userDialogService;
         this.moduleEventRecorder = moduleEventRecorder;
@@ -140,7 +145,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
             RefreshModuleDisplayNames();
             NotifyStageChanged();
         };
-        CaptureMediaRecorder.RecordingCompleted += OnRecordingCompleted;
+        captureMediaRecorder.RecordingCompleted += OnRecordingCompleted;
         DevNextStepCommand = new RelayCommand(_ => MoveToNextDevStep());
         GoNextModuleCommand = new RelayCommand(_ => GoNextModule());
         SwitchModuleCommand = new RelayCommand(SwitchModule);
@@ -187,6 +192,23 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         LoadCameraDevices();
     }
 
+    internal bool IsCameraOpen => cameraCaptureService.IsOpen;
+
+    internal bool OpenCamera(int preferredIndex)
+    {
+        return cameraCaptureService.Open(preferredIndex);
+    }
+
+    internal bool ReadCameraFrame(Mat targetFrame)
+    {
+        return cameraCaptureService.Read(targetFrame);
+    }
+
+    internal void CloseCamera()
+    {
+        cameraCaptureService.Close();
+    }
+
     public async Task<string> GetOrStartUnifiedSessionKeyAsync(CancellationToken cancellationToken = default)
     {
         if (patientService.CurrentPatient is null)
@@ -198,7 +220,29 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         return (await unifiedSessionService.GetOrStartAsync(cancellationToken)).SessionKey;
     }
 
-    public ICaptureMediaRecorder CaptureMediaRecorder { get; }
+    internal bool IsMediaRecording => captureMediaRecorder.IsRecording;
+
+    internal Task<CaptureSessionInfo> StartMediaRecordingAsync(
+        CaptureRecordingRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return captureMediaRecorder.StartAsync(request, cancellationToken);
+    }
+
+    internal void RequestMediaStop(string status, string message)
+    {
+        captureMediaRecorder.RequestStop(status, message);
+    }
+
+    internal int RecordMediaFrame(Mat frame)
+    {
+        return captureMediaRecorder.RecordFrame(frame);
+    }
+
+    internal Task WaitForMediaIdleAsync(CancellationToken cancellationToken = default)
+    {
+        return captureMediaRecorder.WaitForIdleAsync(cancellationToken);
+    }
 
     public string DemoVideoPath => CurrentModuleCode switch
     {
@@ -373,7 +417,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public bool IsQuestionnaireInProgress => IsQuestionnaireStage;
 
-    public bool IsActiveForSessionSecurity => ShouldConfirmLeavingWorkbench || CaptureMediaRecorder.IsRecording;
+    public bool IsActiveForSessionSecurity => ShouldConfirmLeavingWorkbench || captureMediaRecorder.IsRecording;
 
     public bool ShouldConfirmLeavingWorkbench => IsDemoPlaying || IsExecutingCaptureTask || IsQuestionnaireInProgress;
 

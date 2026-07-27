@@ -10,6 +10,10 @@ public sealed class StimulationChannelCountdown
 
     public event Action<ChannelConfig>? Completed;
 
+    public bool IsActive(ChannelConfig channel) => active.ContainsKey(channel);
+
+    public bool HasActiveChannels => !active.IsEmpty;
+
     public void Start(ChannelConfig channel)
     {
         Cancel(channel, reset: false);

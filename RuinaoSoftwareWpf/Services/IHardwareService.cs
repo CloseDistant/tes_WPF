@@ -33,15 +33,8 @@ public sealed record HardwareConnectionChangedEventArgs(
 /// ViewModel 不直接操作设备，而是通过 IHardwareService 发命令。
 /// 这样以后如果硬件协议变了，只要换实现类，界面代码不需要改。
 /// </summary>
-public interface IHardwareService
+public interface IHardwareService : IHardwareConnectionState
 {
-    event EventHandler<HardwareConnectionChangedEventArgs>? ConnectionChanged;
-
-    /// <summary>
-    /// 当前是否认为设备已连接。
-    /// </summary>
-    bool IsConnected { get; }
-
     /// <summary>自动或手动联机正在执行时为true，用于禁止重复点击联机。</summary>
     bool IsConnecting { get; }
 

@@ -77,6 +77,7 @@ public sealed class PrescriptionService : IPrescriptionService
         PrescriptionDefinition prescription,
         CancellationToken cancellationToken = default)
     {
+        EnsureTextFieldsDoNotContainControlCharacters(prescription);
         authorizationService.RequireSignedIn();
         await databaseInitializer.EnsureInitializedAsync(cancellationToken);
         await writeGate.WaitAsync(cancellationToken);
@@ -142,6 +143,13 @@ public sealed class PrescriptionService : IPrescriptionService
                 .AsNoTracking()
                 .FirstOrDefaultAsync(item => item.Id == prescriptionId, cancellationToken)
                 ?? throw new InvalidOperationException("找不到要复制的处方。");
+            EnsureTextFieldsDoNotContainControlCharacters(
+                source.Name,
+                source.Indication,
+                source.StimulationType,
+                source.DeliveryMode,
+                source.Course,
+                source.EvidenceGrade);
             var currentUser = authorizationService.RequireSignedIn();
             var normalizedSourceName = PrescriptionDefinition.NormalizeName(source.Name, source.StimulationType);
             var baseName = Regex.Replace(normalizedSourceName.TrimEnd(), @"-\d+$", string.Empty);
@@ -174,6 +182,10 @@ public sealed class PrescriptionService : IPrescriptionService
                 TotalDurationMinutes = source.TotalDurationMinutes,
                 IntervalMinutes = source.IntervalMinutes,
                 SessionDurationMinutes = source.SessionDurationMinutes,
+                PulseTreatmentDurationSeconds = source.PulseTreatmentDurationSeconds,
+                PulseWidthMilliseconds = source.PulseWidthMilliseconds,
+                PulseRiseWidthMilliseconds = source.PulseRiseWidthMilliseconds,
+                PulseIntervalWidthMilliseconds = source.PulseIntervalWidthMilliseconds,
                 Course = source.Course,
                 RampUpSeconds = source.RampUpSeconds,
                 RampDownSeconds = source.RampDownSeconds,
@@ -247,7 +259,11 @@ public sealed class PrescriptionService : IPrescriptionService
         entity.RampUpSeconds,
         entity.RampDownSeconds,
         entity.EvidenceGrade,
-        entity.IsBuiltin);
+        entity.IsBuiltin,
+        PulseTreatmentDurationSeconds: entity.PulseTreatmentDurationSeconds,
+        PulseWidthMilliseconds: entity.PulseWidthMilliseconds,
+        PulseRiseWidthMilliseconds: entity.PulseRiseWidthMilliseconds,
+        PulseIntervalWidthMilliseconds: entity.PulseIntervalWidthMilliseconds);
 
     private Task<int> SaveChangesAsync(CaptureDbContext context, CancellationToken cancellationToken)
     {
@@ -267,10 +283,34 @@ public sealed class PrescriptionService : IPrescriptionService
         entity.TotalDurationMinutes = prescription.TotalDurationMinutes;
         entity.IntervalMinutes = prescription.IntervalMinutes;
         entity.SessionDurationMinutes = prescription.SessionDurationMinutes;
+        entity.PulseTreatmentDurationSeconds = prescription.PulseTreatmentDurationSeconds;
+        entity.PulseWidthMilliseconds = prescription.PulseWidthMilliseconds;
+        entity.PulseRiseWidthMilliseconds = prescription.PulseRiseWidthMilliseconds;
+        entity.PulseIntervalWidthMilliseconds = prescription.PulseIntervalWidthMilliseconds;
         entity.Course = prescription.Course;
         entity.RampUpSeconds = prescription.RampUpSeconds;
         entity.RampDownSeconds = prescription.RampDownSeconds;
         entity.EvidenceGrade = prescription.EvidenceGrade;
         entity.IsBuiltin = prescription.IsBuiltin;
+    }
+
+    private static void EnsureTextFieldsDoNotContainControlCharacters(PrescriptionDefinition prescription)
+    {
+        ArgumentNullException.ThrowIfNull(prescription);
+        EnsureTextFieldsDoNotContainControlCharacters(
+            prescription.Name,
+            prescription.Indication,
+            prescription.StimulationType,
+            prescription.DeliveryMode,
+            prescription.Course,
+            prescription.EvidenceGrade);
+    }
+
+    private static void EnsureTextFieldsDoNotContainControlCharacters(params string[] values)
+    {
+        if (values.Any(InputTextRules.ContainsControlCharacters))
+        {
+            throw new InvalidOperationException("处方文本内容不能包含控制字符。");
+        }
     }
 }

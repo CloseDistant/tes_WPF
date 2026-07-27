@@ -76,7 +76,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <DockPanel Grid.Row="0" Margin="0,0,0,14">
+            <DockPanel Grid.Row="0" Margin="0,0,0,14" LastChildFill="False">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Content="{Binding Localization.SynchronizedStartButtonText}"
                             Style="{StaticResource TopButton}"
@@ -95,7 +95,13 @@
                            Foreground="{StaticResource Gold}"
                            FontSize="18"
                            FontWeight="SemiBold"
-                           DockPanel.Dock="Left" />
+                           DockPanel.Dock="Left"
+                           VerticalAlignment="Center"
+                           Margin="0,0,12,0" />
+                <Button Content="使用处方"
+                        Style="{StaticResource PrescriptionUseButton}"
+                        Command="{Binding UsePrescriptionCommand}"
+                        DockPanel.Dock="Left" />
             </DockPanel>
 
             <ItemsControl Grid.Row="1" ItemsSource="{Binding SelectedGroup.Channels}">
@@ -109,6 +115,7 @@
                         <controls:StimulationChannelCard Margin="0,0,14,0"
                                                          Localization="{Binding DataContext.Localization, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                          StartCommand="{Binding DataContext.StartChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                         UsePrescriptionCommand="{Binding DataContext.UseChannelPrescriptionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                          ShowCarrierFrequency="True"
                                                          ShowPolarity="False"
                                                          ShowElectrodeDescription="True" />

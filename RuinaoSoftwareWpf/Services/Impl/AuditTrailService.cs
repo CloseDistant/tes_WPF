@@ -36,7 +36,7 @@ internal sealed class AuditTrailService : IAuditTrailService, IAuditTrailStore
         this.timeProvider = timeProvider;
         softwareVersion = typeof(AuditTrailService).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion ?? "1.0.0";
+            .InformationalVersion ?? "1.0.0.0";
     }
 
     public event EventHandler<AuditTrailWriteFailedEventArgs>? WriteFailed;

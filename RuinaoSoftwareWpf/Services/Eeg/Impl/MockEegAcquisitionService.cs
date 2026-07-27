@@ -3,7 +3,7 @@ using System.Windows.Media;
 
 namespace RuinaoSoftwareWpf;
 
-public sealed class MockEegAcquisitionService : IEegAcquisitionService, IDisposable
+public sealed class MockEegAcquisitionService : ILegacyEegAcquisitionService, IDisposable
 {
     private readonly object syncRoot = new();
     private readonly Random random = new();

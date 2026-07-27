@@ -220,5 +220,12 @@ public sealed class DirectCurrentWaveformState : ObservableObject
         RunState = DirectCurrentWaveformRunState.EmergencyStopped;
     }
 
+    public void Clear()
+    {
+        Parameters = null;
+        ElapsedSeconds = 0;
+        RunState = DirectCurrentWaveformRunState.Empty;
+    }
+
     public void ToggleViewMode() => IsGlobalView = !IsGlobalView;
 }

@@ -44,7 +44,7 @@ public partial class IntegrityCheckResultDialog : Window
     {
         return typeof(IntegrityCheckResultDialog).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion ?? "1.0.0";
+            .InformationalVersion ?? "1.0.0.0";
     }
 
     private void ConfirmButton_Click(object sender, RoutedEventArgs e) => DialogResult = true;

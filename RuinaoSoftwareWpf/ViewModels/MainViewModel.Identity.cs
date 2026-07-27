@@ -135,18 +135,51 @@ public sealed partial class MainViewModel
     private async Task EndCurrentSessionAsync()
     {
         var result = await sessionLifecycleCoordinator.EndCurrentAsync();
+        if (result.Confirmation is { } confirmation)
+        {
+            if (!ConfirmSessionLifecycle(confirmation))
+            {
+                ShellState.FooterStatus = confirmation.CancelledResultMessage;
+                return;
+            }
+
+            result = await sessionLifecycleCoordinator.EndCurrentAsync(confirmed: true);
+        }
+
         ShellState.FooterStatus = result.Message;
     }
 
     private async Task<bool> EndSessionBeforePatientChangeAsync(string action)
     {
         var result = await sessionLifecycleCoordinator.PrepareForPatientChangeAsync(action);
+        if (result.Confirmation is { } confirmation)
+        {
+            if (!ConfirmSessionLifecycle(confirmation))
+            {
+                ShellState.FooterStatus = confirmation.CancelledResultMessage;
+                return false;
+            }
+
+            result = await sessionLifecycleCoordinator.PrepareForPatientChangeAsync(
+                action,
+                confirmed: true);
+        }
+
         if (!result.Succeeded && !string.IsNullOrWhiteSpace(result.Message))
         {
             ShellState.FooterStatus = result.Message;
         }
 
         return result.Succeeded;
+    }
+
+    private bool ConfirmSessionLifecycle(SessionLifecycleConfirmationRequest confirmation)
+    {
+        return userDialogService.ConfirmWarning(
+            confirmation.Title,
+            confirmation.Message,
+            confirmation.ConfirmText,
+            confirmation.CancelText);
     }
 
     private void NotifyUnifiedSessionChanged()
@@ -197,6 +230,7 @@ public sealed partial class MainViewModel
             if (dialog.ShowDialog() != true)
             {
                 await accountService.LogoutAsync();
+                ResetStimulationNavigation();
                 ShellState.FooterStatus = "首次登录必须修改密码，请重新登录";
                 return;
             }
@@ -292,6 +326,7 @@ public sealed partial class MainViewModel
         var newUser = await ShowLoginDialogAsync();
         if (previousUser is not null && newUser is not null && previousUser.UserId != newUser.UserId)
         {
+            ResetStimulationNavigation();
             await accountService.RecordAuditAsync(previousUser.UserId, newUser.UserId, "switch_account", "success", "切换账号");
             AppendLog($"ACCOUNT switch from userId={previousUser.UserId} to userId={newUser.UserId}");
         }
@@ -300,6 +335,7 @@ public sealed partial class MainViewModel
     private async Task LogoutAsync()
     {
         await accountService.LogoutAsync();
+        ResetStimulationNavigation();
         ShellState.FooterStatus = "已退出登录";
     }
 

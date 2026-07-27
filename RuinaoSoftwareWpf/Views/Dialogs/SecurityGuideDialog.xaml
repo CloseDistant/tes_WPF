@@ -105,7 +105,7 @@
                                    Foreground="#F0F3F7"
                                    FontSize="21"
                                    FontWeight="SemiBold" />
-                        <TextBlock Text="软件版本 V1.0.0"
+                        <TextBlock Text="软件版本 V1.0.0.0"
                                    Foreground="#8E9AAD"
                                    FontSize="12"
                                    VerticalAlignment="Center"
@@ -207,7 +207,7 @@
                     BorderBrush="#343C49"
                     BorderThickness="0,1,0,0">
                 <Grid Margin="28,0">
-                    <TextBlock Text="本说明为只读内容，适用于软件版本 V1.0.0"
+                    <TextBlock Text="本说明为只读内容，适用于软件版本 V1.0.0.0"
                                Foreground="#8692A5"
                                FontSize="11"
                                VerticalAlignment="Center" />

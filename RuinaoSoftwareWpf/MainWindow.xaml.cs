@@ -142,6 +142,8 @@ public partial class MainWindow : Window
             logger.Info("主窗口正在执行统一关闭流程");
             await viewModel.ShutdownAsync();
             await accountService.LogoutAsync();
+            logger.Info("业务关闭流程完成，开始释放依赖注入根容器");
+            await AppComposition.DisposeAsync();
         }
         catch (Exception exception)
         {

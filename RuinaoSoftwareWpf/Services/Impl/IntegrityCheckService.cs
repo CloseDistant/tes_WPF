@@ -5,15 +5,52 @@ internal sealed class IntegrityCheckService : IIntegrityCheckService
     private readonly IAuditTrailService auditTrail;
     private readonly IAccountService accountService;
     private readonly ILoggingService logger;
+    private readonly IReleaseIntegrityVerifier releaseIntegrityVerifier;
+    private readonly IReleaseIntegrityStateStore stateStore;
+    private readonly TimeProvider timeProvider;
 
     public IntegrityCheckService(
         IAuditTrailService auditTrail,
         IAccountService accountService,
-        ILoggingService logger)
+        ILoggingService logger,
+        IReleaseIntegrityVerifier releaseIntegrityVerifier,
+        IReleaseIntegrityStateStore stateStore,
+        TimeProvider timeProvider)
     {
         this.auditTrail = auditTrail;
         this.accountService = accountService;
         this.logger = logger;
+        this.releaseIntegrityVerifier = releaseIntegrityVerifier;
+        this.stateStore = stateStore;
+        this.timeProvider = timeProvider;
+    }
+
+    public async Task<ReleaseIntegrityStatus> GetReleaseStatusAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var snapshot = await stateStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+        if (snapshot is null)
+        {
+            return new ReleaseIntegrityStatus(ReleaseIntegrityStatusKind.NeverChecked, null);
+        }
+
+        var manifestIdentity = await releaseIntegrityVerifier
+            .GetManifestIdentityAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var result = snapshot.ToResult();
+        if (!string.Equals(
+                snapshot.ManifestIdentity,
+                manifestIdentity,
+                StringComparison.Ordinal))
+        {
+            return new ReleaseIntegrityStatus(ReleaseIntegrityStatusKind.ReleaseChanged, result);
+        }
+
+        return new ReleaseIntegrityStatus(
+            snapshot.IsValid
+                ? ReleaseIntegrityStatusKind.Passed
+                : ReleaseIntegrityStatusKind.Failed,
+            result);
     }
 
     public async Task<IntegrityCheckResult> CheckReleaseFilesAsync(
@@ -22,16 +59,15 @@ internal sealed class IntegrityCheckService : IIntegrityCheckService
     {
         var actor = accountService.CurrentUser
             ?? throw new UnauthorizedAccessException("请先登录后再执行校验");
-        var releaseResult = await ApplicationHardeningGuard.VerifyDirectoryAsync(
-            AppContext.BaseDirectory,
-            progress,
-            cancellationToken).ConfigureAwait(false);
+        var releaseResult = await releaseIntegrityVerifier
+            .VerifyAsync(progress, cancellationToken)
+            .ConfigureAwait(false);
         var result = new IntegrityCheckResult(
             IntegrityCheckKind.ReleaseFiles,
             releaseResult.IsValid,
             releaseResult.VerifiedFileCount,
             releaseResult.IsValid ? "软件发布文件完整性校验通过" : MapReleaseError(releaseResult.ErrorCode),
-            DateTimeOffset.Now);
+            timeProvider.GetLocalNow());
         var written = await auditTrail.TryAppendAsync(
             new AuditEventInput(
                 AuditEventCategory.IntegrityCheck,
@@ -47,6 +83,19 @@ internal sealed class IntegrityCheckService : IIntegrityCheckService
         {
             logger.Warning("发布文件校验结果未能写入安全审计");
         }
+
+        var manifestIdentity = await releaseIntegrityVerifier
+            .GetManifestIdentityAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await stateStore.SaveAsync(
+                new ReleaseIntegritySnapshot(
+                    result.IsValid,
+                    result.VerifiedCount,
+                    result.Message,
+                    result.CompletedAt,
+                    manifestIdentity),
+                cancellationToken)
+            .ConfigureAwait(false);
         return result;
     }
 

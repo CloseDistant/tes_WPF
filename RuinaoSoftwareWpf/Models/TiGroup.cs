@@ -1,4 +1,7 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Globalization;
 
 namespace RuinaoSoftwareWpf;
 
@@ -13,8 +16,13 @@ namespace RuinaoSoftwareWpf;
 public sealed class TiGroup : ObservableObject
 {
     private string title = string.Empty;
-    private string deltaText = string.Empty;
     private bool isSelected;
+    private readonly HashSet<ChannelConfig> observedChannels = [];
+
+    public TiGroup()
+    {
+        Channels.CollectionChanged += OnChannelsChanged;
+    }
 
     /// <summary>组标题，例如 "TI 刺激 7"。</summary>
     public string Title
@@ -23,12 +31,12 @@ public sealed class TiGroup : ObservableObject
         set => SetProperty(ref title, value);
     }
 
-    /// <summary>差频显示文本，例如 "Δf: 10.0 Hz"。</summary>
-    public string DeltaText
-    {
-        get => deltaText;
-        set => SetProperty(ref deltaText, value);
-    }
+    /// <summary>组内两个通道载波频率的绝对差值，例如 "Δf: 10.0 Hz"。</summary>
+    public string DeltaText => TryGetCarrierFrequency(0, out var firstFrequencyHz)
+        && TryGetCarrierFrequency(1, out var secondFrequencyHz)
+            ? FormattableString.Invariant(
+                $"Δf: {Math.Abs(secondFrequencyHz - firstFrequencyHz):0.0} Hz")
+            : "Δf: -- Hz";
 
     /// <summary>当前是否被选中。用于 XAML 中改变选中项的背景色等样式。</summary>
     public bool IsSelected
@@ -42,4 +50,55 @@ public sealed class TiGroup : ObservableObject
     /// 例如 TI 刺激 7 对应 CH 13 和 CH 14。
     /// </summary>
     public ObservableCollection<ChannelConfig> Channels { get; } = new();
+
+    private void OnChannelsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        SynchronizeChannelSubscriptions();
+        OnPropertyChanged(nameof(DeltaText));
+    }
+
+    private void SynchronizeChannelSubscriptions()
+    {
+        foreach (var removedChannel in observedChannels.Except(Channels).ToArray())
+        {
+            removedChannel.PropertyChanged -= OnChannelPropertyChanged;
+            observedChannels.Remove(removedChannel);
+        }
+
+        foreach (var addedChannel in Channels.Except(observedChannels))
+        {
+            addedChannel.PropertyChanged += OnChannelPropertyChanged;
+            observedChannels.Add(addedChannel);
+        }
+    }
+
+    private void OnChannelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ChannelConfig.FrequencyHz))
+        {
+            OnPropertyChanged(nameof(DeltaText));
+        }
+    }
+
+    private bool TryGetCarrierFrequency(int channelIndex, out decimal frequencyHz)
+    {
+        frequencyHz = 0;
+        if (channelIndex >= Channels.Count)
+        {
+            return false;
+        }
+
+        var value = Channels[channelIndex].FrequencyHz;
+        var isValid = decimal.TryParse(
+            value,
+            NumberStyles.Float,
+            CultureInfo.CurrentCulture,
+            out frequencyHz)
+            || decimal.TryParse(
+                value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out frequencyHz);
+        return isValid && frequencyHz >= 0;
+    }
 }

@@ -15,6 +15,8 @@ internal sealed class BackupRestoreService : IBackupRestoreService
     private const int KdfIterations = 210_000;
     private const long MinimumFreeBytes = 100L * 1024 * 1024;
     private const string StatusFileName = "backup-status.json";
+    private const string CurrentSoftwareVersion = "1.0.0.0";
+    private const string LegacySoftwareVersion = "1.0.0";
     private static readonly string[] PreservedStateKeys =
     [
         "software_activation_credential_v1",
@@ -352,7 +354,7 @@ internal sealed class BackupRestoreService : IBackupRestoreService
     {
         return new BackupManifest(
             1,
-            "1.0.0",
+            CurrentSoftwareVersion,
             DateTimeOffset.UtcNow,
             Guid.NewGuid().ToString("N"),
             files.ToDictionary(
@@ -491,7 +493,9 @@ internal sealed class BackupRestoreService : IBackupRestoreService
         }
         var manifest = JsonSerializer.Deserialize<BackupManifest>(manifestBytes)
             ?? throw new InvalidDataException("备份清单无效");
-        if (manifest.FormatVersion != 1 || !string.Equals(manifest.SoftwareVersion, "1.0.0", StringComparison.Ordinal))
+        if (manifest.FormatVersion != 1
+            || (!string.Equals(manifest.SoftwareVersion, CurrentSoftwareVersion, StringComparison.Ordinal)
+                && !string.Equals(manifest.SoftwareVersion, LegacySoftwareVersion, StringComparison.Ordinal)))
         {
             throw new InvalidDataException("备份版本与当前软件不兼容");
         }

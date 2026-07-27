@@ -49,6 +49,10 @@ internal sealed class PrescriptionEntity
     public int TotalDurationMinutes { get; set; }
     public int? IntervalMinutes { get; set; }
     public int? SessionDurationMinutes { get; set; }
+    public int? PulseTreatmentDurationSeconds { get; set; }
+    public int? PulseWidthMilliseconds { get; set; }
+    public int? PulseRiseWidthMilliseconds { get; set; }
+    public int? PulseIntervalWidthMilliseconds { get; set; }
     public string Course { get; set; } = string.Empty;
     public int RampUpSeconds { get; set; }
     public int RampDownSeconds { get; set; }

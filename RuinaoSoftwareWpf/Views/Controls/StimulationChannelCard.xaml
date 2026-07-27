@@ -5,7 +5,9 @@
              xmlns:renderers="clr-namespace:RuinaoSoftwareWpf.Views.Renderers"
              Background="Transparent"
              UseLayoutRounding="True"
-             SnapsToDevicePixels="True">
+             SnapsToDevicePixels="True"
+             PreviewMouseLeftButtonDown="SelectChannelOnInteraction"
+             GotKeyboardFocus="SelectChannelOnInteraction">
     <UserControl.Resources>
         <Style x:Key="WaveformModeOption" TargetType="RadioButton">
             <Setter Property="Foreground" Value="#8593AA" />
@@ -39,7 +41,19 @@
         </Style>
     </UserControl.Resources>
 
-    <Border Style="{StaticResource SelectedCard}" Padding="20" MinHeight="640" SnapsToDevicePixels="True">
+    <Border Padding="20" MinHeight="640" SnapsToDevicePixels="True">
+        <Border.Style>
+            <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                <Setter Property="BorderBrush" Value="{StaticResource Gold}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="RenderOptions.EdgeMode" Value="Aliased" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding HighlightBorder, ElementName=Root}" Value="False">
+                        <Setter Property="BorderBrush" Value="#303846" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -51,6 +65,11 @@
 
             <DockPanel LastChildFill="True">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="使用处方"
+                            Command="{Binding UsePrescriptionCommand, ElementName=Root}"
+                            CommandParameter="{Binding}"
+                            Style="{StaticResource PrescriptionUseButton}"
+                            Margin="0,0,10,0" />
                     <Button Content="{Binding Localization.StartButtonText, ElementName=Root}"
                             Command="{Binding StartCommand, ElementName=Root}"
                             CommandParameter="{Binding}"

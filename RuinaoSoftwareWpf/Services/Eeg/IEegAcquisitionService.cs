@@ -1,6 +1,10 @@
 namespace RuinaoSoftwareWpf;
 
-public interface IEegAcquisitionService
+/// <summary>
+/// 旧 EEG 界面契约，暂时保留波形渲染模型和 WPF 标记颜色。
+/// 新的应用层调用必须使用 Application.IEegAcquisitionService。
+/// </summary>
+public interface ILegacyEegAcquisitionService
 {
     EegAcquisitionState State { get; }
 

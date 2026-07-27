@@ -1,27 +1,9 @@
 namespace RuinaoSoftwareWpf;
 
 using System.Collections.ObjectModel;
+using RuinaoSoftwareWpf.ApplicationContracts;
 
-public enum AssessmentModuleKind
-{
-    EyeCalibration,
-    PictureBrowse,
-    VideoBrowse,
-    VoiceBaseline,
-    WordReading,
-    ShortTextReading,
-    EmotionQuestion,
-    DotProbe,
-    EmotionOddball,
-    EmotionLetterSearch,
-    EmotionStroop,
-    Questionnaire,
-    BasicInformation,
-    GenericTask,
-    SynchronizationTest
-}
-
-public abstract class AssessmentModuleViewModel : ObservableObject
+public abstract class AssessmentModuleViewModel : ObservableObject, IAssessmentModule
 {
     protected AssessmentModuleViewModel(string code, string displayNameKey, bool isDevelopmentOnly)
     {
@@ -34,6 +16,9 @@ public abstract class AssessmentModuleViewModel : ObservableObject
     public string DisplayNameKey { get; }
     public bool IsDevelopmentOnly { get; }
     public abstract AssessmentModuleKind Kind { get; }
+
+    public AssessmentModuleDefinition Definition =>
+        new(Code, DisplayNameKey, Kind, IsDevelopmentOnly);
 }
 
 public sealed class EyeCalibrationAssessmentModuleViewModel(string code, string key, bool developmentOnly)

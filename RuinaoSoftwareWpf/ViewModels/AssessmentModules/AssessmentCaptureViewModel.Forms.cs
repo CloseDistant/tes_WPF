@@ -385,7 +385,7 @@ public sealed partial class AssessmentCaptureViewModel
             var outputRoot = CaptureOutputPathProvider.GetOutputRoot();
             var sessionKey = await GetOrStartUnifiedSessionKeyAsync();
             var payloadJson = JsonSerializer.Serialize(payload);
-            await CaptureMediaRecorder.SaveFormModuleRecordAsync(
+            await captureMediaRecorder.SaveFormModuleRecordAsync(
                 outputRoot,
                 sessionKey,
                 moduleCode,

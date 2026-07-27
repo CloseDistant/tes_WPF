@@ -29,6 +29,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private readonly ISessionLifecycleCoordinator sessionLifecycleCoordinator;
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly IToastService toastService;
+    private readonly StimulationNavigationState stimulationNavigation = new();
     private readonly AsyncRelayCommand connectCommand;
     private readonly AsyncRelayCommand openAuditTrailCommand;
 
@@ -65,6 +66,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         StimulationTypeSelectionViewModel stimulationTypeSelection,
         TiControlViewModel tiControl,
         DirectCurrentControlViewModel directCurrentControl,
+        PulseCurrentControlViewModel pulseCurrentControl,
         PrescriptionViewModel prescription,
         EegSignalCaptureViewModel eegSignalCapture,
         AssessmentCaptureViewModel assessmentCapture,
@@ -96,6 +98,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         StimulationTypeSelection = stimulationTypeSelection;
         TiControl = tiControl;
         DirectCurrentControl = directCurrentControl;
+        PulseCurrentControl = pulseCurrentControl;
         Prescription = prescription;
         EegSignalCapture = eegSignalCapture;
         AssessmentCapture = assessmentCapture;
@@ -177,10 +180,15 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         DirectCurrentControl.HardwareOperationCompleted += (_, result) => ApplyHardwareResult(result);
         TiControl.BackRequested += (_, _) => ShowStimulationTypeSelection();
         DirectCurrentControl.BackRequested += (_, _) => ShowStimulationTypeSelection();
+        PulseCurrentControl.BackRequested += (_, _) => ShowStimulationTypeSelection();
+        TiControl.PrescriptionRequested += OnStimulationPrescriptionRequested;
+        DirectCurrentControl.PrescriptionRequested += OnStimulationPrescriptionRequested;
+        PulseCurrentControl.PrescriptionRequested += OnStimulationPrescriptionRequested;
         Prescription.UseRequested += (_, item) => ApplyPrescription(item);
         Report.ReuseRequested += (_, item) => ApplyPrescription(item);
         StimulationTypeSelection.TemporalInterferenceRequested += (_, _) => ShowTemporalInterference();
         StimulationTypeSelection.DirectCurrentRequested += (_, _) => ShowDirectCurrent();
+        StimulationTypeSelection.PulseCurrentRequested += (_, _) => ShowPulseCurrent();
         featureVisibilityService.VisibilityChanged += (_, _) => ApplyFeatureVisibility();
         accountService.CurrentUserChanged += (_, _) => NotifyAccountChanged();
         sessionLifecycleCoordinator.CurrentSessionChanged += (_, _) => NotifyUnifiedSessionChanged();
@@ -236,6 +244,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
     /// <summary>tDCS 独立页面 ViewModel。</summary>
     public DirectCurrentControlViewModel DirectCurrentControl { get; }
+
+    /// <summary>tPCS 参数页面 ViewModel。</summary>
+    public PulseCurrentControlViewModel PulseCurrentControl { get; }
 
     /// <summary>公用处方管理页面 ViewModel。</summary>
     public PrescriptionViewModel Prescription { get; }
@@ -479,7 +490,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
             AppPage.FemSimulation => FemSimulation,
             AppPage.Settings => Config,
             AppPage.Dashboard => Monitor,
-            AppPage.Control => StimulationTypeSelection,
+            AppPage.Control => ResolveStimulationPageViewModel(),
             AppPage.EegSignalCapture => EegSignalCapture,
             AppPage.ClosedLoopControl => ConfigurePlaceholder(page),
             AppPage.AssessmentCapture => AssessmentCapture,
@@ -497,7 +508,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     /// </summary>
     private PlaceholderPageViewModel ConfigurePlaceholder(AppPage page)
     {
-        PlaceholderPage.Configure(PageTitle, Localization.PlaceholderDescription(page));
+        PlaceholderPage.Configure(Localization.PageTitle(page), Localization.PlaceholderDescription(page));
         return PlaceholderPage;
     }
 
@@ -650,7 +661,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     {
         if (currentPage == page && page == AppPage.Control)
         {
-            ShowStimulationTypeSelection();
+            RestoreStimulationPage();
             return;
         }
 
@@ -671,7 +682,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         {
             if (page == AppPage.Control)
             {
-                ShowStimulationTypeSelection();
+                RestoreStimulationPage();
             }
 
             return;
@@ -687,47 +698,110 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
     private void ChangeCurrentPage(AppPage page)
     {
+        if (currentPage == page)
+        {
+            return;
+        }
+
         if (currentPage == AppPage.Settings && page != AppPage.Settings)
         {
             Config.LeaveSettingsPage();
         }
 
-        if (!SetProperty(ref currentPage, page))
-        {
-            return;
-        }
+        var nextPageViewModel = page == AppPage.Control
+            ? PrepareStimulationPageViewModel()
+            : ResolvePageViewModel(page);
 
         if (page == AppPage.Settings)
         {
             Config.EnterSettingsPage();
         }
 
-        CurrentPageViewModel = ResolvePageViewModel(page);
+        // 页面标识与页面内容先在内存中一起切换，再发出绑定通知。
+        // 若先通知 CurrentPage，WPF 可能在记录页视图创建前短暂渲染上一个刺激子页面。
+        currentPage = page;
+        currentPageViewModel = nextPageViewModel;
         Navigation.Select(page);
+        OnPropertyChanged(nameof(CurrentPage));
+        OnPropertyChanged(nameof(CurrentPageViewModel));
         OnPropertyChanged(nameof(PageTitle));
-        AppendLog($"NAVIGATE {page}");
+        AppendLog($"NAVIGATE {page} -> {nextPageViewModel.GetType().Name}");
     }
 
     private void ShowTemporalInterference()
     {
+        stimulationNavigation.Remember(StimulationSubpage.TemporalInterference);
         TiControl.RestoreLastSelection();
         CurrentPageViewModel = TiControl;
+        Navigation.Select(AppPage.Control);
         AppendLog("STIMULATION TYPE TI selected");
     }
 
     private void ShowStimulationTypeSelection()
     {
-        StimulationTypeSelection.RefreshVisibility();
-        CurrentPageViewModel = StimulationTypeSelection;
+        stimulationNavigation.Remember(StimulationSubpage.TypeSelection);
+        RestoreStimulationPage();
         Navigation.Select(AppPage.Control);
         AppendLog("STIMULATION TYPE selection");
     }
 
     private void ShowDirectCurrent()
     {
+        stimulationNavigation.Remember(StimulationSubpage.DirectCurrent);
         CurrentPageViewModel = DirectCurrentControl;
+        Navigation.Select(AppPage.Control);
         ShellState.FooterStatus = "经颅直流电刺激参数设置";
         AppendLog("STIMULATION TYPE tDCS selected");
+    }
+
+    private void ShowPulseCurrent()
+    {
+        stimulationNavigation.Remember(StimulationSubpage.PulseCurrent);
+        CurrentPageViewModel = PulseCurrentControl;
+        Navigation.Select(AppPage.Control);
+        ShellState.FooterStatus = "经颅脉冲电流刺激参数设置";
+        AppendLog("STIMULATION TYPE tPCS selected");
+    }
+
+    private ObservableObject ResolveStimulationPageViewModel()
+    {
+        return stimulationNavigation.CurrentSubpage switch
+        {
+            StimulationSubpage.TemporalInterference => TiControl,
+            StimulationSubpage.DirectCurrent => DirectCurrentControl,
+            StimulationSubpage.PulseCurrent => PulseCurrentControl,
+            _ => StimulationTypeSelection
+        };
+    }
+
+    private void RestoreStimulationPage()
+    {
+        CurrentPageViewModel = PrepareStimulationPageViewModel();
+    }
+
+    private ObservableObject PrepareStimulationPageViewModel()
+    {
+        switch (stimulationNavigation.CurrentSubpage)
+        {
+            case StimulationSubpage.TemporalInterference:
+                TiControl.RestoreLastSelection();
+                break;
+            case StimulationSubpage.TypeSelection:
+                StimulationTypeSelection.RefreshVisibility();
+                break;
+        }
+
+        return ResolveStimulationPageViewModel();
+    }
+
+    private void ResetStimulationNavigation()
+    {
+        stimulationNavigation.Reset();
+        if (currentPage == AppPage.Control)
+        {
+            RestoreStimulationPage();
+            Navigation.Select(AppPage.Control);
+        }
     }
 
     private void ApplyPrescription(PrescriptionDefinition prescription)
@@ -740,16 +814,99 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         if (prescription.StimulationType == "TI")
         {
             TiControl.ApplyPrescription(prescription);
-            CurrentPageViewModel = TiControl;
-            Navigation.Select(AppPage.Control);
+            ShowTemporalInterference();
         }
-        else
+        else if (prescription.StimulationType == "tDCS")
         {
             DirectCurrentControl.ApplyPrescription(prescription);
             ShowDirectCurrent();
         }
+        else if (prescription.IsPulseCurrent)
+        {
+            if (!PulseCurrentControl.TryApplyPrescription(prescription, out var error))
+            {
+                toastService.ShowError("处方应用失败", error);
+                return;
+            }
+
+            ShowPulseCurrent();
+        }
+        else
+        {
+            toastService.ShowError("处方类型不受支持", $"无法识别刺激类型：{prescription.StimulationType}");
+            return;
+        }
         ShellState.FooterStatus = $"已应用处方：{prescription.Name}";
         AppendLog($"PRESCRIPTION applied {prescription.Id}");
+    }
+
+    private async void OnStimulationPrescriptionRequested(
+        object? sender,
+        StimulationPrescriptionRequestEventArgs eventArgs)
+    {
+        try
+        {
+            var targetName = eventArgs.TargetChannel switch
+            {
+                ChannelConfig channel => channel.Name,
+                PulseCurrentChannelConfig channel => channel.Name,
+                _ => string.Empty
+            };
+            var applyScopeText = eventArgs.AppliesToAllChannels ? "全部通道" : targetName;
+            var prescription = await userDialogService.SelectStimulationPrescriptionAsync(
+                eventArgs.StimulationType,
+                applyScopeText);
+            if (prescription is null)
+            {
+                return;
+            }
+
+            if (sender is TiControlViewModel)
+            {
+                if (eventArgs.AppliesToAllChannels)
+                {
+                    TiControl.ApplyPrescription(prescription);
+                }
+                else if (eventArgs.TargetChannel is ChannelConfig channel)
+                {
+                    TiControl.ApplyPrescription(prescription, channel);
+                }
+            }
+            else if (sender is DirectCurrentControlViewModel)
+            {
+                if (eventArgs.AppliesToAllChannels)
+                {
+                    DirectCurrentControl.ApplyPrescription(prescription);
+                }
+                else if (eventArgs.TargetChannel is ChannelConfig channel)
+                {
+                    DirectCurrentControl.ApplyPrescription(prescription, channel);
+                }
+            }
+            else if (sender is PulseCurrentControlViewModel)
+            {
+                var error = "未找到目标通道。";
+                var applied = eventArgs.AppliesToAllChannels
+                    ? PulseCurrentControl.TryApplyPrescription(prescription, out error)
+                    : eventArgs.TargetChannel is PulseCurrentChannelConfig channel
+                        && PulseCurrentControl.TryApplyPrescription(prescription, channel, out error);
+                if (!applied)
+                {
+                    toastService.ShowError("处方应用失败", error);
+                    return;
+                }
+            }
+
+            ShellState.FooterStatus = $"已应用处方：{prescription.Name}";
+            AppendLog(
+                $"PRESCRIPTION applied {prescription.Id} scope="
+                + (eventArgs.AppliesToAllChannels ? "all" : targetName));
+        }
+        catch (Exception ex)
+        {
+            logger.Error("刺激页面选择处方失败", ex);
+            toastService.ShowError("处方加载失败", "无法加载或应用处方，请稍后重试。");
+        }
     }
 
     private async Task InitializeFeatureVisibilityAsync()
@@ -858,12 +1015,12 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
             await AssessmentCapture.FlushPendingModuleEventsAsync();
 
-            if (AssessmentCapture.CaptureMediaRecorder.IsRecording)
+            if (AssessmentCapture.IsMediaRecording)
             {
-                AssessmentCapture.CaptureMediaRecorder.RequestStop("interrupted", "软件退出，当前采集已中断。");
+                AssessmentCapture.RequestMediaStop("interrupted", "软件退出，当前采集已中断。");
             }
 
-            await AssessmentCapture.CaptureMediaRecorder.WaitForIdleAsync();
+            await AssessmentCapture.WaitForMediaIdleAsync();
 
             await hardwareService.ShutdownAsync();
             await sessionLifecycleCoordinator.InterruptForShutdownAsync();

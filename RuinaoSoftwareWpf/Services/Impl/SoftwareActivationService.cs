@@ -10,7 +10,7 @@ public sealed class SoftwareActivationService : ISoftwareActivationService
     private const string ActivationStateKey = "software_activation_credential_v1";
     private const string ProductCode = "RUINAO-TDCS-CONTROL";
     private const int CredentialSchemaVersion = 1;
-    private const string SoftwareVersion = "1.0.0";
+    private const string SoftwareVersion = "1.0.0.0";
 
     private static readonly byte[] CredentialEntropy = SHA256.HashData(
         Encoding.UTF8.GetBytes("RuinaoSoftwareWpf.SoftwareActivationCredential.v1"));

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Windows.Input;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -11,6 +12,8 @@ namespace RuinaoSoftwareWpf;
 public sealed class DirectCurrentControlViewModel : ObservableObject
 {
     private readonly IStimulationEngine stimulationEngine;
+    private readonly IHardwareConnectionState hardwareConnectionState;
+    private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly ILoggingService logger;
     private readonly IToastService toastService;
     private readonly DispatcherTimer waveformTimer;
@@ -18,26 +21,38 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     private readonly AsyncRelayCommand synchronizedStartCommand;
     private readonly AsyncRelayCommand startChannelCommand;
     private readonly AsyncRelayCommand emergencyStopCommand;
+    private readonly RelayCommand usePrescriptionCommand;
+    private readonly RelayCommand useChannelPrescriptionCommand;
     private string appliedPrescriptionName = "手动设置";
+    private DirectCurrentChannelPair? selectedChannelPair;
+    private ChannelConfig? selectedChannel;
 
     public DirectCurrentControlViewModel(
         IStimulationEngine stimulationEngine,
+        IHardwareConnectionState hardwareConnectionState,
+        IDebugHardwareSimulationService debugHardwareSimulation,
         ILoggingService logger,
         LocalizationViewModel localization,
         IToastService toastService)
     {
         this.stimulationEngine = stimulationEngine;
+        this.hardwareConnectionState = hardwareConnectionState;
+        this.debugHardwareSimulation = debugHardwareSimulation;
         this.logger = logger;
         this.toastService = toastService;
         Localization = localization;
 
         var accent = new SolidColorBrush(Color.FromRgb(228, 232, 239));
         accent.Freeze();
-        Channels =
-        [
-            CreateChannel("CH 1", accent),
-            CreateChannel("CH 2", accent)
-        ];
+        Channels = new ObservableCollection<ChannelConfig>(
+            Enumerable.Range(1, 16).Select(channelNumber =>
+                CreateChannel($"CH {channelNumber}", accent)));
+        ChannelPairs = new ObservableCollection<DirectCurrentChannelPair>(
+            Enumerable.Range(0, 8).Select(pairIndex =>
+                new DirectCurrentChannelPair(
+                    pairIndex + 1,
+                    Channels[pairIndex * 2],
+                    Channels[pairIndex * 2 + 1])));
 
         waveformTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
@@ -46,9 +61,17 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         waveformTimer.Tick += OnWaveformTimerTick;
 
         BackCommand = new RelayCommand(_ => RequestBack());
+        SelectChannelCommand = new RelayCommand(parameter =>
+        {
+            if (parameter is ChannelConfig channel && Channels.Contains(channel))
+            {
+                SelectedChannelPair = ChannelPairs.First(pair => pair.Channels.Contains(channel));
+                SelectedChannel = channel;
+            }
+        });
         synchronizedStartCommand = new AsyncRelayCommand(
             (_, _) => StartSynchronizedAsync(),
-            _ => activeChannels.Count == 0,
+            _ => CanStartStimulation && activeChannels.Count == 0,
             HandleStartFailure);
         SynchronizedStartCommand = synchronizedStartCommand;
         startChannelCommand = new AsyncRelayCommand(
@@ -58,7 +81,9 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
                 {
                     await StartChannelAsync(channel);
                 }
-            }, parameter => parameter is ChannelConfig channel && !activeChannels.ContainsKey(channel),
+            }, parameter => CanStartStimulation
+                && parameter is ChannelConfig channel
+                && !activeChannels.ContainsKey(channel),
             onError: HandleStartFailure);
         StartChannelCommand = startChannelCommand;
         emergencyStopCommand = new AsyncRelayCommand(
@@ -66,19 +91,75 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             _ => activeChannels.Count > 0,
             ex => logger.Error("tDCS 急停命令执行失败", ex));
         EmergencyStopCommand = emergencyStopCommand;
+        usePrescriptionCommand = new RelayCommand(
+            _ => RequestPrescription(StimulationPrescriptionApplyScope.AllChannels),
+            _ => activeChannels.Count == 0);
+        UsePrescriptionCommand = usePrescriptionCommand;
+        useChannelPrescriptionCommand = new RelayCommand(
+            parameter => RequestPrescription(StimulationPrescriptionApplyScope.SingleChannel, parameter),
+            parameter => parameter is ChannelConfig channel
+                && Channels.Contains(channel)
+                && !activeChannels.ContainsKey(channel));
+        UseChannelPrescriptionCommand = useChannelPrescriptionCommand;
+        hardwareConnectionState.ConnectionChanged += OnHardwareConnectionChanged;
+        debugHardwareSimulation.ConnectionChanged += OnDebugSimulationConnectionChanged;
+        SelectedChannelPair = ChannelPairs[0];
+        SelectedChannel = Channels[0];
     }
 
     public LocalizationViewModel Localization { get; }
 
     public ObservableCollection<ChannelConfig> Channels { get; }
 
+    public ObservableCollection<DirectCurrentChannelPair> ChannelPairs { get; }
+
+    public DirectCurrentChannelPair? SelectedChannelPair
+    {
+        get => selectedChannelPair;
+        private set
+        {
+            if (!SetProperty(ref selectedChannelPair, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(SelectedChannels));
+        }
+    }
+
+    public ChannelConfig? SelectedChannel
+    {
+        get => selectedChannel;
+        private set
+        {
+            if (!SetProperty(ref selectedChannel, value))
+            {
+                return;
+            }
+
+            foreach (var channel in Channels)
+            {
+                channel.IsSelected = ReferenceEquals(channel, value);
+            }
+        }
+    }
+
+    public IReadOnlyList<ChannelConfig> SelectedChannels =>
+        SelectedChannelPair?.Channels ?? Array.Empty<ChannelConfig>();
+
     public ICommand BackCommand { get; }
+
+    public ICommand SelectChannelCommand { get; }
 
     public ICommand SynchronizedStartCommand { get; }
 
     public ICommand StartChannelCommand { get; }
 
     public ICommand EmergencyStopCommand { get; }
+
+    public ICommand UsePrescriptionCommand { get; }
+
+    public ICommand UseChannelPrescriptionCommand { get; }
 
     public string AppliedPrescriptionName
     {
@@ -90,8 +171,24 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
 
     public event EventHandler<HardwareOperationResult>? HardwareOperationCompleted;
 
+    public event EventHandler<StimulationPrescriptionRequestEventArgs>? PrescriptionRequested;
+
     public void ApplyPrescription(PrescriptionDefinition prescription)
     {
+        ApplyPrescription(prescription, Channels);
+    }
+
+    public void ApplyPrescription(PrescriptionDefinition prescription, ChannelConfig channel)
+    {
+        ArgumentNullException.ThrowIfNull(channel);
+        ApplyPrescription(prescription, [channel]);
+    }
+
+    private void ApplyPrescription(
+        PrescriptionDefinition prescription,
+        IEnumerable<ChannelConfig> targetChannels)
+    {
+        ArgumentNullException.ThrowIfNull(prescription);
         AppliedPrescriptionName = prescription.Name;
         var current = prescription.CurrentMilliamp.ToString("0.##", CultureInfo.InvariantCulture);
         var duration = (prescription.TotalDurationMinutes * 60).ToString(CultureInfo.InvariantCulture);
@@ -100,9 +197,8 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             .ToString(CultureInfo.InvariantCulture);
         var mode = prescription.DeliveryMode == PrescriptionDeliveryModes.Interval ? "间隔" : "连续";
 
-        for (var channelIndex = 0; channelIndex < Channels.Count; channelIndex++)
+        foreach (var channel in targetChannels)
         {
-            var channel = Channels[channelIndex];
             channel.CurrentMA = current;
             channel.RampUpS = prescription.RampUpSeconds.ToString(CultureInfo.InvariantCulture);
             channel.RampDownS = prescription.RampDownSeconds.ToString(CultureInfo.InvariantCulture);
@@ -110,8 +206,21 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             channel.IntervalS = interval;
             channel.SingleDurationS = singleDuration;
             channel.StimulationMode = mode;
-            channel.Polarity = prescription.GetChannelPolarity(channelIndex);
+            channel.RemainingTime = "00:00:00";
+            channel.DirectCurrentWaveform.Clear();
+            channel.RefreshBindings();
         }
+
+        OnPropertyChanged(nameof(SelectedChannels));
+    }
+
+    private void RequestPrescription(
+        StimulationPrescriptionApplyScope scope,
+        object? targetChannel = null)
+    {
+        PrescriptionRequested?.Invoke(
+            this,
+            new StimulationPrescriptionRequestEventArgs("tDCS", scope, targetChannel));
     }
 
     private static ChannelConfig CreateChannel(string name, Brush accent)
@@ -155,8 +264,15 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             return;
         }
 
+        var selectedChannels = SelectedChannels.ToArray();
+        if (selectedChannels.Length != 2)
+        {
+            toastService.ShowError("同步开始失败", "请先选择一组完整的双通道。");
+            return;
+        }
+
         var snapshots = new Dictionary<ChannelConfig, DirectCurrentWaveformParameters>();
-        foreach (var channel in Channels)
+        foreach (var channel in selectedChannels)
         {
             if (!DirectCurrentWaveformParameters.TryCreate(channel, out var snapshot, out var error))
             {
@@ -167,13 +283,13 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             snapshots[channel] = snapshot!;
         }
 
-        var group = CreateExecutionGroup(Channels);
+        var group = CreateExecutionGroup(selectedChannels);
         var result = await stimulationEngine.StartDirectCurrentGroupAsync(
             group,
-            string.Join(" + ", Channels.Select(channel => channel.Name)),
+            string.Join(" + ", selectedChannels.Select(channel => channel.Name)),
             AppliedPrescriptionName);
         var sharedTimestamp = Stopwatch.GetTimestamp();
-        foreach (var channel in Channels)
+        foreach (var channel in selectedChannels)
         {
             BeginChannelRuntime(channel, snapshots[channel], sharedTimestamp);
         }
@@ -318,6 +434,35 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         synchronizedStartCommand.RaiseCanExecuteChanged();
         startChannelCommand.RaiseCanExecuteChanged();
         emergencyStopCommand.RaiseCanExecuteChanged();
+        usePrescriptionCommand.RaiseCanExecuteChanged();
+        useChannelPrescriptionCommand.RaiseCanExecuteChanged();
+    }
+
+    private void OnHardwareConnectionChanged(
+        object? sender,
+        HardwareConnectionChangedEventArgs eventArgs)
+    {
+        RefreshCommandStatesOnUiThread();
+    }
+
+    private void OnDebugSimulationConnectionChanged(object? sender, EventArgs eventArgs)
+    {
+        RefreshCommandStatesOnUiThread();
+    }
+
+    private bool CanStartStimulation =>
+        hardwareConnectionState.IsConnected || debugHardwareSimulation.IsConnected;
+
+    private void RefreshCommandStatesOnUiThread()
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            _ = dispatcher.BeginInvoke(RefreshCommandStates);
+            return;
+        }
+
+        RefreshCommandStates();
     }
 
     private static string FormatRemaining(double seconds)
@@ -350,7 +495,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
 
     private static TiGroup CreateExecutionGroup(IEnumerable<ChannelConfig> channels)
     {
-        var group = new TiGroup { Title = "经颅直流电刺激", DeltaText = string.Empty };
+        var group = new TiGroup { Title = "经颅直流电刺激" };
         foreach (var channel in channels)
         {
             group.Channels.Add(channel);

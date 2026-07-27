@@ -18,17 +18,44 @@ public sealed record PrescriptionDefinition(
     int RampDownSeconds,
     string EvidenceGrade,
     bool IsBuiltin,
-    IReadOnlyList<string>? ChannelPolarities = null)
+    IReadOnlyList<string>? ChannelPolarities = null,
+    int? PulseTreatmentDurationSeconds = null,
+    int? PulseWidthMilliseconds = null,
+    int? PulseRiseWidthMilliseconds = null,
+    int? PulseIntervalWidthMilliseconds = null)
 {
+    public const string PulseCurrentStimulationType = "tPCS";
+
     public bool IsContinuous => DeliveryMode == PrescriptionDeliveryModes.Continuous;
+    public bool IsPulseCurrent => string.Equals(StimulationType, PulseCurrentStimulationType, StringComparison.Ordinal);
     public string CurrentDisplay => $"{CurrentMilliamp:0.##} mA";
-    public string TotalDurationDisplay => $"{TotalDurationMinutes} min";
-    public string IntervalDisplay => IsContinuous ? "/" : $"{IntervalMinutes} min";
-    public string SessionDurationDisplay => IsContinuous ? "/" : $"{SessionDurationMinutes} min";
-    public string RampDisplay => $"{RampUpSeconds}s / {RampDownSeconds}s";
+    public string CurrentLabel => "幅值";
+    public string TotalDurationLabel => IsPulseCurrent ? "治疗时间" : "总时长";
+    public string IntervalLabel => IsPulseCurrent ? "间隔宽度" : "间隔时间";
+    public string SessionDurationLabel => IsPulseCurrent ? "脉冲宽度" : "单次时长";
+    public string RampUpLabel => IsPulseCurrent ? "上升宽度" : "渐升时间";
+    public string RampDownLabel => "渐降时间";
+    public string TotalDurationDisplay => IsPulseCurrent
+        ? FormatPulseValue(PulseTreatmentDurationSeconds, "s")
+        : $"{TotalDurationMinutes} min";
+    public string IntervalDisplay => IsPulseCurrent
+        ? FormatPulseValue(PulseIntervalWidthMilliseconds, "ms")
+        : IsContinuous ? "/" : $"{IntervalMinutes} min";
+    public string SessionDurationDisplay => IsPulseCurrent
+        ? FormatPulseValue(PulseWidthMilliseconds, "ms")
+        : IsContinuous ? "/" : $"{SessionDurationMinutes} min";
+    public string RampUpDisplay => IsPulseCurrent
+        ? FormatPulseValue(PulseRiseWidthMilliseconds, "ms")
+        : $"{RampUpSeconds} s";
+    public string RampDownDisplay => IsPulseCurrent ? "/" : $"{RampDownSeconds} s";
     public string DisplayName => string.IsNullOrWhiteSpace(StimulationType)
         ? Name
         : $"{Name} ({StimulationType})";
+    public bool HasPulseCurrentParameters =>
+        PulseTreatmentDurationSeconds.HasValue
+        && PulseWidthMilliseconds.HasValue
+        && PulseRiseWidthMilliseconds.HasValue
+        && PulseIntervalWidthMilliseconds.HasValue;
 
     public string GetChannelPolarity(int channelIndex)
     {
@@ -59,6 +86,9 @@ public sealed record PrescriptionDefinition(
         normalized = Regex.Replace(normalized, @"\s+(\d+)$", "-$1");
         return normalized;
     }
+
+    private static string FormatPulseValue(int? value, string unit) =>
+        value.HasValue ? $"{value.Value} {unit}" : string.Empty;
 }
 
 public static class PrescriptionDeliveryModes

@@ -176,20 +176,23 @@ public sealed class DirectCurrentWaveformSurface : FrameworkElement
 
         if (parameters.IsContinuous)
         {
+            var continuousSign = parameters.ReversePolarity ? -1d : 1d;
             var rampDownStart = Math.Max(parameters.RampUpSeconds, parameters.TotalDurationSeconds - parameters.RampDownSeconds);
             if (seconds < parameters.RampUpSeconds)
             {
-                return parameters.RampUpSeconds <= 0 ? parameters.CurrentMilliamp : parameters.CurrentMilliamp * seconds / parameters.RampUpSeconds;
+                return continuousSign * (parameters.RampUpSeconds <= 0
+                    ? parameters.CurrentMilliamp
+                    : parameters.CurrentMilliamp * seconds / parameters.RampUpSeconds);
             }
 
             if (seconds < rampDownStart)
             {
-                return parameters.CurrentMilliamp;
+                return continuousSign * parameters.CurrentMilliamp;
             }
 
-            return parameters.RampDownSeconds <= 0
+            return continuousSign * (parameters.RampDownSeconds <= 0
                 ? 0
-                : parameters.CurrentMilliamp * Math.Max(0, parameters.TotalDurationSeconds - seconds) / parameters.RampDownSeconds;
+                : parameters.CurrentMilliamp * Math.Max(0, parameters.TotalDurationSeconds - seconds) / parameters.RampDownSeconds);
         }
 
         // PlateauSeconds已由参数层从“单次时长”中扣除了渐升和渐降，
@@ -215,7 +218,8 @@ public sealed class DirectCurrentWaveformSurface : FrameworkElement
         var plateau = Math.Min(parameters.PlateauSeconds,
             Math.Max(0, remainingTreatment - parameters.RampUpSeconds - parameters.RampDownSeconds));
         var local = seconds - cycleStart;
-        var sign = parameters.ReversePolarity && cycleIndex % 2 != 0 ? -1d : 1d;
+        // “调转”表示整个刺激过程统一反向，不是按刺激轮次交替正负。
+        var sign = parameters.ReversePolarity ? -1d : 1d;
         if (local < parameters.RampUpSeconds)
         {
             return sign * (parameters.RampUpSeconds <= 0
@@ -274,10 +278,20 @@ public sealed class DirectCurrentWaveformSurface : FrameworkElement
             maximum += tick;
         }
 
-        var hasNegative = parameters.ReversePolarity && !parameters.IsContinuous;
-        var minimum = hasNegative ? -maximum : 0;
-        var divisions = Math.Max(1, (int)Math.Round((maximum - minimum) / tick));
-        return new WaveformYScale(minimum, maximum, tick, divisions);
+        if (!parameters.ReversePolarity)
+        {
+            return new WaveformYScale(
+                0,
+                maximum,
+                tick,
+                Math.Max(1, (int)Math.Round(maximum / tick)));
+        }
+
+        return new WaveformYScale(
+            -maximum,
+            0,
+            tick,
+            Math.Max(1, (int)Math.Round(maximum / tick)));
     }
 
     private static double CurrentToY(WaveformYScale scale, Rect plot, double current)

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using System.Windows.Input;
 
 namespace RuinaoSoftwareWpf;
@@ -12,9 +13,15 @@ namespace RuinaoSoftwareWpf;
 public sealed class TiControlViewModel : ObservableObject
 {
     private readonly IStimulationEngine stimulationEngine;
+    private readonly IHardwareConnectionState hardwareConnectionState;
+    private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly ILoggingService logger;
     private readonly IToastService toastService;
     private readonly StimulationChannelCountdown countdown = new();
+    private readonly AsyncRelayCommand startCommand;
+    private readonly AsyncRelayCommand startChannelCommand;
+    private readonly RelayCommand usePrescriptionCommand;
+    private readonly RelayCommand useChannelPrescriptionCommand;
     private TiGroup? selectedGroup;
     private TiGroup? lastSelectedGroup;
     private string appliedPrescriptionName = "手动设置";
@@ -25,12 +32,16 @@ public sealed class TiControlViewModel : ObservableObject
 
     public TiControlViewModel(
         IStimulationEngine stimulationEngine,
+        IHardwareConnectionState hardwareConnectionState,
+        IDebugHardwareSimulationService debugHardwareSimulation,
         ILoggingService logger,
         ITiGroupFactory tiGroupFactory,
         LocalizationViewModel localization,
         IToastService toastService)
     {
         this.stimulationEngine = stimulationEngine;
+        this.hardwareConnectionState = hardwareConnectionState;
+        this.debugHardwareSimulation = debugHardwareSimulation;
         this.logger = logger;
         this.toastService = toastService;
         countdown.Completed += channel => _ = CompleteChannelAsync(channel);
@@ -45,8 +56,12 @@ public sealed class TiControlViewModel : ObservableObject
             }
         });
 
-        StartCommand = CreateHardwareCommand(_ => StartSelectedGroupAsync(), HandleStartFailure);
-        StartChannelCommand = new AsyncRelayCommand(
+        startCommand = new AsyncRelayCommand(
+            (_, _) => StartSelectedGroupAsync(),
+            _ => CanStartStimulation,
+            HandleStartFailure);
+        StartCommand = startCommand;
+        startChannelCommand = new AsyncRelayCommand(
             async (parameter, _) =>
             {
                 if (parameter is ChannelConfig channel)
@@ -54,10 +69,24 @@ public sealed class TiControlViewModel : ObservableObject
                     await StartChannelAsync(channel);
                 }
             },
+            _ => CanStartStimulation,
             onError: HandleStartFailure);
+        StartChannelCommand = startChannelCommand;
         PauseCommand = CreateHardwareCommand(_ => PauseSelectedGroupAsync());
         EmergencyStopCommand = CreateHardwareCommand(_ => EmergencyStopSelectedGroupAsync());
+        usePrescriptionCommand = new RelayCommand(
+            _ => RequestPrescription(StimulationPrescriptionApplyScope.AllChannels),
+            _ => !countdown.HasActiveChannels);
+        UsePrescriptionCommand = usePrescriptionCommand;
+        useChannelPrescriptionCommand = new RelayCommand(
+            parameter => RequestPrescription(StimulationPrescriptionApplyScope.SingleChannel, parameter),
+            parameter => parameter is ChannelConfig channel
+                && Groups.SelectMany(group => group.Channels).Contains(channel)
+                && !countdown.IsActive(channel));
+        UseChannelPrescriptionCommand = useChannelPrescriptionCommand;
         BackCommand = new RelayCommand(_ => BackRequested?.Invoke(this, EventArgs.Empty));
+        hardwareConnectionState.ConnectionChanged += OnHardwareConnectionChanged;
+        debugHardwareSimulation.ConnectionChanged += OnDebugSimulationConnectionChanged;
 
         SelectedGroup = Groups.FirstOrDefault();
         lastSelectedGroup = SelectedGroup;
@@ -72,6 +101,8 @@ public sealed class TiControlViewModel : ObservableObject
     /// <summary>请求返回电刺激类型选择页。</summary>
     public event EventHandler? BackRequested;
 
+    public event EventHandler<StimulationPrescriptionRequestEventArgs>? PrescriptionRequested;
+
     public LocalizationViewModel Localization { get; }
 
     public ObservableCollection<TiGroup> Groups { get; }
@@ -85,6 +116,10 @@ public sealed class TiControlViewModel : ObservableObject
     public ICommand PauseCommand { get; }
 
     public ICommand EmergencyStopCommand { get; }
+
+    public ICommand UsePrescriptionCommand { get; }
+
+    public ICommand UseChannelPrescriptionCommand { get; }
 
     public ICommand BackCommand { get; }
     public string AppliedPrescriptionName { get => appliedPrescriptionName; private set => SetProperty(ref appliedPrescriptionName, value); }
@@ -137,6 +172,20 @@ public sealed class TiControlViewModel : ObservableObject
 
     public void ApplyPrescription(PrescriptionDefinition prescription)
     {
+        ApplyPrescription(prescription, Groups.SelectMany(group => group.Channels));
+    }
+
+    public void ApplyPrescription(PrescriptionDefinition prescription, ChannelConfig channel)
+    {
+        ArgumentNullException.ThrowIfNull(channel);
+        ApplyPrescription(prescription, [channel]);
+    }
+
+    private void ApplyPrescription(
+        PrescriptionDefinition prescription,
+        IEnumerable<ChannelConfig> targetChannels)
+    {
+        ArgumentNullException.ThrowIfNull(prescription);
         AppliedPrescriptionName = prescription.Name;
         DeliveryMode = prescription.DeliveryMode;
         TotalDurationMinutes = prescription.TotalDurationMinutes;
@@ -146,19 +195,34 @@ public sealed class TiControlViewModel : ObservableObject
         var durationSeconds = (prescription.TotalDurationMinutes * 60).ToString(System.Globalization.CultureInfo.InvariantCulture);
         var singleDurationSeconds = ((prescription.SessionDurationMinutes ?? prescription.TotalDurationMinutes) * 60)
             .ToString(System.Globalization.CultureInfo.InvariantCulture);
-        foreach (var group in Groups)
+        var intervalSeconds = ((prescription.IntervalMinutes ?? 0) * 60)
+            .ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var mode = prescription.DeliveryMode == PrescriptionDeliveryModes.Interval ? "间隔" : "连续";
+        foreach (var channel in targetChannels)
         {
-            for (var channelIndex = 0; channelIndex < group.Channels.Count; channelIndex++)
-            {
-                var channel = group.Channels[channelIndex];
-                channel.CurrentMA = current;
-                channel.RampUpS = prescription.RampUpSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                channel.RampDownS = prescription.RampDownSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                channel.DurationS = durationSeconds;
-                channel.SingleDurationS = singleDurationSeconds;
-                channel.Polarity = prescription.GetChannelPolarity(channelIndex);
-            }
+            // TI 处方不包含载波频率；处方应用不得覆盖通道自己的 FrequencyHz。
+            channel.CurrentMA = current;
+            channel.RampUpS = prescription.RampUpSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            channel.RampDownS = prescription.RampDownSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            channel.DurationS = durationSeconds;
+            channel.IntervalS = intervalSeconds;
+            channel.SingleDurationS = singleDurationSeconds;
+            channel.StimulationMode = mode;
+            channel.RemainingTime = "00:00:00";
+            channel.DirectCurrentWaveform.Clear();
+            channel.RefreshBindings();
         }
+
+        OnPropertyChanged(nameof(SelectedGroup));
+    }
+
+    private void RequestPrescription(
+        StimulationPrescriptionApplyScope scope,
+        object? targetChannel = null)
+    {
+        PrescriptionRequested?.Invoke(
+            this,
+            new StimulationPrescriptionRequestEventArgs("TI", scope, targetChannel));
     }
 
     private ICommand CreateHardwareCommand(Func<object?, Task> execute, Action<Exception>? onError = null)
@@ -176,6 +240,41 @@ public sealed class TiControlViewModel : ObservableObject
             "刺激启动命令未完成，软件未进入运行状态。具体原因已记录到运行日志。");
     }
 
+    private void OnHardwareConnectionChanged(
+        object? sender,
+        HardwareConnectionChangedEventArgs eventArgs)
+    {
+        RefreshStartCommandStatesOnUiThread();
+    }
+
+    private void OnDebugSimulationConnectionChanged(object? sender, EventArgs eventArgs)
+    {
+        RefreshStartCommandStatesOnUiThread();
+    }
+
+    private bool CanStartStimulation =>
+        hardwareConnectionState.IsConnected || debugHardwareSimulation.IsConnected;
+
+    private void RefreshStartCommandStatesOnUiThread()
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            _ = dispatcher.BeginInvoke(RefreshStartCommandStates);
+            return;
+        }
+
+        RefreshStartCommandStates();
+    }
+
+    private void RefreshStartCommandStates()
+    {
+        startCommand.RaiseCanExecuteChanged();
+        startChannelCommand.RaiseCanExecuteChanged();
+        usePrescriptionCommand.RaiseCanExecuteChanged();
+        useChannelPrescriptionCommand.RaiseCanExecuteChanged();
+    }
+
     private async Task StartSelectedGroupAsync()
     {
         if (SelectedGroup is null)
@@ -190,8 +289,10 @@ public sealed class TiControlViewModel : ObservableObject
             AppliedPrescriptionName);
         foreach (var channel in SelectedGroup.Channels)
         {
+            channel.IsParameterEditingEnabled = false;
             countdown.Start(channel);
         }
+        RefreshStartCommandStates();
 
         HardwareOperationCompleted?.Invoke(this, result);
     }
@@ -206,8 +307,7 @@ public sealed class TiControlViewModel : ObservableObject
 
         var singleChannelGroup = new TiGroup
         {
-            Title = SelectedGroup.Title,
-            DeltaText = SelectedGroup.DeltaText
+            Title = SelectedGroup.Title
         };
         singleChannelGroup.Channels.Add(channel);
 
@@ -216,6 +316,8 @@ public sealed class TiControlViewModel : ObservableObject
             channel.Name,
             AppliedPrescriptionName);
         countdown.Start(channel);
+        channel.IsParameterEditingEnabled = false;
+        RefreshStartCommandStates();
         HardwareOperationCompleted?.Invoke(this, result);
     }
 
@@ -229,6 +331,11 @@ public sealed class TiControlViewModel : ObservableObject
 
         var result = await stimulationEngine.PauseTiGroupAsync(SelectedGroup, SelectedChannelNames);
         countdown.CancelAll(SelectedGroup.Channels, reset: false);
+        foreach (var channel in SelectedGroup.Channels)
+        {
+            channel.IsParameterEditingEnabled = true;
+        }
+        RefreshStartCommandStates();
         HardwareOperationCompleted?.Invoke(this, result);
     }
 
@@ -242,6 +349,11 @@ public sealed class TiControlViewModel : ObservableObject
 
         var result = await stimulationEngine.EmergencyStopTiGroupAsync(SelectedGroup, "用户点击急停");
         countdown.CancelAll(Groups.SelectMany(group => group.Channels), reset: true);
+        foreach (var channel in Groups.SelectMany(group => group.Channels))
+        {
+            channel.IsParameterEditingEnabled = true;
+        }
+        RefreshStartCommandStates();
         HardwareOperationCompleted?.Invoke(this, result);
     }
 
@@ -255,12 +367,14 @@ public sealed class TiControlViewModel : ObservableObject
                 return;
             }
 
-            var singleChannelGroup = new TiGroup { Title = owner.Title, DeltaText = owner.DeltaText };
+            var singleChannelGroup = new TiGroup { Title = owner.Title };
             singleChannelGroup.Channels.Add(channel);
             var result = await stimulationEngine.CompleteGroupAsync(
                 singleChannelGroup,
                 channel.Name,
                 "TI");
+            channel.IsParameterEditingEnabled = true;
+            RefreshStartCommandStatesOnUiThread();
             HardwareOperationCompleted?.Invoke(this, result);
         }
         catch (Exception ex)

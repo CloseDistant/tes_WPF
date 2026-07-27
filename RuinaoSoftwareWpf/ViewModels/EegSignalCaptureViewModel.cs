@@ -7,7 +7,7 @@ using System.Text.Json;
 
 public sealed class EegSignalCaptureViewModel : ObservableObject
 {
-    private readonly IEegAcquisitionService acquisitionService;
+    private readonly ILegacyEegAcquisitionService acquisitionService;
     private readonly IEegRecordingService recordingService;
     private readonly IUnifiedSessionService unifiedSessionService;
     private readonly IUserDialogService userDialogService;
@@ -25,7 +25,7 @@ public sealed class EegSignalCaptureViewModel : ObservableObject
     private int backpressureNoticeShown;
 
     public EegSignalCaptureViewModel(
-        IEegAcquisitionService acquisitionService,
+        ILegacyEegAcquisitionService acquisitionService,
         IEegRecordingService recordingService,
         IUnifiedSessionService unifiedSessionService,
         IUserDialogService userDialogService,

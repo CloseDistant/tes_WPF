@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -19,6 +19,9 @@ public sealed class ConfigViewModel : ObservableObject
     private readonly IHardwareService hardwareService;
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly IToastService toastService;
+    private readonly IIntegrityCheckService integrityCheckService;
+    private readonly IBackupRestoreService backupRestoreService;
+    private readonly IUserDialogService userDialogService;
     private readonly AsyncRelayCommand saveNavigationCommand;
     private readonly AsyncRelayCommand saveStimulationTypesCommand;
     private readonly AsyncRelayCommand saveStartupSettingsCommand;
@@ -36,6 +39,8 @@ public sealed class ConfigViewModel : ObservableObject
     private bool autoConnectOnStartup;
     private int idleTimeoutMinutes = ISessionSecurityService.DefaultIdleTimeoutMinutes;
     private string sessionSecurityStatus = string.Empty;
+    private string releaseIntegrityStatusText = "尚未校验";
+    private string releaseIntegrityTimeText = "--";
 
     public ConfigViewModel(
         IFeatureVisibilityService featureVisibilityService,
@@ -47,7 +52,10 @@ public sealed class ConfigViewModel : ObservableObject
         ISessionSecurityService sessionSecurityService,
         IHardwareService hardwareService,
         IDebugHardwareSimulationService debugHardwareSimulation,
-        IToastService toastService)
+        IToastService toastService,
+        IIntegrityCheckService integrityCheckService,
+        IBackupRestoreService backupRestoreService,
+        IUserDialogService userDialogService)
     {
         this.featureVisibilityService = featureVisibilityService;
         this.accountService = accountService;
@@ -59,6 +67,9 @@ public sealed class ConfigViewModel : ObservableObject
         this.hardwareService = hardwareService;
         this.debugHardwareSimulation = debugHardwareSimulation;
         this.toastService = toastService;
+        this.integrityCheckService = integrityCheckService;
+        this.backupRestoreService = backupRestoreService;
+        this.userDialogService = userDialogService;
 
         NavigationOptions = new ObservableCollection<FeatureVisibilityOptionViewModel>(
             FeatureCatalog.Navigation.Select((item, index) => CreateNavigationOption(item, index)));
@@ -237,6 +248,18 @@ public sealed class ConfigViewModel : ObservableObject
         private set => SetProperty(ref sessionSecurityStatus, value);
     }
 
+    public string ReleaseIntegrityStatusText
+    {
+        get => releaseIntegrityStatusText;
+        private set => SetProperty(ref releaseIntegrityStatusText, value);
+    }
+
+    public string ReleaseIntegrityTimeText
+    {
+        get => releaseIntegrityTimeText;
+        private set => SetProperty(ref releaseIntegrityTimeText, value);
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await featureVisibilityService.InitializeAsync(cancellationToken);
@@ -245,6 +268,128 @@ public sealed class ConfigViewModel : ObservableObject
         ApplyPersistedVisibility();
         AutoConnectOnStartup = startupSettingsService.AutoConnectOnStartup;
         IdleTimeoutMinutes = sessionSecurityService.IdleTimeoutMinutes;
+        await TryRefreshReleaseIntegrityStatusAsync(cancellationToken);
+    }
+
+    public async Task<IntegrityCheckResult> CheckReleaseFilesAsync(
+        IProgress<IntegrityCheckProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ReleaseIntegrityStatusText = "正在校验…";
+        try
+        {
+            var result = await integrityCheckService.CheckReleaseFilesAsync(
+                progress,
+                cancellationToken);
+            await RefreshReleaseIntegrityStatusAsync(cancellationToken);
+            return result;
+        }
+        catch
+        {
+            await TryRefreshReleaseIntegrityStatusAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    public void NotifyIntegrityCheckCanceled()
+    {
+        toastService.ShowInformation("校验已取消", "已保留上一次校验结果。");
+    }
+
+    public Task<BackupLocationInfo> GetDefaultBackupLocationAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return backupRestoreService.GetDefaultBackupLocationAsync(cancellationToken);
+    }
+
+    public Task<BackupStatus> GetBackupStatusAsync(CancellationToken cancellationToken = default)
+    {
+        return backupRestoreService.GetStatusAsync(cancellationToken);
+    }
+
+    public Task<BackupOperationResult> CreateBackupAsync(
+        string targetDirectory,
+        string password,
+        IProgress<BackupOperationProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        return backupRestoreService.CreateBackupAsync(
+            targetDirectory,
+            password,
+            progress,
+            cancellationToken);
+    }
+
+    public Task<BackupOperationResult> RestoreBackupAsync(
+        string backupFile,
+        string password,
+        IProgress<BackupOperationProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        return backupRestoreService.RestoreBackupAsync(
+            backupFile,
+            password,
+            progress,
+            cancellationToken);
+    }
+
+    public bool ConfirmDataRestore()
+    {
+        return userDialogService.ConfirmWarning(
+            "确认恢复数据",
+            "恢复将使用备份内容替换本机业务数据和安全审计数据。是否继续？",
+            "继续恢复",
+            "取消");
+    }
+
+    public void NotifyBackupSucceeded(string? filePath)
+    {
+        toastService.ShowSuccess("数据备份完成", $"已保存：{System.IO.Path.GetFileName(filePath)}");
+    }
+
+    public void NotifyBackupFailed(Exception exception)
+    {
+        toastService.ShowError("数据备份失败", exception.Message);
+    }
+
+    public void NotifyRestoreFailed(Exception exception)
+    {
+        toastService.ShowError("数据恢复失败", exception.Message);
+    }
+
+    private async Task TryRefreshReleaseIntegrityStatusAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await RefreshReleaseIntegrityStatusAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.Error("读取发布文件校验状态失败", exception);
+            ReleaseIntegrityStatusText = "校验状态读取失败";
+            ReleaseIntegrityTimeText = "--";
+        }
+    }
+
+    private async Task RefreshReleaseIntegrityStatusAsync(
+        CancellationToken cancellationToken)
+    {
+        var status = await integrityCheckService.GetReleaseStatusAsync(cancellationToken);
+        ReleaseIntegrityStatusText = status.Kind switch
+        {
+            ReleaseIntegrityStatusKind.Passed => "上次校验通过",
+            ReleaseIntegrityStatusKind.Failed => "上次校验失败",
+            ReleaseIntegrityStatusKind.ReleaseChanged => "发布文件已变化，需重新校验",
+            _ => "尚未校验"
+        };
+        ReleaseIntegrityTimeText = status.LastResult is { } lastResult
+            ? $"校验时间：{lastResult.CompletedAt:yyyy-MM-dd HH:mm}"
+            : "--";
     }
 
     private void CreateDesktopShortcut()

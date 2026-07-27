@@ -23,6 +23,7 @@ public sealed class PrescriptionViewModel : ObservableObject
     private int nextOffset;
     private bool hasMore = true;
     private bool isLoading;
+    private bool visibilityInvalidated;
 
     public PrescriptionViewModel(
         IPrescriptionService prescriptionService,
@@ -54,6 +55,7 @@ public sealed class PrescriptionViewModel : ObservableObject
             OnPropertyChanged(nameof(IsAdmin));
             (DeleteCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         };
+        featureVisibilityService.VisibilityChanged += (_, _) => visibilityInvalidated = true;
     }
 
     public ObservableCollection<PrescriptionDefinition> Prescriptions { get; } = [];
@@ -80,9 +82,10 @@ public sealed class PrescriptionViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
-        if (initialized) return;
+        if (initialized && !visibilityInvalidated) return;
         await ReloadAsync();
         initialized = true;
+        visibilityInvalidated = false;
     }
 
     private async Task AddAsync(CancellationToken cancellationToken)
@@ -200,16 +203,27 @@ public sealed class PrescriptionViewModel : ObservableObject
         isLoading = true;
         try
         {
-            var page = await prescriptionService.GetPrescriptionsPageAsync(
-                new PageRequest(nextOffset, PageSize),
-                cancellationToken);
-            foreach (var item in page.Items)
+            var targetVisibleCount = Prescriptions.Count + PageSize;
+            var visibleStimulationTypes = GetVisibleStimulationTypes();
+            while (hasMore && Prescriptions.Count < targetVisibleCount)
             {
-                Prescriptions.Add(item);
+                var page = await prescriptionService.GetPrescriptionsPageAsync(
+                    new PageRequest(nextOffset, PageSize),
+                    cancellationToken);
+                foreach (var item in page.Items.Where(
+                    item => IsPrescriptionVisible(item, visibleStimulationTypes)))
+                {
+                    Prescriptions.Add(item);
+                }
+
+                nextOffset += page.Items.Count;
+                hasMore = page.HasMore;
+                if (page.Items.Count == 0)
+                {
+                    hasMore = false;
+                }
             }
 
-            nextOffset += page.Items.Count;
-            hasMore = page.HasMore;
             SelectedPrescription ??= Prescriptions.FirstOrDefault();
         }
         finally
@@ -218,20 +232,46 @@ public sealed class PrescriptionViewModel : ObservableObject
         }
     }
 
+    internal static bool IsPrescriptionVisible(
+        PrescriptionDefinition prescription,
+        IReadOnlySet<string> visibleStimulationTypes) =>
+        visibleStimulationTypes.Contains(prescription.StimulationType);
+
+    private IReadOnlySet<string> GetVisibleStimulationTypes() =>
+        FeatureCatalog.StimulationTypes
+            .Where(item => featureVisibilityService.IsVisible(item.Key))
+            .Select(item => item.ShortName)
+            .ToHashSet(StringComparer.Ordinal);
+
     internal static string BuildCsv(PrescriptionDefinition prescription)
     {
-        var rows = new (string Label, string Value)[]
-        {
-            ("处方名称", prescription.Name), ("适应症", prescription.Indication), ("刺激模式", prescription.StimulationType),
-            ("电流强度", prescription.CurrentDisplay), ("模式", prescription.DeliveryMode),
-            ("总时长", prescription.TotalDurationDisplay), ("间隔时间", prescription.IntervalDisplay),
-            ("单次时长", prescription.SessionDurationDisplay), ("疗程", prescription.Course),
-            ("渐升/渐降", prescription.RampDisplay), ("证据等级", prescription.EvidenceGrade)
-        };
+        var rows = prescription.IsPulseCurrent
+            ? BuildPulseCurrentCsvRows(prescription)
+            : BuildMinuteBasedCsvRows(prescription);
         var builder = new StringBuilder("参数,内容\r\n");
         foreach (var (label, value) in rows) builder.Append(Escape(label)).Append(',').Append(Escape(value)).Append("\r\n");
         return builder.ToString();
     }
+
+    private static (string Label, string Value)[] BuildMinuteBasedCsvRows(PrescriptionDefinition prescription) =>
+    [
+        ("处方名称", prescription.Name), ("适应症", prescription.Indication), ("刺激模式", prescription.StimulationType),
+        ("幅值", prescription.CurrentDisplay), ("模式", prescription.DeliveryMode),
+        ("总时长", prescription.TotalDurationDisplay), ("间隔时间", prescription.IntervalDisplay),
+        ("单次时长", prescription.SessionDurationDisplay), ("疗程", prescription.Course),
+        ("渐升时间", prescription.RampUpDisplay), ("渐降时间", prescription.RampDownDisplay),
+        ("证据等级", prescription.EvidenceGrade)
+    ];
+
+    private static (string Label, string Value)[] BuildPulseCurrentCsvRows(PrescriptionDefinition prescription) =>
+    [
+        ("处方名称", prescription.Name), ("适应症", prescription.Indication), ("刺激模式", prescription.StimulationType),
+        ("幅值", prescription.CurrentDisplay), ("模式", prescription.DeliveryMode),
+        ("治疗时间", prescription.TotalDurationDisplay), ("脉冲宽度", prescription.SessionDurationDisplay),
+        ("上升宽度", prescription.RampUpDisplay),
+        ("间隔宽度", prescription.IntervalDisplay), ("渐降时间", prescription.RampDownDisplay),
+        ("疗程", prescription.Course), ("证据等级", prescription.EvidenceGrade)
+    ];
 
     private static string Escape(string value) => $"\"{value.Replace("\"", "\"\"")}\"";
 

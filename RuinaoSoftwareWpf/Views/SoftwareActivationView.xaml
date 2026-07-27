@@ -84,7 +84,7 @@
                                    FontWeight="SemiBold"
                                    VerticalAlignment="Center"
                                    Margin="30,3,0,0" />
-                        <TextBlock Text="V1.0.0"
+                        <TextBlock Text="V1.0.0.0"
                                    Foreground="#7E8AA0"
                                    FontSize="12"
                                    HorizontalAlignment="Right"

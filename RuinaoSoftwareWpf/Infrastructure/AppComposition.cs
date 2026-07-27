@@ -1,6 +1,7 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using Microsoft.Extensions.DependencyInjection;
+using RuinaoSoftwareWpf.ApplicationContracts;
 using RuinaoTesHardware;
 
 /// <summary>
@@ -13,13 +14,17 @@ using RuinaoTesHardware;
 /// </summary>
 public static class AppComposition
 {
-    // Lazy 保证 ServiceProvider 只创建一次，并保持线程安全。
-    private static readonly Lazy<IServiceProvider> ServiceProvider = new(BuildServiceProvider);
+    // Lazy 保证根容器只创建一次，并保持线程安全。
+    private static readonly Lazy<ServiceProvider> RootProvider = new(BuildServiceProvider);
+    private static int disposeState;
 
     /// <summary>
-    /// 全局唯一的 DI 容器，程序里需要服务的地方可通过它获取实例。
+    /// 仅供 App、MainWindow 和本组合根使用的根容器。
+    /// 普通 View、ViewModel 和业务服务必须使用构造函数注入。
     /// </summary>
-    public static IServiceProvider Services => ServiceProvider.Value;
+    public static IServiceProvider Services => RootProvider.Value;
+
+    public static bool IsDisposed => Volatile.Read(ref disposeState) != 0;
 
     /// <summary>
     /// 创建主界面 ViewModel，App 启动时调用。
@@ -30,11 +35,26 @@ public static class AppComposition
     }
 
     /// <summary>
+    /// 按 DI 容器管理的逆序释放全部 Singleton 和后台资源。
+    /// 正常关闭流程必须在窗口真正关闭前等待该方法完成。
+    /// </summary>
+    public static async ValueTask DisposeAsync()
+    {
+        if (!RootProvider.IsValueCreated
+            || Interlocked.Exchange(ref disposeState, 1) != 0)
+        {
+            return;
+        }
+
+        await RootProvider.Value.DisposeAsync();
+    }
+
+    /// <summary>
     /// 注册所有服务与 ViewModel 的对应关系。
     /// Singleton：整个程序生命周期只创建一个实例。
     /// Transient：每次请求都创建新实例。
     /// </summary>
-    private static IServiceProvider BuildServiceProvider()
+    private static ServiceProvider BuildServiceProvider()
     {
         var services = new ServiceCollection();
 
@@ -52,6 +72,8 @@ public static class AppComposition
         services.AddSingleton<IAppDatabaseInitializer, AppDatabaseInitializer>(); // EF Core 数据库迁移入口
         services.AddSingleton<IAppDatabaseWriteCoordinator, AppDatabaseWriteCoordinator>(); // 运行期数据库按库串行写入协调器
         services.AddSingleton<PatientDataProtector>(); // 患者敏感字段自动密钥加密
+        services.AddSingleton<IReleaseIntegrityVerifier, ReleaseIntegrityVerifier>();
+        services.AddSingleton<IReleaseIntegrityStateStore, SqliteReleaseIntegrityStateStore>();
         services.AddSingleton<IIntegrityCheckService, IntegrityCheckService>();
         services.AddSingleton<IBackupRestoreService, BackupRestoreService>();
         services.AddSingleton<ILocalizationService, AppLocalizationService>(); // 多语言服务
@@ -70,6 +92,9 @@ public static class AppComposition
         services.AddSingleton<IHeadModelStateMachine, HeadModelStateMachine>(); // 头模型状态机
         services.AddSingleton<ISafetyService, SafetyService>();           // 安全监控服务
         services.AddSingleton<IHardwareService, HardwareService>();       // 硬件业务服务
+        services.AddSingleton<IHardwareConnectionState>(
+            provider => provider.GetRequiredService<IHardwareService>());
+        services.AddSingleton<IStimulationDeviceGateway, LegacyStimulationDeviceGatewayAdapter>();
         services.AddSingleton<IStimulationEngine, StimulationEngine>();   // 刺激控制引擎
         services.AddSingleton<IPrescriptionService, PrescriptionService>(); // 处方服务
         services.AddSingleton<SqliteCaptureRecordingRepository>(); // 采集工作台本地记录仓储
@@ -78,12 +103,15 @@ public static class AppComposition
         services.AddSingleton<IUnifiedSessionRepository>(provider => provider.GetRequiredService<SqliteCaptureRecordingRepository>());
         services.AddSingleton<IUnifiedSessionService, UnifiedSessionService>(); // 电刺激、EEG、数字表型共享 Session 与时间轴
         services.AddSingleton<ICaptureMediaRecorder, CaptureMediaRecorder>(); // 采集工作台音视频录制服务
+        services.AddSingleton<ICaptureMediaService, LegacyCaptureMediaServiceAdapter>();
         services.AddSingleton<ICaptureVideoFrameWriter, CaptureVideoFrameWriter>();
         services.AddSingleton<ICaptureAudioRecorder, CaptureAudioRecorder>();
         services.AddSingleton<ICaptureMediaEncoder, CaptureMediaEncoder>();
         services.AddSingleton<ICaptureMediaSyncProbe, CaptureMediaSyncProbe>();
         services.AddSingleton<IModuleEventRecorder, ModuleEventRecorder>(); // 模块事件顺序写入与退出等待
-        services.AddTransient<ICameraCaptureService, OpenCvCameraCaptureService>(); // 摄像头设备生命周期
+        // 单台工作站同一时间只允许一个摄像头会话；采集 ViewModel 也是 Singleton，
+        // 因此摄像头服务使用相同生命周期，并由根容器统一释放。
+        services.AddSingleton<ICameraCaptureService, OpenCvCameraCaptureService>();
         services.AddSingleton<IUserDialogService, UserDialogService>(); // 统一确认弹窗服务
         services.AddSingleton<IAccountService, LocalAccountService>(); // 本地离线账号服务
         services.AddSingleton<ISoftwareActivationService, SoftwareActivationService>(); // 首次运行离线激活与受保护凭据
@@ -96,7 +124,10 @@ public static class AppComposition
         services.AddSingleton<IEegSegmentFileWriter, EegSegmentFileWriter>(); // EEG 分段二进制写入
         services.AddSingleton<IEegWritePipeline, BoundedEegWritePipeline>(); // EEG 有界生产者/消费者管线
         services.AddSingleton<IEegRecordingService, EegRecordingService>(); // EEG 采集存储服务
-        services.AddSingleton<IEegAcquisitionService, MockEegAcquisitionService>(); // EEG 第一阶段：Mock 采集服务
+        services.AddSingleton<MockEegAcquisitionService>();
+        services.AddSingleton<ILegacyEegAcquisitionService>(
+            provider => provider.GetRequiredService<MockEegAcquisitionService>());
+        services.AddSingleton<ApplicationContracts.IEegAcquisitionService, LegacyEegAcquisitionServiceAdapter>();
         services.AddSingleton<ISessionLifecycleCoordinator, SessionLifecycleCoordinator>(); // Session 收尾和切换患者策略
         services.AddSingleton<IAssessmentActivityState>(provider => provider.GetRequiredService<AssessmentCaptureViewModel>());
         services.AddSingleton<ISessionSecurityService, SessionSecurityService>(); // 无操作锁定、当前账号再认证和安全配置
@@ -110,28 +141,33 @@ public static class AppComposition
         services.AddSingleton<IConfigService, NullConfigService>();
         services.AddSingleton<IReportService, NullReportService>();
 
-        // ---------- 子页面/子模块 ViewModel（Transient：每次新建） ----------
-        services.AddTransient<NavigationViewModel>();      // 左侧导航
-        services.AddTransient<LocalizationViewModel>();    // 顶部语言切换
-        services.AddTransient<PatientViewModel>();         // 患者信息
-        services.AddTransient<ShellStateViewModel>();      // 底部状态栏
-        services.AddTransient<MonitorViewModel>();         // 总览面板
-        services.AddTransient<StimulationTypeSelectionViewModel>(); // 电刺激类型选择页
-        services.AddTransient<TiControlViewModel>();       // TI 控制面板
-        services.AddTransient<DirectCurrentControlViewModel>(); // tDCS 独立页面
-        services.AddTransient<PrescriptionViewModel>(); // 公用处方管理页面
+        // ---------- 单窗口 UI 状态（Singleton：导航切换时保持同一状态与事件订阅） ----------
+        services.AddSingleton<NavigationViewModel>();      // 左侧导航
+        services.AddSingleton<LocalizationViewModel>();    // 顶部语言切换及所有页面共享语言状态
+        services.AddSingleton<PatientViewModel>();         // 患者信息
+        services.AddSingleton<ShellStateViewModel>();      // 底部状态栏
+        services.AddSingleton<MonitorViewModel>();         // 总览面板
+        services.AddSingleton<StimulationTypeSelectionViewModel>(); // 电刺激类型选择页
+        services.AddSingleton<TiControlViewModel>();       // TI 控制面板
+        services.AddSingleton<DirectCurrentControlViewModel>(); // tDCS 独立页面
+        services.AddSingleton<PulseCurrentControlViewModel>(); // tPCS 参数页面
+        services.AddSingleton<PrescriptionViewModel>(); // 公用处方管理页面
         services.AddSingleton<EegSignalCaptureViewModel>(); // EEG 采集面板
         services.AddSingleton<AssessmentCaptureViewModel>(); // 采集工作台：导航切换时保留模块进度
         services.AddSingleton<AssessmentWorkbenchCoordinator>(); // 数字表型工作台流程协调器和模块 VM 容器
-        services.AddTransient<FemSimulationViewModel>();   // FEM 仿真面板
-        services.AddTransient<DeviceViewModel>();          // 设备管理面板
-        services.AddTransient<ConfigViewModel>();          // 设置面板
+        services.AddSingleton<FemSimulationViewModel>();   // FEM 仿真面板
+        services.AddSingleton<DeviceViewModel>();          // 设备管理面板
+        services.AddSingleton<ConfigViewModel>();          // 设置面板
         services.AddSingleton<SessionLockViewModel>();     // 应用会话锁屏
-        services.AddTransient<AuditTrailViewModel>();      // Admin安全审计查询与导出
-        services.AddTransient<ReportViewModel>();          // 报告面板
-        services.AddTransient<PlaceholderPageViewModel>(); // 未实现页面占位
-        services.AddTransient<MainViewModel>();            // 主界面（聚合以上所有 VM）
+        services.AddSingleton<AuditTrailViewModel>();      // Admin安全审计查询与导出
+        services.AddSingleton<ReportViewModel>();          // 报告面板
+        services.AddSingleton<PlaceholderPageViewModel>(); // 未实现页面占位
+        services.AddSingleton<MainViewModel>();            // 单窗口主界面，聚合以上共享 VM
 
-        return services.BuildServiceProvider();
+        return services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true
+        });
     }
 }

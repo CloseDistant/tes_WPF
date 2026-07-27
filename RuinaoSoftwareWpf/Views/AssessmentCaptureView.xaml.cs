@@ -1,11 +1,10 @@
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.IO;
-using Microsoft.Extensions.DependencyInjection;
 using OpenCvSharp;
 
 namespace RuinaoSoftwareWpf.Views;
@@ -27,7 +26,6 @@ public partial class AssessmentCaptureView : UserControl
         Interval = TimeSpan.FromMilliseconds(80)
     };
 
-    private readonly ICameraCaptureService cameraCaptureService = AppComposition.Services.GetRequiredService<ICameraCaptureService>();
     private Mat? cameraFrame;
     private bool cameraPreviewHasFrame;
     private bool faceInGuideFrame;
@@ -340,7 +338,7 @@ public partial class AssessmentCaptureView : UserControl
 
         var cameraIndex = CameraComboBox.SelectedIndex < 0 ? 0 : CameraComboBox.SelectedIndex;
         CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceOpeningCamera");
-        if (!cameraCaptureService.Open(cameraIndex))
+        if (!viewModel.OpenCamera(cameraIndex))
         {
             StopCameraPreview();
             CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceCameraOpenFailed");
@@ -357,14 +355,14 @@ public partial class AssessmentCaptureView : UserControl
         StopRecordingForPreviewStop();
         cameraFrame?.Dispose();
         cameraFrame = null;
-        cameraCaptureService.Close();
+        ViewModel?.CloseCamera();
         cameraPreviewHasFrame = false;
     }
 
     private void StopRecordingForPreviewStop()
     {
         var viewModel = ViewModel;
-        if (viewModel is null || !viewModel.CaptureMediaRecorder.IsRecording)
+        if (viewModel is null || !viewModel.IsMediaRecording)
         {
             return;
         }
@@ -385,12 +383,13 @@ public partial class AssessmentCaptureView : UserControl
 
     private void UpdateCameraPreview()
     {
-        if (!cameraCaptureService.IsOpen || cameraFrame is null)
+        var viewModel = ViewModel;
+        if (viewModel is null || !viewModel.IsCameraOpen || cameraFrame is null)
         {
             return;
         }
 
-        if (!cameraCaptureService.Read(cameraFrame))
+        if (!viewModel.ReadCameraFrame(cameraFrame))
         {
             CameraPreviewStatusText.Text = ViewModel?.Localize("CaptureWorkspaceNoFrameRead") ?? string.Empty;
             return;
@@ -526,7 +525,7 @@ public partial class AssessmentCaptureView : UserControl
         var moduleCode = viewModel.CurrentModuleCode;
         var outputRoot = CaptureOutputPathProvider.GetOutputRoot();
 
-        var session = await viewModel.CaptureMediaRecorder.StartAsync(new CaptureRecordingRequest(
+        var session = await viewModel.StartMediaRecordingAsync(new CaptureRecordingRequest(
             outputRoot,
             sessionName,
             moduleCode,
@@ -548,13 +547,13 @@ public partial class AssessmentCaptureView : UserControl
             viewModel.StopFrameSaving();
         }
 
-        viewModel.CaptureMediaRecorder.RequestStop(status, message);
+        viewModel.RequestMediaStop(status, message);
     }
 
     private void RecordFrameIfNeeded(Mat frame)
     {
         var viewModel = ViewModel;
-        if (viewModel is null || !viewModel.CaptureMediaRecorder.IsRecording)
+        if (viewModel is null || !viewModel.IsMediaRecording)
         {
             return;
         }
@@ -572,7 +571,7 @@ public partial class AssessmentCaptureView : UserControl
             return;
         }
 
-        viewModel.CaptureMediaRecorder.RecordFrame(frame);
+        viewModel.RecordMediaFrame(frame);
         viewModel.RecordSavedFrame();
     }
 

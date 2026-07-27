@@ -137,7 +137,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/>
                             <RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="54"/>
-                            <RowDefinition Height="42"/><RowDefinition Height="54"/>
+                            <RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="54"/>
                         </Grid.RowDefinitions>
                         <Border Grid.ColumnSpan="2" Style="{StaticResource DetailRow}"/>
                         <Border Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource DetailRow}" Background="#1A1F29"/>
@@ -149,16 +149,18 @@
                         <Border Grid.Row="7" Grid.ColumnSpan="2" Style="{StaticResource DetailRow}" Background="#1A1F29"/>
                         <Border Grid.Row="8" Grid.ColumnSpan="2" Style="{StaticResource DetailRow}"/>
                         <Border Grid.Row="9" Grid.ColumnSpan="2" Style="{StaticResource DetailRow}" Background="#1A1F29"/>
+                        <Border Grid.Row="10" Grid.ColumnSpan="2" Style="{StaticResource DetailRow}"/>
                         <TextBlock Margin="12,0" Text="适应症" Style="{StaticResource LabelText}"/><TextBlock Grid.Column="1" Text="{Binding Indication}" Style="{StaticResource ValueText}"/>
                         <TextBlock Grid.Row="1" Margin="12,0" Text="刺激模式" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding StimulationType}" Style="{StaticResource ValueText}"/>
-                        <TextBlock Grid.Row="2" Margin="12,0" Text="电流强度" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CurrentDisplay}" Style="{StaticResource ValueText}"/>
+                        <TextBlock Grid.Row="2" Margin="12,0" Text="{Binding CurrentLabel}" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CurrentDisplay}" Style="{StaticResource ValueText}"/>
                         <TextBlock Grid.Row="3" Margin="12,0" Text="模式" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding DeliveryMode}" Style="{StaticResource ValueText}"/>
-                        <TextBlock Grid.Row="4" Margin="12,0" Text="总时长" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding TotalDurationDisplay}" Style="{StaticResource ValueText}"/>
-                        <TextBlock Grid.Row="5" Margin="12,0" Text="间隔时间" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding IntervalDisplay}" Style="{StaticResource ValueText}"/>
-                        <TextBlock Grid.Row="6" Margin="12,0" Text="单次时长" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SessionDurationDisplay}" Style="{StaticResource ValueText}"/>
+                        <TextBlock Grid.Row="4" Margin="12,0" Text="{Binding TotalDurationLabel}" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding TotalDurationDisplay}" Style="{StaticResource ValueText}"/>
+                        <TextBlock Grid.Row="5" Margin="12,0" Text="{Binding IntervalLabel}" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding IntervalDisplay}" Style="{StaticResource ValueText}"/>
+                        <TextBlock Grid.Row="6" Margin="12,0" Text="{Binding SessionDurationLabel}" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SessionDurationDisplay}" Style="{StaticResource ValueText}"/>
                         <TextBlock Grid.Row="7" Margin="12,0" Text="疗程" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding Course}" Style="{StaticResource ValueText}"/>
-                        <TextBlock Grid.Row="8" Margin="12,0" Text="渐升/渐降" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding RampDisplay}" Style="{StaticResource ValueText}"/>
-                        <TextBlock Grid.Row="9" Margin="12,0" Text="证据等级" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding EvidenceGrade}" Style="{StaticResource ValueText}"/>
+                        <TextBlock Grid.Row="8" Margin="12,0" Text="{Binding RampUpLabel}" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding RampUpDisplay}" Style="{StaticResource ValueText}"/>
+                        <TextBlock Grid.Row="9" Margin="12,0" Text="{Binding RampDownLabel}" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding RampDownDisplay}" Style="{StaticResource ValueText}"/>
+                        <TextBlock Grid.Row="10" Margin="12,0" Text="证据等级" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="10" Grid.Column="1" Text="{Binding EvidenceGrade}" Style="{StaticResource ValueText}"/>
                     </Grid>
                 </ScrollViewer>
                 <StackPanel Grid.Row="3" Orientation="Horizontal" DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}" VerticalAlignment="Center">

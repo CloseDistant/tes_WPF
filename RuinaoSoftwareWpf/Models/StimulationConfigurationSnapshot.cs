@@ -41,7 +41,7 @@ public sealed record StimulationConfigurationSnapshot(
 
     public TiGroup ToMutableGroup()
     {
-        var group = new TiGroup { Title = Title, DeltaText = DeltaText };
+        var group = new TiGroup { Title = Title };
         foreach (var channel in Channels)
         {
             group.Channels.Add(new ChannelConfig

@@ -11,4 +11,9 @@ public interface IUserDialogService
     void ShowInformation(string title, string message);
 
     void ShowError(string title, string message);
+
+    Task<PrescriptionDefinition?> SelectStimulationPrescriptionAsync(
+        string stimulationType,
+        string applyScopeText,
+        CancellationToken cancellationToken = default);
 }

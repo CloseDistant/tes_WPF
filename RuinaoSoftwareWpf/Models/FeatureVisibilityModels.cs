@@ -14,6 +14,7 @@ public static class FeatureKeys
 
     public const string StimulationTemporalInterference = "stimulation.ti";
     public const string StimulationDirectCurrent = "stimulation.tdcs";
+    public const string StimulationPulseCurrent = "stimulation.tpcs";
 }
 
 public sealed record NavigationFeatureDefinition(
@@ -46,7 +47,8 @@ public static class FeatureCatalog
     public static IReadOnlyList<StimulationTypeFeatureDefinition> StimulationTypes { get; } =
     [
         new(FeatureKeys.StimulationTemporalInterference, "TemporalInterference", "TI"),
-        new(FeatureKeys.StimulationDirectCurrent, "TranscranialDirectCurrent", "tDCS")
+        new(FeatureKeys.StimulationDirectCurrent, "TranscranialDirectCurrent", "tDCS"),
+        new(FeatureKeys.StimulationPulseCurrent, "TranscranialPulseCurrent", "tPCS")
     ];
 
     public static IReadOnlySet<string> AllKeys { get; } = Navigation

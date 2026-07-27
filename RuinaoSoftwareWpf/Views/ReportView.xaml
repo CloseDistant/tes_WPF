@@ -159,18 +159,7 @@
                 <DataGridTextColumn Header="患者" Binding="{Binding PatientDisplay}" Width="1.05*"/>
                 <DataGridTextColumn Header="刺激方式" Binding="{Binding StimulationType}" Width="1.15*"/>
                 <DataGridTextColumn Header="治疗日期" Binding="{Binding TreatmentDate}" Width="160"/>
-                <DataGridTextColumn Header="处方" Binding="{Binding PrescriptionName}" Width="1.05*"/>
                 <DataGridTextColumn Header="不良反应记录" Binding="{Binding AdverseReactionRecord}" Width="1.2*"/>
-                <DataGridTemplateColumn Header="处方记录" Width="120">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Button Content="导出"
-                                    Style="{StaticResource RecordButton}"
-                                    Command="{Binding DataContext.ExportCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                    CommandParameter="{Binding}"/>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
                 <DataGridTemplateColumn Header="复用参数" Width="140">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>

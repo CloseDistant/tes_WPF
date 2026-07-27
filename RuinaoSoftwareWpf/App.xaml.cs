@@ -18,8 +18,10 @@ namespace RuinaoSoftwareWpf;
 public partial class App : Application
 {
     private bool systemSleepInhibitionActive;
+    private ILoggingService? logger;
 
-    private ILoggingService Logger => AppComposition.Services.GetRequiredService<ILoggingService>();
+    private ILoggingService Logger =>
+        logger ??= AppComposition.Services.GetRequiredService<ILoggingService>();
 
     /// <summary>
     /// 软件启动时调用。
@@ -113,7 +115,7 @@ public partial class App : Application
             systemSleepInhibitionActive = false;
         }
 
-        Logger.Info($"软件退出，ExitCode={e.ApplicationExitCode}");
+        logger?.Info($"软件退出，ExitCode={e.ApplicationExitCode}");
         base.OnExit(e);
     }
 

@@ -20,6 +20,7 @@ public sealed class ReportViewModel : ObservableObject
     private int currentPage = 1;
     private int totalCount;
     private bool isLoading;
+    private bool initialized;
 
     public ReportViewModel(
         IStimulationRecordService stimulationRecordService,
@@ -121,7 +122,21 @@ public sealed class ReportViewModel : ObservableObject
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        await RefreshAsync(cancellationToken);
+        if (initialized)
+        {
+            return;
+        }
+
+        try
+        {
+            await RefreshAsync(cancellationToken);
+            initialized = true;
+        }
+        catch
+        {
+            initialized = false;
+            throw;
+        }
     }
 
     private async Task RefreshAsync(CancellationToken cancellationToken)
@@ -238,6 +253,7 @@ public sealed class ReportViewModel : ObservableObject
         SelectedRecord = null;
         CurrentPage = 1;
         TotalCount = 0;
+        initialized = false;
     }
 
     private void RefreshPagingCommandStates()

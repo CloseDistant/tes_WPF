@@ -25,6 +25,7 @@ public sealed class ChannelConfig : ObservableObject
     private string remainingTime = "00:00:00";
     private Brush accentBrush = Brushes.White;
     private bool isParameterEditingEnabled = true;
+    private bool isSelected;
 
     /// <summary>通道名称，例如 "CH 13"。</summary>
     public string Name { get => name; set => SetProperty(ref name, value); }
@@ -173,8 +174,21 @@ public sealed class ChannelConfig : ObservableObject
 
     public DirectCurrentWaveformState DirectCurrentWaveform { get; } = new();
 
+    /// <summary>该通道是否为当前界面选中的单通道。</summary>
+    public bool IsSelected
+    {
+        get => isSelected;
+        set => SetProperty(ref isSelected, value);
+    }
+
     /// <summary>该通道名称在列表和详情页中的显示颜色。</summary>
     public Brush AccentBrush { get => accentBrush; set => SetProperty(ref accentBrush, value); }
+
+    /// <summary>批量应用处方后通知当前可见卡片重新读取全部绑定值。</summary>
+    internal void RefreshBindings()
+    {
+        OnPropertyChanged(string.Empty);
+    }
 
     // 下面三个状态值先用 mock 固定值。接设备后应从 ReadStatus/ReadImpedance 返回值更新。
     public int AnodeTempC => 36;

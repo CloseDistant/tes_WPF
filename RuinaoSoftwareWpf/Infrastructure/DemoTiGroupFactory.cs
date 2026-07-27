@@ -37,7 +37,6 @@ public sealed class DemoTiGroupFactory : ITiGroupFactory
             groups.Add(new TiGroup
             {
                 Title = $"TI 刺激 {groupIndex}",
-                DeltaText = "Δf: 10.0 Hz",
                 Channels =
                 {
                     new ChannelConfig

@@ -106,6 +106,10 @@ internal static class CaptureDbContextModelConfiguration
         entity.Property(item => item.TotalDurationMinutes).HasColumnName("total_duration_minutes");
         entity.Property(item => item.IntervalMinutes).HasColumnName("interval_minutes");
         entity.Property(item => item.SessionDurationMinutes).HasColumnName("session_duration_minutes");
+        entity.Property(item => item.PulseTreatmentDurationSeconds).HasColumnName("pulse_treatment_duration_seconds");
+        entity.Property(item => item.PulseWidthMilliseconds).HasColumnName("pulse_width_milliseconds");
+        entity.Property(item => item.PulseRiseWidthMilliseconds).HasColumnName("pulse_rise_width_milliseconds");
+        entity.Property(item => item.PulseIntervalWidthMilliseconds).HasColumnName("pulse_interval_width_milliseconds");
         entity.Property(item => item.Course).HasColumnName("course");
         entity.Property(item => item.RampUpSeconds).HasColumnName("ramp_up_seconds");
         entity.Property(item => item.RampDownSeconds).HasColumnName("ramp_down_seconds");

@@ -21,6 +21,32 @@ public sealed class DirectCurrentWaveformTests
         Assert.Equal(expected, actual, 6);
     }
 
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(15, -1)]
+    [InlineData(30, -2)]
+    [InlineData(90, -2)]
+    [InlineData(105, -1)]
+    [InlineData(120, 0)]
+    public void ReversedContinuousWaveform_DrawsBelowZero(
+        double seconds,
+        double expected)
+    {
+        var parameters = new DirectCurrentWaveformParameters(
+            2,
+            30,
+            30,
+            120,
+            0,
+            0,
+            true,
+            true);
+
+        var actual = DirectCurrentWaveformSurface.GetSimulatedCurrent(parameters, seconds);
+
+        Assert.Equal(expected, actual, 6);
+    }
+
     [Fact]
     public void IntervalWaveform_DoesNotStartPulseWhenRemainingTimeCannotFitBothRamps()
     {
@@ -84,11 +110,11 @@ public sealed class DirectCurrentWaveformTests
     }
 
     [Fact]
-    public void IntervalWaveform_ReversesEveryCompleteCycleWhenConfigured()
+    public void ReversedIntervalWaveform_DrawsEveryCycleBelowZero()
     {
         var parameters = new DirectCurrentWaveformParameters(2, 10, 10, 120, 5, 20, false, true);
 
-        Assert.Equal(2, DirectCurrentWaveformSurface.GetSimulatedCurrent(parameters, 20), 6);
+        Assert.Equal(-2, DirectCurrentWaveformSurface.GetSimulatedCurrent(parameters, 20), 6);
         Assert.Equal(-2, DirectCurrentWaveformSurface.GetSimulatedCurrent(parameters, 65), 6);
     }
 
@@ -145,5 +171,43 @@ public sealed class DirectCurrentWaveformTests
         Assert.Equal(expectedTick, scale.TickStep, 6);
         Assert.Equal(expectedMaximum, scale.Maximum, 6);
         Assert.True(scale.Maximum > currentMilliamp);
+    }
+
+    [Fact]
+    public void ReversedContinuousWaveform_VerticalAxisExtendsBelowTarget()
+    {
+        var parameters = new DirectCurrentWaveformParameters(
+            2,
+            30,
+            30,
+            1200,
+            0,
+            0,
+            true,
+            true);
+
+        var scale = DirectCurrentWaveformSurface.CreateYScale(parameters);
+
+        Assert.Equal(0, scale.Maximum);
+        Assert.True(scale.Minimum < -parameters.CurrentMilliamp);
+    }
+
+    [Fact]
+    public void ReversedIntervalWaveform_VerticalAxisOnlyDisplaysNegativeRange()
+    {
+        var parameters = new DirectCurrentWaveformParameters(
+            2,
+            10,
+            10,
+            120,
+            5,
+            20,
+            false,
+            true);
+
+        var scale = DirectCurrentWaveformSurface.CreateYScale(parameters);
+
+        Assert.Equal(0, scale.Maximum);
+        Assert.True(scale.Minimum < -parameters.CurrentMilliamp);
     }
 }

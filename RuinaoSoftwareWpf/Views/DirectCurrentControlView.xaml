@@ -4,63 +4,184 @@
              xmlns:local="clr-namespace:RuinaoSoftwareWpf"
              xmlns:controls="clr-namespace:RuinaoSoftwareWpf.Views.Controls"
              Background="#11141D">
-    <Grid Margin="18,16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <UserControl.Resources>
+        <Style x:Key="DirectCurrentPairCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="#1D232E" />
+            <Setter Property="BorderBrush" Value="#2A3240" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
 
-        <DockPanel Margin="0,0,0,14">
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Content="{Binding Localization.SynchronizedStartButtonText}"
-                        Style="{StaticResource TopButton}"
-                        Background="#27B65A"
-                        Padding="24,8"
-                        MinWidth="96"
-                        Command="{Binding SynchronizedStartCommand}" />
-                <Button Content="{Binding Localization.EmergencyStopButtonText}"
-                        Style="{StaticResource TopButton}"
-                        Background="{StaticResource Danger}"
-                        Padding="24,8"
-                        MinWidth="96"
-                        Command="{Binding EmergencyStopCommand}" />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Content="{Binding Localization.BackText}"
-                        Command="{Binding BackCommand}"
-                        Style="{StaticResource BackNavigationButton}"
-                        Margin="0,0,16,0"
-                        ToolTip="返回电刺激模式选择" />
-                <StackPanel>
+        <Style x:Key="DirectCurrentChannelChipStyle" TargetType="Border">
+            <Setter Property="Background" Value="#252B37" />
+            <Setter Property="BorderBrush" Value="#303846" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Background" Value="#332D23" />
+                    <Setter Property="BorderBrush" Value="{StaticResource Gold}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="250" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0"
+                Background="#171B25"
+                BorderBrush="#242A36"
+                BorderThickness="0,0,1,0">
+            <DockPanel Margin="18,8">
+                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                    <Button Content="{Binding Localization.BackText}"
+                            Command="{Binding BackCommand}"
+                            HorizontalAlignment="Left"
+                            Style="{StaticResource BackNavigationButton}"
+                            Margin="0,0,0,12"
+                            ToolTip="返回电刺激模式选择" />
                     <TextBlock Text="{Binding Localization.DirectCurrentModeTitleText}"
                                Foreground="{StaticResource Gold}"
                                FontWeight="SemiBold"
-                               FontSize="14" />
+                               FontSize="16" />
                     <TextBlock Text="{Binding Localization.TranscranialDirectCurrentText}"
-                               FontSize="20"
+                               FontSize="18"
                                FontWeight="SemiBold"
-                               Margin="0,2,0,0" />
+                               Margin="0,3,0,0" />
                 </StackPanel>
-            </StackPanel>
-        </DockPanel>
 
-        <ItemsControl Grid.Row="1" ItemsSource="{Binding Channels}">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <UniformGrid Columns="2" />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="{x:Type local:ChannelConfig}">
-                    <controls:StimulationChannelCard Margin="0,0,14,0"
-                                                     Localization="{Binding DataContext.Localization, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                     StartCommand="{Binding DataContext.StartChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                     ShowCarrierFrequency="False"
-                                                     ShowPolarity="True"
-                                                     EnableSimulatedWaveform="True"
-                                                     ShowElectrodeDescription="False" />
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+                <ItemsControl ItemsSource="{Binding ChannelPairs}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:DirectCurrentChannelPair}">
+                            <Border Style="{StaticResource DirectCurrentPairCardStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="6" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0"
+                                            DataContext="{Binding FirstChannel}"
+                                            Style="{StaticResource DirectCurrentChannelChipStyle}">
+                                        <Border.InputBindings>
+                                            <MouseBinding Gesture="LeftClick"
+                                                          Command="{Binding DataContext.SelectChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                          CommandParameter="{Binding}" />
+                                        </Border.InputBindings>
+                                        <Grid>
+                                            <Border Width="3"
+                                                    HorizontalAlignment="Left"
+                                                    Margin="-5,-3,0,-3"
+                                                    Background="{StaticResource Gold}"
+                                                    CornerRadius="2"
+                                                    Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                            <DockPanel Margin="3,0,0,0">
+                                                <Ellipse Width="7"
+                                                         Height="7"
+                                                         Fill="{StaticResource Green}"
+                                                         DockPanel.Dock="Right"
+                                                         VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="12"
+                                                           FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" />
+                                            </DockPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <Border Grid.Column="2"
+                                            DataContext="{Binding SecondChannel}"
+                                            Style="{StaticResource DirectCurrentChannelChipStyle}">
+                                        <Border.InputBindings>
+                                            <MouseBinding Gesture="LeftClick"
+                                                          Command="{Binding DataContext.SelectChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                          CommandParameter="{Binding}" />
+                                        </Border.InputBindings>
+                                        <Grid>
+                                            <Border Width="3"
+                                                    HorizontalAlignment="Left"
+                                                    Margin="-5,-3,0,-3"
+                                                    Background="{StaticResource Gold}"
+                                                    CornerRadius="2"
+                                                    Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                            <DockPanel Margin="3,0,0,0">
+                                                <Ellipse Width="7"
+                                                         Height="7"
+                                                         Fill="{StaticResource Green}"
+                                                         DockPanel.Dock="Right"
+                                                         VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="12"
+                                                           FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" />
+                                            </DockPanel>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Column="1" Margin="18,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <DockPanel Margin="0,0,0,14" LastChildFill="False">
+                <Button DockPanel.Dock="Left"
+                        Content="使用处方"
+                        Style="{StaticResource PrescriptionUseButton}"
+                        Command="{Binding UsePrescriptionCommand}" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="{Binding Localization.SynchronizedStartButtonText}"
+                            Style="{StaticResource TopButton}"
+                            Background="#27B65A"
+                            Padding="24,8"
+                            MinWidth="96"
+                            Command="{Binding SynchronizedStartCommand}" />
+                    <Button Content="{Binding Localization.EmergencyStopButtonText}"
+                            Style="{StaticResource TopButton}"
+                            Background="{StaticResource Danger}"
+                            Padding="24,8"
+                            MinWidth="96"
+                            Command="{Binding EmergencyStopCommand}" />
+                </StackPanel>
+            </DockPanel>
+
+            <ItemsControl Grid.Row="1" ItemsSource="{Binding SelectedChannels}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type local:ChannelConfig}">
+                        <controls:StimulationChannelCard Margin="0,0,14,0"
+                                                         Localization="{Binding DataContext.Localization, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                         StartCommand="{Binding DataContext.StartChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                         UsePrescriptionCommand="{Binding DataContext.UseChannelPrescriptionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                         SelectCommand="{Binding DataContext.SelectChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                         ShowCarrierFrequency="False"
+                                                         ShowPolarity="True"
+                                                         EnableSimulatedWaveform="True"
+                                                         ShowElectrodeDescription="False"
+                                                         HighlightBorder="{Binding IsSelected}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Grid>
     </Grid>
 </UserControl>

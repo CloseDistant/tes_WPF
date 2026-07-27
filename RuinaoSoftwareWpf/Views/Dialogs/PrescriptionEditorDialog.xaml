@@ -140,31 +140,31 @@
                     <TextBlock Grid.Row="2" Text="刺激模式" Style="{StaticResource EditorLabel}"/>
                     <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding AvailableStimulationTypes}"
                               SelectedItem="{Binding StimulationType, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource EditorCombo}"/>
-                    <TextBlock Grid.Row="3" Text="电流强度 (mA)" Style="{StaticResource EditorLabel}"/>
+                    <TextBlock Grid.Row="3" Text="{Binding CurrentLabel}" Style="{StaticResource EditorLabel}"/>
                     <TextBox Grid.Row="3" Grid.Column="1" Tag="decimal" Text="{Binding CurrentMilliamp, UpdateSourceTrigger=PropertyChanged}"
                              Style="{StaticResource EditorBox}" PreviewTextInput="Decimal_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
                     <TextBlock Grid.Row="4" Text="模式" Style="{StaticResource EditorLabel}"/>
                     <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding DeliveryModes}"
-                              SelectedItem="{Binding DeliveryMode, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource EditorCombo}"/>
-                    <TextBlock Grid.Row="5" Text="总时长 (min)" Style="{StaticResource EditorLabel}"/>
+                              SelectedItem="{Binding DeliveryMode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsDeliveryModeEnabled}" Style="{StaticResource EditorCombo}"/>
+                    <TextBlock Grid.Row="5" Text="{Binding TotalDurationLabel}" Style="{StaticResource EditorLabel}"/>
                     <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding TotalDurationMinutes, UpdateSourceTrigger=PropertyChanged}"
                              Style="{StaticResource EditorBox}" PreviewTextInput="Integer_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
-                    <TextBlock Grid.Row="6" Text="间隔时间 (min)" Style="{StaticResource EditorLabel}"/>
+                    <TextBlock Grid.Row="6" Text="{Binding IntervalLabel}" Style="{StaticResource EditorLabel}"/>
                     <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding IntervalMinutesEntry, UpdateSourceTrigger=PropertyChanged}"
                              IsEnabled="{Binding IsIntervalMode}" Style="{StaticResource EditorBox}"
                              PreviewTextInput="Integer_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
-                    <TextBlock Grid.Row="7" Text="单次时长 (min)" Style="{StaticResource EditorLabel}"/>
+                    <TextBlock Grid.Row="7" Text="{Binding SessionDurationLabel}" Style="{StaticResource EditorLabel}"/>
                     <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding SessionDurationMinutesEntry, UpdateSourceTrigger=PropertyChanged}"
                              IsEnabled="{Binding IsIntervalMode}" Style="{StaticResource EditorBox}"
                              PreviewTextInput="Integer_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
                     <TextBlock Grid.Row="8" Text="疗程" Style="{StaticResource EditorLabel}"/>
                     <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding Course, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" Style="{StaticResource EditorBox}"/>
-                    <TextBlock Grid.Row="9" Text="渐升时间 (s)" Style="{StaticResource EditorLabel}"/>
+                    <TextBlock Grid.Row="9" Text="{Binding RampUpLabel}" Style="{StaticResource EditorLabel}"/>
                     <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding RampUpSeconds, UpdateSourceTrigger=PropertyChanged}"
                              Style="{StaticResource EditorBox}" PreviewTextInput="Integer_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
-                    <TextBlock Grid.Row="10" Text="渐降时间 (s)" Style="{StaticResource EditorLabel}"/>
-                    <TextBox Grid.Row="10" Grid.Column="1" Text="{Binding RampDownSeconds, UpdateSourceTrigger=PropertyChanged}"
-                             Style="{StaticResource EditorBox}" PreviewTextInput="Integer_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
+                    <TextBlock Grid.Row="10" Text="{Binding RampDownLabel}" Style="{StaticResource EditorLabel}"/>
+                    <TextBox Grid.Row="10" Grid.Column="1" Text="{Binding RampDownSecondsEntry, UpdateSourceTrigger=PropertyChanged}"
+                             IsEnabled="{Binding IsRampDownEnabled}" Style="{StaticResource EditorBox}" PreviewTextInput="Integer_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
                     <TextBlock Grid.Row="11" Text="证据等级" Style="{StaticResource EditorLabel}"/>
                     <TextBox Grid.Row="11" Grid.Column="1" Text="{Binding EvidenceGrade, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" Style="{StaticResource EditorBox}"/>
                     <TextBlock Grid.Row="12" Grid.ColumnSpan="2" Text="{Binding ErrorMessage}" Foreground="{StaticResource Danger}"
