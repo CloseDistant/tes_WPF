@@ -80,16 +80,15 @@ public sealed class PulseCurrentParametersTests
     }
 
     [Fact]
-    public void TryCreate_AllowsZeroRiseWidth()
+    public void TryCreate_RejectsZeroRiseWidthBecauseHardwareTrapezoidRequiresRise()
     {
         var channel = CreateValidChannel();
         channel.RiseWidthMilliseconds = "0";
 
-        var success = PulseCurrentParameters.TryCreate(channel, out var parameters, out var error);
+        var success = PulseCurrentParameters.TryCreate(channel, out _, out var error);
 
-        Assert.True(success, error);
-        Assert.NotNull(parameters);
-        Assert.Equal(0, parameters.RiseWidthMilliseconds);
+        Assert.False(success);
+        Assert.Contains("上升宽度必须大于 0", error);
     }
 
     [Theory]

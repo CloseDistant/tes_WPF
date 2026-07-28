@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using RuinaoTesHardware;
 
@@ -213,7 +213,12 @@ public sealed class HardwareService : IHardwareService
                 throw new InvalidOperationException("仪器未联机，且未启用 DEBUG 模拟联机，禁止启动电刺激。");
             }
 
-            await RunDeviceOperationAsync(token => StartGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+            await RunDeviceOperationAsync(
+                token => StartGroupOnProtocolBridgeAsync(
+                    group,
+                    parameterRecord.StimulationType,
+                    token),
+                cancellationToken);
         }
 
         await stimulationRecordService.RecordAsync(
@@ -234,6 +239,45 @@ public sealed class HardwareService : IHardwareService
 
         logger.Hardware($"启动刺激：硬件 ACK 已确认，group={group.Title}, channels={selectedChannelNames}");
         return Result($"设备：已确认 | 模式：{parameterRecord.StimulationType} | 刺激：运行中");
+    }
+
+    public async Task<HardwareOperationResult> StartPulseCurrentAsync(
+        IReadOnlyList<PulseCurrentExecutionChannel> channels,
+        string selectedChannelNames,
+        string prescriptionName,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(channels);
+        var useDebugMock = ShouldUseDebugStimulationMock();
+        if (!useDebugMock && !IsConnected)
+        {
+            throw new InvalidOperationException("仪器未联机，禁止启动 tPCS 电刺激。");
+        }
+
+        if (!useDebugMock)
+        {
+            await RunDeviceOperationAsync(
+                token => protocolBridge.ConfigureAndStartPulseCurrentAsync(channels, token),
+                cancellationToken);
+        }
+        await stimulationRecordService.RecordAsync(
+            new StimulationRecordRequest(
+                "start",
+                "经颅脉冲电刺激",
+                selectedChannelNames,
+                "running",
+                PrescriptionDefinition.PulseCurrentStimulationType,
+                prescriptionName,
+                ParameterSnapshotJson: System.Text.Json.JsonSerializer.Serialize(channels)),
+            cancellationToken);
+
+        if (useDebugMock)
+        {
+            return DebugMockResult(PrescriptionDefinition.PulseCurrentStimulationType, "运行中");
+        }
+
+        logger.Hardware($"启动 tPCS：硬件 ACK 已确认，channels={selectedChannelNames}");
+        return Result("设备：已确认 | 模式：tPCS | 刺激：运行中");
     }
 
     /// <summary>
@@ -288,6 +332,36 @@ public sealed class HardwareService : IHardwareService
         return Result($"设备：已确认 | 模式：{stimulationType} | 刺激：已急停");
     }
 
+    public async Task<HardwareOperationResult> EmergencyStopPulseCurrentAsync(
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var useDebugMock = ShouldUseDebugStimulationMock();
+        if (!useDebugMock)
+        {
+            await RunDeviceOperationAsync(
+                protocolBridge.EmergencyStopAllKnownStimulationBoardsAsync,
+                cancellationToken);
+        }
+        await stimulationRecordService.RecordAsync(
+            new StimulationRecordRequest(
+                "emergency_stop",
+                "经颅脉冲电刺激",
+                "CH 1 + CH 2",
+                "stopped",
+                PrescriptionDefinition.PulseCurrentStimulationType,
+                AdverseReactionRecord: reason),
+            cancellationToken);
+
+        if (useDebugMock)
+        {
+            return DebugMockResult(PrescriptionDefinition.PulseCurrentStimulationType, "已急停");
+        }
+
+        logger.Hardware("tPCS 紧急停止：业务板0x01已返回停止 ACK。");
+        return Result("设备：已确认 | 模式：tPCS | 刺激：已急停");
+    }
+
     public async Task<HardwareOperationResult> CompleteGroupAsync(
         TiGroup group,
         string selectedChannelNames,
@@ -297,7 +371,9 @@ public sealed class HardwareService : IHardwareService
         var useDebugMock = ShouldUseDebugStimulationMock();
         if (!useDebugMock)
         {
-            await RunDeviceOperationAsync(token => PauseGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+            await RunDeviceOperationAsync(
+                token => CompleteGroupOnProtocolBridgeAsync(group, stimulationType, token),
+                cancellationToken);
         }
 
         await stimulationRecordService.RecordAsync(
@@ -317,6 +393,32 @@ public sealed class HardwareService : IHardwareService
 
         logger.Hardware($"刺激完成：停止命令 ACK 已确认，group={group.Title}, channels={selectedChannelNames}");
         return Result($"设备：已确认 | 模式：{stimulationType} | 刺激：已完成");
+    }
+
+    public async Task<HardwareOperationResult> CompletePulseCurrentAsync(
+        IReadOnlyList<int> logicalChannelNumbers,
+        string selectedChannelNames,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(logicalChannelNumbers);
+        var useDebugMock = ShouldUseDebugStimulationMock();
+        if (!useDebugMock)
+        {
+            await RunDeviceOperationAsync(
+                token => protocolBridge.StopStimulationChannelsAsync(logicalChannelNumbers, token),
+                cancellationToken);
+        }
+        await stimulationRecordService.RecordAsync(
+            new StimulationRecordRequest(
+                "complete",
+                "经颅脉冲电刺激",
+                selectedChannelNames,
+                "completed",
+                PrescriptionDefinition.PulseCurrentStimulationType),
+            cancellationToken);
+        return useDebugMock
+            ? DebugMockResult(PrescriptionDefinition.PulseCurrentStimulationType, "已完成")
+            : Result("设备：已确认 | 模式：tPCS | 刺激：已完成");
     }
 
     /// <summary>
@@ -384,8 +486,17 @@ public sealed class HardwareService : IHardwareService
     /// <summary>
     /// 调用 Bridge 启动 TI 刺激组。调用方必须已经完成真实设备联机。
     /// </summary>
-    private async Task StartGroupOnProtocolBridgeAsync(TiGroup group, CancellationToken cancellationToken)
+    private async Task StartGroupOnProtocolBridgeAsync(
+        TiGroup group,
+        string stimulationType,
+        CancellationToken cancellationToken)
     {
+        if (string.Equals(stimulationType, "tDCS", StringComparison.Ordinal))
+        {
+            await protocolBridge.ConfigureAndStartDirectCurrentAsync(group, cancellationToken);
+            return;
+        }
+
         await protocolBridge.SendTiParametersAsync(group, cancellationToken);
         await protocolBridge.StartTiAsync(cancellationToken);
     }
@@ -397,11 +508,26 @@ public sealed class HardwareService : IHardwareService
         await protocolBridge.PauseTiAsync(cancellationToken);
     }
 
+    private async Task CompleteGroupOnProtocolBridgeAsync(
+        TiGroup group,
+        string stimulationType,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(stimulationType, "tDCS", StringComparison.Ordinal))
+        {
+            var logicalChannels = group.Channels
+                .Select(channel => TemporaryStimulationConfigurationFactory.ParseLogicalChannelNumber(channel.Name));
+            await protocolBridge.StopStimulationChannelsAsync(logicalChannels, cancellationToken);
+            return;
+        }
+
+        await PauseGroupOnProtocolBridgeAsync(group, cancellationToken);
+    }
+
     /// <summary>调用 Bridge 对 TI 刺激组执行急停。</summary>
     private async Task EmergencyStopGroupOnProtocolBridgeAsync(TiGroup group, CancellationToken cancellationToken)
     {
-        await protocolBridge.SendTiParametersAsync(group, cancellationToken);
-        await protocolBridge.EmergencyStopAsync(cancellationToken);
+        await protocolBridge.EmergencyStopAllKnownStimulationBoardsAsync(cancellationToken);
     }
 
     private bool ShouldUseDebugStimulationMock()

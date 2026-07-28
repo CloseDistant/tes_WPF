@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using Xunit;
 
 namespace RuinaoSoftwareWpf.Tests;
@@ -167,7 +167,10 @@ public sealed class StimulationConnectionCommandTests
     public void PulseCurrentStartCommands_RequireExplicitDebugSimulationConnection()
     {
         var simulation = new MutableDebugHardwareSimulation();
+        var realConnection = new MutableHardwareConnectionState();
         var viewModel = new PulseCurrentControlViewModel(
+            new NoopStimulationEngine(),
+            realConnection,
             simulation,
             new LocalizationViewModel(new AppLocalizationService()),
             new NoopToastService(),
@@ -270,6 +273,12 @@ public sealed class StimulationConnectionCommandTests
             string prescriptionName,
             CancellationToken cancellationToken = default) => NotUsed();
 
+        public Task<HardwareOperationResult> StartPulseCurrentAsync(
+            IReadOnlyList<PulseCurrentExecutionChannel> channels,
+            string selectedChannelNames,
+            string prescriptionName,
+            CancellationToken cancellationToken = default) => NotUsed();
+
         public Task<HardwareOperationResult> PauseTiGroupAsync(
             TiGroup group,
             string selectedChannelNames,
@@ -285,10 +294,19 @@ public sealed class StimulationConnectionCommandTests
             string reason,
             CancellationToken cancellationToken = default) => NotUsed();
 
+        public Task<HardwareOperationResult> EmergencyStopPulseCurrentAsync(
+            string reason,
+            CancellationToken cancellationToken = default) => NotUsed();
+
         public Task<HardwareOperationResult> CompleteGroupAsync(
             TiGroup group,
             string selectedChannelNames,
             string stimulationType,
+            CancellationToken cancellationToken = default) => NotUsed();
+
+        public Task<HardwareOperationResult> CompletePulseCurrentAsync(
+            IReadOnlyList<int> logicalChannelNumbers,
+            string selectedChannelNames,
             CancellationToken cancellationToken = default) => NotUsed();
 
         private static Task<HardwareOperationResult> NotUsed() =>

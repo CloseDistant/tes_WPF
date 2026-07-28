@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 namespace RuinaoSoftwareWpf;
 
@@ -46,10 +46,10 @@ public sealed record PulseCurrentParameters(
         }
 
         if (!TryDouble(channel.RiseWidthMilliseconds, out var riseWidth)
-            || riseWidth < 0
+            || riseWidth <= 0
             || riseWidth > MaxRiseWidthMilliseconds)
         {
-            return Fail("上升宽度必须在 0–1000 ms 范围内。", out parameters, out error);
+            return Fail("上升宽度必须大于 0 且不超过 1000 ms。", out parameters, out error);
         }
 
         var activeWidth = pulseWidth + riseWidth;

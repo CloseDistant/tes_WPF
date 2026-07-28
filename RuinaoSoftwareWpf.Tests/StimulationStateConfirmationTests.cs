@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf.Tests;
+﻿namespace RuinaoSoftwareWpf.Tests;
 
 using Xunit;
 
@@ -136,6 +136,12 @@ public sealed class StimulationStateConfirmationTests
             return StartCompletion.Task.WaitAsync(cancellationToken);
         }
 
+        public Task<HardwareOperationResult> StartPulseCurrentAsync(
+            IReadOnlyList<PulseCurrentExecutionChannel> channels,
+            string selectedChannelNames,
+            string prescriptionName,
+            CancellationToken cancellationToken = default) => NotUsed();
+
         public Task<HardwareOperationResult> ConnectAsync(CancellationToken cancellationToken = default) => NotUsed();
         public Task<HardwareOperationResult> HandshakeAsync(CancellationToken cancellationToken = default) => NotUsed();
         public Task<HardwareOperationResult> DisconnectAsync(CancellationToken cancellationToken = default) => NotUsed();
@@ -148,11 +154,13 @@ public sealed class StimulationStateConfirmationTests
             return PauseCompletion.Task.WaitAsync(cancellationToken);
         }
         public Task<HardwareOperationResult> EmergencyStopGroupAsync(TiGroup group, string selectedChannelNames, string stimulationType = "TI", CancellationToken cancellationToken = default) => NotUsed();
+        public Task<HardwareOperationResult> EmergencyStopPulseCurrentAsync(string reason, CancellationToken cancellationToken = default) => NotUsed();
         public Task<HardwareOperationResult> CompleteGroupAsync(TiGroup group, string selectedChannelNames, string stimulationType, CancellationToken cancellationToken = default)
         {
             CompleteInvoked.TrySetResult();
             return CompleteCompletion.Task.WaitAsync(cancellationToken);
         }
+        public Task<HardwareOperationResult> CompletePulseCurrentAsync(IReadOnlyList<int> logicalChannelNumbers, string selectedChannelNames, CancellationToken cancellationToken = default) => NotUsed();
         public Task ShutdownAsync() => Task.CompletedTask;
 
         private static Task<HardwareOperationResult> NotUsed() =>

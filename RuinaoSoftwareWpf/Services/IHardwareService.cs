@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 /// <summary>
 /// 硬件操作结果。
@@ -77,6 +77,13 @@ public interface IHardwareService : IHardwareConnectionState
         PrescriptionDefinition parameterRecord,
         CancellationToken cancellationToken = default);
 
+    /// <summary>配置并启动 tPCS 临时业务板通道。</summary>
+    Task<HardwareOperationResult> StartPulseCurrentAsync(
+        IReadOnlyList<PulseCurrentExecutionChannel> channels,
+        string selectedChannelNames,
+        string prescriptionName,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// 暂停指定 TI 组的刺激。
     /// </summary>
@@ -91,11 +98,22 @@ public interface IHardwareService : IHardwareConnectionState
         string stimulationType = "TI",
         CancellationToken cancellationToken = default);
 
+    /// <summary>停止已知临时业务板上的全部电刺激输出。</summary>
+    Task<HardwareOperationResult> EmergencyStopPulseCurrentAsync(
+        string reason,
+        CancellationToken cancellationToken = default);
+
     /// <summary>停止已完成通道并写入自然完成记录。</summary>
     Task<HardwareOperationResult> CompleteGroupAsync(
         TiGroup group,
         string selectedChannelNames,
         string stimulationType,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>停止自然完成的 tPCS 通道并记录完成状态。</summary>
+    Task<HardwareOperationResult> CompletePulseCurrentAsync(
+        IReadOnlyList<int> logicalChannelNumbers,
+        string selectedChannelNames,
         CancellationToken cancellationToken = default);
 
     /// <summary>

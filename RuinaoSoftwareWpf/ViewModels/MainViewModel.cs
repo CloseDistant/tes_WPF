@@ -1,4 +1,4 @@
-using System.Windows.Input;
+﻿using System.Windows.Input;
 using System.Windows;
 using System.Windows.Controls;
 using RuinaoSoftwareWpf.Views.Dialogs;
@@ -178,6 +178,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
         TiControl.HardwareOperationCompleted += (_, result) => ApplyHardwareResult(result);
         DirectCurrentControl.HardwareOperationCompleted += (_, result) => ApplyHardwareResult(result);
+        PulseCurrentControl.HardwareOperationCompleted += (_, result) => ApplyHardwareResult(result);
         TiControl.BackRequested += (_, _) => ShowStimulationTypeSelection();
         DirectCurrentControl.BackRequested += (_, _) => ShowStimulationTypeSelection();
         PulseCurrentControl.BackRequested += (_, _) => ShowStimulationTypeSelection();

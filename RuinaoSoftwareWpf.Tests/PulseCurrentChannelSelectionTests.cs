@@ -130,11 +130,11 @@ public sealed class PulseCurrentChannelSelectionTests
             {
                 Assert.Equal("2", channel.CurrentMilliamp);
                 Assert.Equal("1200", channel.TreatmentDurationSeconds);
-                  Assert.Equal("10", channel.PulseWidthMilliseconds);
-                  Assert.Equal("5", channel.RiseWidthMilliseconds);
-                  Assert.Equal("20", channel.IntervalWidthMilliseconds);
-                  Assert.Equal("00:00:00", channel.RemainingTime);
-              });
+                Assert.Equal("10", channel.PulseWidthMilliseconds);
+                Assert.Equal("5", channel.RiseWidthMilliseconds);
+                Assert.Equal("20", channel.IntervalWidthMilliseconds);
+                Assert.Equal("00:00:00", channel.RemainingTime);
+            });
         Assert.Equal(PulseCurrentPolarities.Reversed, viewModel.Channels[0].Polarity);
         Assert.All(
             viewModel.Channels.Skip(1),
@@ -162,10 +162,56 @@ public sealed class PulseCurrentChannelSelectionTests
     private static PulseCurrentControlViewModel CreateViewModel()
     {
         return new PulseCurrentControlViewModel(
+            new NoopStimulationEngine(),
+            new ConnectedHardwareState(),
             new ConnectedDebugSimulation(),
             new LocalizationViewModel(new AppLocalizationService()),
             new NoopToastService(),
             new NoopLoggingService());
+    }
+
+    private sealed class ConnectedHardwareState : IHardwareConnectionState
+    {
+        public event EventHandler<HardwareConnectionChangedEventArgs>? ConnectionChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public bool IsConnected => true;
+    }
+
+    private sealed class NoopStimulationEngine : IStimulationEngine
+    {
+        public StimulationExecutionState CurrentState => StimulationExecutionState.Idle;
+
+        public Task<HardwareOperationResult> StartPulseCurrentAsync(
+            IReadOnlyList<PulseCurrentExecutionChannel> channels,
+            string selectedChannelNames,
+            string prescriptionName,
+            CancellationToken cancellationToken = default) => Success();
+
+        public Task<HardwareOperationResult> EmergencyStopPulseCurrentAsync(
+            string reason,
+            CancellationToken cancellationToken = default) => Success();
+
+        public Task<HardwareOperationResult> CompletePulseCurrentAsync(
+            IReadOnlyList<int> logicalChannelNumbers,
+            string selectedChannelNames,
+            CancellationToken cancellationToken = default) => Success();
+
+        public Task<HardwareOperationResult> StartTiGroupAsync(TiGroup group, string selectedChannelNames, string prescriptionName, CancellationToken cancellationToken = default) => NotUsed();
+        public Task<HardwareOperationResult> StartDirectCurrentGroupAsync(TiGroup group, string selectedChannelNames, string prescriptionName, CancellationToken cancellationToken = default) => NotUsed();
+        public Task<HardwareOperationResult> PauseTiGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default) => NotUsed();
+        public Task<HardwareOperationResult> EmergencyStopTiGroupAsync(TiGroup group, string reason, CancellationToken cancellationToken = default) => NotUsed();
+        public Task<HardwareOperationResult> EmergencyStopDirectCurrentGroupAsync(TiGroup group, string reason, CancellationToken cancellationToken = default) => NotUsed();
+        public Task<HardwareOperationResult> CompleteGroupAsync(TiGroup group, string selectedChannelNames, string stimulationType, CancellationToken cancellationToken = default) => NotUsed();
+
+        private static Task<HardwareOperationResult> Success() =>
+            Task.FromResult(new HardwareOperationResult(true, "test"));
+
+        private static Task<HardwareOperationResult> NotUsed() =>
+            throw new InvalidOperationException("tPCS selection tests must not call other stimulation modes.");
     }
 
     private static void ConfigureValidPulseParameters(

@@ -186,6 +186,12 @@ public sealed class DirectCurrentChannelSelectionTests
             return Success();
         }
 
+        public Task<HardwareOperationResult> StartPulseCurrentAsync(
+            IReadOnlyList<PulseCurrentExecutionChannel> channels,
+            string selectedChannelNames,
+            string prescriptionName,
+            CancellationToken cancellationToken = default) => NotUsed();
+
         public Task<HardwareOperationResult> PauseTiGroupAsync(
             TiGroup group,
             string selectedChannelNames,
@@ -201,10 +207,19 @@ public sealed class DirectCurrentChannelSelectionTests
             string reason,
             CancellationToken cancellationToken = default) => Success();
 
+        public Task<HardwareOperationResult> EmergencyStopPulseCurrentAsync(
+            string reason,
+            CancellationToken cancellationToken = default) => NotUsed();
+
         public Task<HardwareOperationResult> CompleteGroupAsync(
             TiGroup group,
             string selectedChannelNames,
             string stimulationType,
+            CancellationToken cancellationToken = default) => NotUsed();
+
+        public Task<HardwareOperationResult> CompletePulseCurrentAsync(
+            IReadOnlyList<int> logicalChannelNumbers,
+            string selectedChannelNames,
             CancellationToken cancellationToken = default) => NotUsed();
 
         private static Task<HardwareOperationResult> NotUsed() =>

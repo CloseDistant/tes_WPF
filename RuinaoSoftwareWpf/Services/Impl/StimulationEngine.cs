@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using System.Text.Json;
 
@@ -96,6 +96,40 @@ public sealed class StimulationEngine : IStimulationEngine
             cancellationToken);
     }
 
+    public async Task<HardwareOperationResult> StartPulseCurrentAsync(
+        IReadOnlyList<PulseCurrentExecutionChannel> channels,
+        string selectedChannelNames,
+        string prescriptionName,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(channels);
+        authorizationService.RequireSignedIn();
+        var auditGroup = CreatePulseAuditGroup(channels);
+        if (patientService.CurrentPatient is not null)
+        {
+            await unifiedSessionService.GetOrStartAsync(cancellationToken);
+            await RecordRequestAsync(
+                "start_requested",
+                auditGroup,
+                selectedChannelNames,
+                cancellationToken);
+        }
+
+        await safetyService.EnsureCanStartStimulationAsync(cancellationToken);
+        auditLog.RecordUserAction($"Start tPCS channels {selectedChannelNames}");
+        return await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Starting,
+            "StartPulseCurrentRequested",
+            StimulationExecutionState.Running,
+            "StartPulseCurrentConfirmed",
+            token => hardwareService.StartPulseCurrentAsync(
+                channels,
+                selectedChannelNames,
+                prescriptionName,
+                token),
+            cancellationToken);
+    }
+
     public async Task<HardwareOperationResult> PauseTiGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default)
     {
         authorizationService.RequireSignedIn();
@@ -148,6 +182,23 @@ public sealed class StimulationEngine : IStimulationEngine
         return result;
     }
 
+    public async Task<HardwareOperationResult> EmergencyStopPulseCurrentAsync(
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        auditLog.RecordUserAction($"Emergency stop tPCS: {reason}");
+        var result = await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Stopping,
+            $"EmergencyStopPulseCurrentRequested:{reason}",
+            StimulationExecutionState.EmergencyStopped,
+            $"EmergencyStopPulseCurrentConfirmed:{reason}",
+            token => hardwareService.EmergencyStopPulseCurrentAsync(reason, token),
+            cancellationToken);
+        activeConfiguration = null;
+        configurationSnapshots.Clear(SessionModuleCodes.Stimulation);
+        return result;
+    }
+
     public async Task<HardwareOperationResult> CompleteGroupAsync(
         TiGroup group,
         string selectedChannelNames,
@@ -169,6 +220,27 @@ public sealed class StimulationEngine : IStimulationEngine
                 token),
             cancellationToken);
         await RecordRequestIfSessionActiveAsync("completed", executionGroup, selectedChannelNames, cancellationToken);
+        configurationSnapshots.Clear(SessionModuleCodes.Stimulation);
+        return result;
+    }
+
+    public async Task<HardwareOperationResult> CompletePulseCurrentAsync(
+        IReadOnlyList<int> logicalChannelNumbers,
+        string selectedChannelNames,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(logicalChannelNumbers);
+        auditLog.RecordUserAction($"Complete tPCS channels {selectedChannelNames}");
+        var result = await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Stopping,
+            $"CompletePulseCurrentRequested:{selectedChannelNames}",
+            StimulationExecutionState.Completed,
+            $"CompletePulseCurrentConfirmed:{selectedChannelNames}",
+            token => hardwareService.CompletePulseCurrentAsync(
+                logicalChannelNumbers,
+                selectedChannelNames,
+                token),
+            cancellationToken);
         configurationSnapshots.Clear(SessionModuleCodes.Stimulation);
         return result;
     }
@@ -220,5 +292,25 @@ public sealed class StimulationEngine : IStimulationEngine
             group.Title,
             JsonSerializer.Serialize(new { group = group.Title, details }),
             cancellationToken: cancellationToken);
+    }
+
+    private static TiGroup CreatePulseAuditGroup(
+        IEnumerable<PulseCurrentExecutionChannel> channels)
+    {
+        var group = new TiGroup { Title = "经颅脉冲电刺激" };
+        foreach (var channel in channels)
+        {
+            group.Channels.Add(new ChannelConfig
+            {
+                Name = $"CH {channel.LogicalChannelNumber}",
+                CurrentMA = channel.Parameters.CurrentMilliamp.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture),
+                DurationS = channel.Parameters.TreatmentDurationSeconds.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture),
+                Polarity = channel.Parameters.Polarity,
+            });
+        }
+
+        return group;
     }
 }

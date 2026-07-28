@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.RegularExpressions;
 using RuinaoTesHardware;
 using RuinaoTesProtocol;
@@ -205,6 +205,139 @@ public sealed partial class RuinaoTesProtocolBridge
     public async Task StopImpedanceAcquisitionAsync(uint channelMask = 0, CancellationToken cancellationToken = default)
     {
         await transport.SendFrameAsync("STOP_IMPEDANCE_ACQUISITION", protocol.BuildStopImpedanceAcquisition(channelMask), cancellationToken);
+    }
+
+    /// <summary>
+    /// 按临时单业务板双通道映射配置并启动 tDCS。任一配置或启动步骤失败时，
+    /// 都会尽力停止业务板，避免刺激输出状态不确定。
+    /// </summary>
+    public Task ConfigureAndStartDirectCurrentAsync(
+        TiGroup group,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+        var configurations = group.Channels
+            .Select(TemporaryStimulationConfigurationFactory.CreateDirectCurrent)
+            .ToArray();
+        return ConfigureAndStartAsync(configurations, "tDCS", cancellationToken);
+    }
+
+    /// <summary>
+    /// 按临时单业务板双通道映射配置并启动 tPCS。界面毫秒/秒单位已在配置工厂中统一转换。
+    /// </summary>
+    public Task ConfigureAndStartPulseCurrentAsync(
+        IReadOnlyList<PulseCurrentExecutionChannel> channels,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(channels);
+        var configurations = channels
+            .Select(channel => TemporaryStimulationConfigurationFactory.CreatePulseCurrent(
+                channel.LogicalChannelNumber,
+                channel.Parameters))
+            .ToArray();
+        return ConfigureAndStartAsync(configurations, "tPCS", cancellationToken);
+    }
+
+    /// <summary>停止指定逻辑刺激通道对应的业务板。</summary>
+    public async Task StopStimulationChannelsAsync(
+        IEnumerable<int> logicalChannelNumbers,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(logicalChannelNumbers);
+        foreach (var targetAddress in logicalChannelNumbers
+            .Select(TemporaryStimulationConfigurationFactory.GetTargetAddress)
+            .Distinct())
+        {
+            await backplaneClient.StopStimulationAsync(
+                targetAddress,
+                BackplaneOptions,
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// 急停当前已知的临时业务板 0x01。板级停止命令会停止其全部刺激通道。
+    /// </summary>
+    public async Task EmergencyStopAllKnownStimulationBoardsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await backplaneClient.StopStimulationAsync(
+            TemporaryStimulationConfigurationFactory.TargetBoardAddress,
+            BackplaneOptions,
+            cancellationToken);
+    }
+
+    private async Task ConfigureAndStartAsync(
+        IReadOnlyList<TemporaryBoardStimulationConfiguration> configurations,
+        string stimulationType,
+        CancellationToken cancellationToken)
+    {
+        if (configurations.Count == 0)
+        {
+            throw new ArgumentException("至少需要一个刺激通道配置。", nameof(configurations));
+        }
+
+        var normalizedConfigurations = configurations
+            .GroupBy(item => item.TargetAddress)
+            .SelectMany(group =>
+            {
+                var combinedEnableMask = group.Aggregate(
+                    0U,
+                    (mask, item) => mask | item.Configuration.EnableMask);
+                return group.Select(item => item with
+                {
+                    Configuration = item.Configuration with
+                    {
+                        EnableMask = combinedEnableMask,
+                    },
+                });
+            })
+            .ToArray();
+
+        try
+        {
+            foreach (var item in normalizedConfigurations)
+            {
+                logger.Hardware(
+                    $"{stimulationType}临时配置：board=0x{item.TargetAddress:X2} "
+                    + $"channel={item.Configuration.ChannelNumber} "
+                    + $"low={item.Configuration.Waveforms[0].LowLevelOrPositiveValue} "
+                    + $"high={item.Configuration.Waveforms[0].HighLevelOrNegativeValue} "
+                    + $"totalMs={item.Configuration.TotalTimeMs}");
+                await backplaneClient.ConfigureStimulationAsync(
+                    item.TargetAddress,
+                    item.Configuration,
+                    BackplaneOptions,
+                    cancellationToken);
+            }
+
+            foreach (var targetAddress in normalizedConfigurations
+                .Select(item => item.TargetAddress)
+                .Distinct())
+            {
+                await backplaneClient.StartStimulationAsync(
+                    targetAddress,
+                    BackplaneOptions,
+                    cancellationToken);
+            }
+        }
+        catch
+        {
+            await StopAllKnownBoardsAfterFailedStartAsync();
+            throw;
+        }
+    }
+
+    private async Task StopAllKnownBoardsAfterFailedStartAsync()
+    {
+        try
+        {
+            await EmergencyStopAllKnownStimulationBoardsAsync(CancellationToken.None);
+        }
+        catch (Exception stopException)
+        {
+            logger.Error("刺激启动失败后的双业务板安全停止未全部确认。", stopException);
+        }
     }
 
     /// <summary>

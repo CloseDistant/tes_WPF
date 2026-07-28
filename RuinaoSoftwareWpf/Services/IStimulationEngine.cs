@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 /// <summary>
 /// 刺激控制引擎接口。
@@ -23,6 +23,13 @@ public interface IStimulationEngine
         string prescriptionName,
         CancellationToken cancellationToken = default);
 
+    /// <summary>启动一个或两个 tPCS 临时业务板内部通道。</summary>
+    Task<HardwareOperationResult> StartPulseCurrentAsync(
+        IReadOnlyList<PulseCurrentExecutionChannel> channels,
+        string selectedChannelNames,
+        string prescriptionName,
+        CancellationToken cancellationToken = default);
+
     /// <summary>暂停 TI 刺激组。</summary>
     Task<HardwareOperationResult> PauseTiGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default);
 
@@ -32,10 +39,21 @@ public interface IStimulationEngine
     /// <summary>急停 tDCS 通道组。</summary>
     Task<HardwareOperationResult> EmergencyStopDirectCurrentGroupAsync(TiGroup group, string reason, CancellationToken cancellationToken = default);
 
+    /// <summary>急停临时业务板上的全部 tPCS 输出。</summary>
+    Task<HardwareOperationResult> EmergencyStopPulseCurrentAsync(
+        string reason,
+        CancellationToken cancellationToken = default);
+
     /// <summary>通道倒计时自然结束并生成完成记录。</summary>
     Task<HardwareOperationResult> CompleteGroupAsync(
         TiGroup group,
         string selectedChannelNames,
         string stimulationType,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>停止自然完成的 tPCS 通道并生成完成记录。</summary>
+    Task<HardwareOperationResult> CompletePulseCurrentAsync(
+        IReadOnlyList<int> logicalChannelNumbers,
+        string selectedChannelNames,
         CancellationToken cancellationToken = default);
 }

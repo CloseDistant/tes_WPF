@@ -7,21 +7,21 @@ using System.Windows.Threading;
 
 namespace RuinaoSoftwareWpf;
 
-/// <summary>
-/// tPCS 参数编辑与 DEBUG 模拟波形运行页面。真实硬件协议接入前不会向设备发送 tPCS 命令。
-/// </summary>
+/// <summary>tPCS 参数编辑、真实硬件控制与波形状态页面。</summary>
 public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
 {
     private const int AvailableChannelCount = 2;
 
+    private readonly IStimulationEngine stimulationEngine;
+    private readonly IHardwareConnectionState hardwareConnectionState;
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly IToastService toastService;
     private readonly ILoggingService logger;
     private readonly DispatcherTimer waveformTimer;
     private readonly Dictionary<PulseCurrentChannelConfig, ChannelRuntime> activeChannels = [];
-    private readonly RelayCommand synchronizedStartCommand;
-    private readonly RelayCommand startChannelCommand;
-    private readonly RelayCommand emergencyStopCommand;
+    private readonly AsyncRelayCommand synchronizedStartCommand;
+    private readonly AsyncRelayCommand startChannelCommand;
+    private readonly AsyncRelayCommand emergencyStopCommand;
     private readonly RelayCommand usePrescriptionCommand;
     private readonly RelayCommand useChannelPrescriptionCommand;
     private PulseCurrentChannelPair? selectedChannelPair;
@@ -29,11 +29,15 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
     private bool disposed;
 
     public PulseCurrentControlViewModel(
+        IStimulationEngine stimulationEngine,
+        IHardwareConnectionState hardwareConnectionState,
         IDebugHardwareSimulationService debugHardwareSimulation,
         LocalizationViewModel localization,
         IToastService toastService,
         ILoggingService logger)
     {
+        this.stimulationEngine = stimulationEngine;
+        this.hardwareConnectionState = hardwareConnectionState;
         this.debugHardwareSimulation = debugHardwareSimulation;
         this.toastService = toastService;
         this.logger = logger;
@@ -67,26 +71,29 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
                 SelectedChannel = channel;
             }
         });
-        synchronizedStartCommand = new RelayCommand(
-            _ => StartSynchronized(),
-            _ => CanStartSimulation && activeChannels.Count == 0);
+        synchronizedStartCommand = new AsyncRelayCommand(
+            (_, _) => StartSynchronizedAsync(),
+            _ => CanStartSimulation && activeChannels.Count == 0,
+            HandleHardwareFailure);
         SynchronizedStartCommand = synchronizedStartCommand;
-        startChannelCommand = new RelayCommand(
-            parameter =>
+        startChannelCommand = new AsyncRelayCommand(
+            async (parameter, _) =>
             {
                 if (parameter is PulseCurrentChannelConfig channel)
                 {
-                    StartChannel(channel);
+                    await StartChannelAsync(channel);
                 }
             },
             parameter => CanStartSimulation
                 && parameter is PulseCurrentChannelConfig channel
                 && Channels.Contains(channel)
-                && !activeChannels.ContainsKey(channel));
+                && !activeChannels.ContainsKey(channel),
+            HandleHardwareFailure);
         StartChannelCommand = startChannelCommand;
-        emergencyStopCommand = new RelayCommand(
-            _ => EmergencyStop(),
-            _ => activeChannels.Count > 0);
+        emergencyStopCommand = new AsyncRelayCommand(
+            (_, _) => EmergencyStopAsync(),
+            _ => activeChannels.Count > 0,
+            HandleHardwareFailure);
         EmergencyStopCommand = emergencyStopCommand;
         usePrescriptionCommand = new RelayCommand(
             _ => RequestPrescription(StimulationPrescriptionApplyScope.AllChannels),
@@ -99,6 +106,7 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
                 && !activeChannels.ContainsKey(channel));
         UseChannelPrescriptionCommand = useChannelPrescriptionCommand;
 
+        hardwareConnectionState.ConnectionChanged += OnHardwareConnectionChanged;
         debugHardwareSimulation.ConnectionChanged += OnDebugSimulationConnectionChanged;
         SelectedChannelPair = ChannelPairs[0];
         SelectedChannel = Channels[0];
@@ -163,6 +171,8 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
     public event EventHandler? BackRequested;
 
     public event EventHandler<StimulationPrescriptionRequestEventArgs>? PrescriptionRequested;
+
+    public event EventHandler<HardwareOperationResult>? HardwareOperationCompleted;
 
     public bool TryApplyPrescription(PrescriptionDefinition prescription, out string error)
     {
@@ -250,10 +260,11 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         disposed = true;
         waveformTimer.Stop();
         waveformTimer.Tick -= OnWaveformTimerTick;
+        hardwareConnectionState.ConnectionChanged -= OnHardwareConnectionChanged;
         debugHardwareSimulation.ConnectionChanged -= OnDebugSimulationConnectionChanged;
     }
 
-    private void StartSynchronized()
+    private async Task StartSynchronizedAsync()
     {
         var synchronizedChannels = Channels.ToArray();
         if (synchronizedChannels.Length != AvailableChannelCount)
@@ -274,17 +285,25 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
             snapshots[channel] = snapshot!;
         }
 
-        // 两个可用通道全部校验成功后共享同一时间戳，避免出现部分启动。
+        var executionChannels = synchronizedChannels
+            .Select(channel => CreateExecutionChannel(channel, snapshots[channel]))
+            .ToArray();
+        var result = await stimulationEngine.StartPulseCurrentAsync(
+            executionChannels,
+            string.Join(" + ", synchronizedChannels.Select(channel => channel.Name)),
+            "手动设置");
+
+        // 业务板内两个通道都完成配置且启动 ACK 后，界面才进入运行状态。
         var sharedTimestamp = Stopwatch.GetTimestamp();
         foreach (var channel in synchronizedChannels)
         {
             BeginChannelRuntime(channel, snapshots[channel], sharedTimestamp);
         }
 
-        logger.Info($"tPCS DEBUG 模拟同步开始：{string.Join(" + ", synchronizedChannels.Select(channel => channel.Name))}");
+        HardwareOperationCompleted?.Invoke(this, result);
     }
 
-    private void StartChannel(PulseCurrentChannelConfig channel)
+    private async Task StartChannelAsync(PulseCurrentChannelConfig channel)
     {
         if (!Channels.Contains(channel) || activeChannels.ContainsKey(channel))
         {
@@ -297,8 +316,12 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var result = await stimulationEngine.StartPulseCurrentAsync(
+            [CreateExecutionChannel(channel, snapshot!)],
+            channel.Name,
+            "手动设置");
         BeginChannelRuntime(channel, snapshot!, Stopwatch.GetTimestamp());
-        logger.Info($"tPCS DEBUG 模拟开始：{channel.Name}");
+        HardwareOperationCompleted?.Invoke(this, result);
     }
 
     private void BeginChannelRuntime(
@@ -320,13 +343,14 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         RefreshCommandStates();
     }
 
-    private void EmergencyStop()
+    private async Task EmergencyStopAsync()
     {
         if (activeChannels.Count == 0)
         {
             return;
         }
 
+        var result = await stimulationEngine.EmergencyStopPulseCurrentAsync("用户点击急停");
         var stoppedAt = Stopwatch.GetTimestamp();
         foreach (var pair in activeChannels.ToArray())
         {
@@ -339,14 +363,15 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
             channel.IsStimulating = false;
             activeChannels.Remove(channel);
             logger.Info(
-                $"tPCS DEBUG 模拟急停：{channel.Name}，完成次数 {channel.Waveform.CompletedPulseCount}/{runtime.Parameters.PlannedTotalCount}");
+                $"tPCS 急停：{channel.Name}，完成次数 {channel.Waveform.CompletedPulseCount}/{runtime.Parameters.PlannedTotalCount}");
         }
 
         waveformTimer.Stop();
         RefreshCommandStates();
+        HardwareOperationCompleted?.Invoke(this, result);
     }
 
-    private void OnWaveformTimerTick(object? sender, EventArgs e)
+    private async void OnWaveformTimerTick(object? sender, EventArgs e)
     {
         if (activeChannels.Count == 0)
         {
@@ -387,10 +412,27 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         }
 
         RefreshCommandStates();
-        foreach (var channel in completedChannels)
+        try
         {
-            logger.Info(
-                $"tPCS DEBUG 模拟完成：{channel.Name}，完成次数 {channel.Waveform.CompletedPulseCount}/{channel.Waveform.Parameters?.PlannedTotalCount}");
+            var result = await stimulationEngine.CompletePulseCurrentAsync(
+                completedChannels
+                    .Select(channel => TemporaryStimulationConfigurationFactory.ParseLogicalChannelNumber(channel.Name))
+                    .ToArray(),
+                string.Join(" + ", completedChannels.Select(channel => channel.Name)));
+            HardwareOperationCompleted?.Invoke(this, result);
+            foreach (var channel in completedChannels)
+            {
+                logger.Info(
+                    $"tPCS 完成并已确认停止：{channel.Name}，完成次数 "
+                    + $"{channel.Waveform.CompletedPulseCount}/{channel.Waveform.Parameters?.PlannedTotalCount}");
+            }
+        }
+        catch (Exception exception)
+        {
+            logger.Error("tPCS 倒计时结束后的停止命令未确认", exception);
+            toastService.ShowError(
+                "停止确认失败",
+                "倒计时已经结束，但对应业务板未确认停止。请立即使用紧急停止并检查仪器。");
         }
     }
 
@@ -409,6 +451,18 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
 
     private void OnDebugSimulationConnectionChanged(object? sender, EventArgs e)
     {
+        RefreshCommandStatesOnUiThread();
+    }
+
+    private void OnHardwareConnectionChanged(
+        object? sender,
+        HardwareConnectionChangedEventArgs eventArgs)
+    {
+        RefreshCommandStatesOnUiThread();
+    }
+
+    private void RefreshCommandStatesOnUiThread()
+    {
         var dispatcher = Application.Current?.Dispatcher;
         if (dispatcher is not null && !dispatcher.CheckAccess())
         {
@@ -419,7 +473,16 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         RefreshCommandStates();
     }
 
-    private bool CanStartSimulation => debugHardwareSimulation.IsConnected;
+    private bool CanStartSimulation =>
+        hardwareConnectionState.IsConnected || debugHardwareSimulation.IsConnected;
+
+    private void HandleHardwareFailure(Exception exception)
+    {
+        logger.Error("tPCS 硬件命令执行失败", exception);
+        toastService.ShowError(
+            "tPCS 操作失败",
+            "硬件未确认本次操作，软件不会把该操作视为成功。请检查运行日志和仪器状态。");
+    }
 
     private void RefreshCommandStates()
     {
@@ -437,6 +500,15 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         var minutes = wholeSeconds % 3600 / 60;
         var remainingSeconds = wholeSeconds % 60;
         return $"{hours:00}:{minutes:00}:{remainingSeconds:00}";
+    }
+
+    private static PulseCurrentExecutionChannel CreateExecutionChannel(
+        PulseCurrentChannelConfig channel,
+        PulseCurrentParameters parameters)
+    {
+        return new PulseCurrentExecutionChannel(
+            TemporaryStimulationConfigurationFactory.ParseLogicalChannelNumber(channel.Name),
+            parameters);
     }
 
     private sealed record ChannelRuntime(

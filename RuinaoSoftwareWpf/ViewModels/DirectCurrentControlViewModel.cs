@@ -494,7 +494,10 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            logger.Error($"tDCS 通道 {channel.Name} 完成记录失败", ex);
+            logger.Error($"tDCS 通道 {channel.Name} 倒计时结束后的停止命令未确认", ex);
+            toastService.ShowError(
+                "停止确认失败",
+                $"{channel.Name} 倒计时已经结束，但业务板未确认停止。请立即使用紧急停止并检查仪器。");
         }
     }
 
