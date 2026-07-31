@@ -167,12 +167,12 @@ public partial class EegMarkerSettingsDialog : Window
 
     private void ShortcutTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key is Key.Tab or Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift or Key.LeftAlt or Key.RightAlt)
+        if (!EegMarkerShortcutInput.TryGetShortcutText(e.Key, e.SystemKey, out var shortcut))
         {
             return;
         }
 
-        ShortcutTextBox.Text = NormalizeKey(e.Key);
+        ShortcutTextBox.Text = shortcut;
         e.Handled = true;
     }
 
@@ -207,17 +207,6 @@ public partial class EegMarkerSettingsDialog : Window
         return (ColorComboBox.SelectedItem as ComboBoxItem)?.Tag is MarkerColorOption option
             ? option.Color
             : colorOptions[0].Color;
-    }
-
-    private static string NormalizeKey(Key key)
-    {
-        return key switch
-        {
-            Key.Space => "Space",
-            >= Key.D0 and <= Key.D9 => key.ToString(),
-            >= Key.NumPad0 and <= Key.NumPad9 => key.ToString(),
-            _ => key.ToString()
-        };
     }
 
     private sealed record MarkerColorOption(string Name, Color Color);

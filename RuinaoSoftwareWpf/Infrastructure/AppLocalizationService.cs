@@ -127,7 +127,6 @@ public sealed class AppLocalizationService : ILocalizationService
         ["CaptureWorkspaceRefresh"] = ("刷新", "Refresh"),
         ["CaptureWorkspaceCameraPreview"] = ("摄像头实时预览", "Live camera preview"),
         ["CaptureWorkspaceModuleFlowTitle"] = ("模块流程", "Module flow"),
-        ["CaptureWorkspaceDevelopmentClickable"] = ("开发可点", "Dev clickable"),
         ["CaptureWorkspaceNoCameraDetected"] = ("未检测到摄像头", "No camera detected"),
         ["CaptureWorkspaceNoCameraSelected"] = ("未选择摄像头", "No camera selected"),
         ["CaptureWorkspaceChooseCamera"] = ("请选择摄像头", "Please select a camera"),

@@ -21,6 +21,7 @@ public partial class EegSignalCaptureView : UserControl
     private int lastTimeAxisPageIndex = -1;
     private double lastTimeAxisWidth = -1;
     private double lastTimeAxisSurfaceLeft = double.NaN;
+    private bool markerShortcutInputAttached;
 
     public EegSignalCaptureView()
     {
@@ -29,6 +30,7 @@ public partial class EegSignalCaptureView : UserControl
         Loaded += (_, _) =>
         {
             Focus();
+            AttachMarkerShortcutInput();
             AttachViewModel();
             InitializeMarkers();
             BuildElectrodeMap();
@@ -42,6 +44,7 @@ public partial class EegSignalCaptureView : UserControl
             {
                 viewModel.StopCommand.Execute(null);
             }
+            DetachMarkerShortcutInput();
             DetachViewModel();
         };
         DataContextChanged += (_, _) =>
@@ -626,16 +629,52 @@ public partial class EegSignalCaptureView : UserControl
         MarkerListPanel.Children.Add(row);
     }
 
-    private void EegPage_PreviewKeyDown(object sender, KeyEventArgs e)
+    private void AttachMarkerShortcutInput()
     {
-        var tag = viewModel?.MarkerTags.FirstOrDefault(t => t.KeyText == e.Key.ToString());
+        if (markerShortcutInputAttached)
+        {
+            return;
+        }
+
+        InputManager.Current.PreProcessInput += InputManager_PreProcessInput;
+        markerShortcutInputAttached = true;
+    }
+
+    private void DetachMarkerShortcutInput()
+    {
+        if (!markerShortcutInputAttached)
+        {
+            return;
+        }
+
+        InputManager.Current.PreProcessInput -= InputManager_PreProcessInput;
+        markerShortcutInputAttached = false;
+    }
+
+    private void InputManager_PreProcessInput(object sender, PreProcessInputEventArgs e)
+    {
+        if (!IsVisible || Window.GetWindow(this)?.IsActive != true)
+        {
+            return;
+        }
+
+        if (e.StagingItem.Input is not KeyEventArgs keyEvent
+            || keyEvent.RoutedEvent != Keyboard.PreviewKeyDownEvent
+            || keyEvent.IsRepeat
+            || !EegMarkerShortcutInput.TryGetShortcutText(keyEvent.Key, keyEvent.SystemKey, out var shortcut))
+        {
+            return;
+        }
+
+        var tag = viewModel?.MarkerTags.FirstOrDefault(item =>
+            string.Equals(item.KeyText, shortcut, StringComparison.OrdinalIgnoreCase));
         if (tag is null)
         {
             return;
         }
 
         AddMarker(tag, "keyboard");
-        e.Handled = true;
+        keyEvent.Handled = true;
     }
 
     private void HighlightChannel(int channel)

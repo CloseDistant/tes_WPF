@@ -484,8 +484,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public string ModuleFlowTitleText => T("CaptureWorkspaceModuleFlowTitle");
 
-    public string DevelopmentClickableText => T("CaptureWorkspaceDevelopmentClickable");
-
     public ICommand DevNextStepCommand { get; }
 
     public ICommand GoNextModuleCommand { get; }
@@ -2104,7 +2102,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(RefreshButtonText));
         OnPropertyChanged(nameof(CameraPreviewPlaceholderText));
         OnPropertyChanged(nameof(ModuleFlowTitleText));
-        OnPropertyChanged(nameof(DevelopmentClickableText));
         OnPropertyChanged(nameof(DemoVideoPath));
         OnPropertyChanged(nameof(DemoVideoUri));
         OnPropertyChanged(nameof(DevMainStageText));

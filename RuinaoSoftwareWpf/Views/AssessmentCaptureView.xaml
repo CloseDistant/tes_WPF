@@ -1829,16 +1829,6 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <DockPanel Margin="0,0,0,10">
-                            <Border DockPanel.Dock="Right"
-                                    Background="#242A36"
-                                    BorderBrush="{StaticResource Line}"
-                                    BorderThickness="1"
-                                    CornerRadius="4"
-                                    Padding="8,3">
-                                <TextBlock Text="{Binding DevelopmentClickableText}"
-                                           Foreground="{StaticResource SubText}"
-                                           FontSize="11" />
-                            </Border>
                             <TextBlock Text="{Binding ModuleFlowTitleText}"
                                        Style="{StaticResource SectionTitle}"
                                        VerticalAlignment="Center" />

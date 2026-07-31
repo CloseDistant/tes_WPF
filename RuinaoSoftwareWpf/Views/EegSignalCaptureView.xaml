@@ -5,7 +5,6 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:renderers="clr-namespace:RuinaoSoftwareWpf.Views.Renderers"
              Focusable="True"
-             PreviewKeyDown="EegPage_PreviewKeyDown"
              mc:Ignorable="d"
              Background="{StaticResource Bg}">
     <UserControl.Resources>
