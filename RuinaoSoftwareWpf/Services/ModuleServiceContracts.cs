@@ -54,24 +54,79 @@ public sealed record PatientSaveRequest(
     string? HomeAddress,
     string? ClinicalInfo);
 
-public sealed record StimulationRecordRequest(
-    string Action,
+public enum StimulationTreatmentStatus
+{
+    Running,
+    Ended,
+    Incomplete
+}
+
+public enum StimulationEndType
+{
+    NormalCompletion,
+    ManualTermination,
+    AbnormalTermination
+}
+
+public static class StimulationEndReasonCodes
+{
+    public const string DurationCompleted = "DURATION_COMPLETED";
+    public const string ChannelStop = "CHANNEL_STOP";
+    public const string EmergencyStop = "EMERGENCY_STOP";
+    public const string SoftwareInterrupted = "SOFTWARE_INTERRUPTED";
+    public const string DeviceDisconnected = "DEVICE_DISCONNECTED";
+    public const string ImpedanceAbnormal = "IMPEDANCE_ABNORMAL";
+    public const string CommunicationLost = "COMMUNICATION_LOST";
+    public const string DeviceError = "DEVICE_ERROR";
+}
+
+public sealed record StimulationChannelStartRequest(
+    string ChannelName,
+    double CurrentMilliamp,
+    double PlannedDurationSeconds,
+    string Polarity,
+    string ParameterSnapshotJson,
+    long? PlannedTotalCount = null);
+
+public sealed record StimulationRunStartRequest(
     string GroupTitle,
-    string SelectedChannelNames,
-    string Status,
-    string? StimulationType = null,
-    string? PrescriptionName = null,
-    string? AdverseReactionRecord = null,
-    string? ParameterSnapshotJson = null);
+    string StimulationType,
+    string? PrescriptionName,
+    IReadOnlyList<StimulationChannelStartRequest> Channels);
+
+public sealed record StimulationChannelEndItem(
+    string ChannelName,
+    long? CompletedCount = null);
+
+public sealed record StimulationChannelsEndRequest(
+    string StimulationType,
+    IReadOnlyList<StimulationChannelEndItem> Channels,
+    StimulationEndType EndType,
+    string EndReasonCode,
+    string? EndReasonDetail = null);
+
+public sealed record StimulationChannelTreatmentRecord(
+    long Id,
+    string ChannelName,
+    StimulationTreatmentStatus Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? EndedAt,
+    StimulationEndType? EndType,
+    string? EndReasonCode,
+    string? EndReasonDetail,
+    long? PlannedTotalCount,
+    long? CompletedCount);
 
 public sealed record StimulationTreatmentRecord(
     long Id,
+    string RunId,
     string PatientDisplay,
     string StimulationType,
     DateOnly TreatmentDate,
     string PrescriptionName,
     string AdverseReactionRecord,
-    PrescriptionDefinition ParameterRecord);
+    PrescriptionDefinition ParameterRecord,
+    IReadOnlyList<StimulationChannelTreatmentRecord> Channels);
 
 /// <summary>
 /// 患者服务接口。
@@ -102,7 +157,13 @@ public interface IPatientService
 
 public interface IStimulationRecordService
 {
-    Task RecordAsync(StimulationRecordRequest request, CancellationToken cancellationToken = default);
+    Task<string> StartRunAsync(
+        StimulationRunStartRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task EndChannelsAsync(
+        StimulationChannelsEndRequest request,
+        CancellationToken cancellationToken = default);
 
     Task<PageResult<StimulationTreatmentRecord>> GetTreatmentRecordsPageAsync(
         PageRequest request,

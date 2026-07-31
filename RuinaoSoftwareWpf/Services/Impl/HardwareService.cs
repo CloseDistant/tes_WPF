@@ -6,8 +6,8 @@ using RuinaoTesHardware;
 /// 硬件业务服务的具体实现。
 ///
 /// 它位于 ViewModel 和硬件协议桥接层之间：
-/// - 接收来自界面的联机、开始、暂停、急停等命令。
-/// - 串行调用 RuinaoTesProtocolBridge，避免多个硬件命令同时下发。
+/// - 接收来自界面的联机、开始、停止、急停等命令。
+/// - 串行调用 RuinaoTesHardwareBridge，避免多个硬件命令同时下发。
 /// - 维护心跳检测，判断设备是否仍然在线。
 /// - 返回 HardwareOperationResult，供界面更新底部状态栏。
 /// </summary>
@@ -18,7 +18,7 @@ public sealed class HardwareService : IHardwareService
 
     // 这里故意直接依赖具体 Bridge，而不是再套一层接口。
     // 这样在 Visual Studio 中可以从 HardwareService 直接“转到定义/查找引用”到 DLL 调用集中点。
-    private readonly RuinaoTesProtocolBridge protocolBridge;
+    private readonly RuinaoTesHardwareBridge hardwareBridge;
     private readonly ILoggingService logger;
     private readonly IDeviceStateMachine deviceStateMachine;
     private readonly IAuditLogService auditLog;
@@ -36,14 +36,14 @@ public sealed class HardwareService : IHardwareService
     public event EventHandler<HardwareConnectionChangedEventArgs>? ConnectionChanged;
 
     public HardwareService(
-        RuinaoTesProtocolBridge protocolBridge,
+        RuinaoTesHardwareBridge hardwareBridge,
         ILoggingService logger,
         IDeviceStateMachine deviceStateMachine,
         IAuditLogService auditLog,
         IStimulationRecordService stimulationRecordService,
         IDebugHardwareSimulationService debugHardwareSimulation)
     {
-        this.protocolBridge = protocolBridge;
+        this.hardwareBridge = hardwareBridge;
         this.logger = logger;
         this.deviceStateMachine = deviceStateMachine;
         this.auditLog = auditLog;
@@ -216,16 +216,34 @@ public sealed class HardwareService : IHardwareService
             await RunDeviceOperationAsync(token => StartGroupOnProtocolBridgeAsync(group, token), cancellationToken);
         }
 
-        await stimulationRecordService.RecordAsync(
-            new StimulationRecordRequest(
-                "start",
-                group.Title,
-                selectedChannelNames,
-                "running",
-                parameterRecord.StimulationType,
-                parameterRecord.Name,
-                ParameterSnapshotJson: StimulationRecordParameters.ToJson(parameterRecord)),
-            cancellationToken);
+        try
+        {
+            await stimulationRecordService.StartRunAsync(
+                StimulationRecordParameters.CreateRunStartRequest(group, parameterRecord),
+                cancellationToken);
+        }
+        catch (Exception recordException)
+        {
+            if (!useDebugMock)
+            {
+                try
+                {
+                    await RunDeviceOperationAsync(
+                        token => StopGroupOnHardwareBridgeAsync(group, token),
+                        CancellationToken.None);
+                }
+                catch (Exception stopException)
+                {
+                    throw new InvalidOperationException(
+                        "硬件已确认启动，但治疗记录创建失败，且安全停止命令也未成功。请立即检查设备状态。",
+                        new AggregateException(recordException, stopException));
+                }
+            }
+
+            throw new InvalidOperationException(
+                "治疗记录创建失败，刺激未进入软件运行状态。",
+                recordException);
+        }
 
         if (useDebugMock)
         {
@@ -237,27 +255,37 @@ public sealed class HardwareService : IHardwareService
     }
 
     /// <summary>
-    /// 暂停某个 TI 刺激组。
-    /// 流程：下发参数，再下发暂停命令。
+    /// 停止某个刺激组。
+    /// 流程：下发参数，再下发停止命令。
     /// </summary>
-    public async Task<HardwareOperationResult> PauseGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default)
+    public async Task<HardwareOperationResult> StopGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string stimulationType,
+        CancellationToken cancellationToken = default)
     {
         var useDebugMock = ShouldUseDebugStimulationMock();
         if (!useDebugMock)
         {
-            await RunDeviceOperationAsync(token => PauseGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+            await RunDeviceOperationAsync(token => StopGroupOnHardwareBridgeAsync(group, token), cancellationToken);
         }
 
-        await stimulationRecordService.RecordAsync(new StimulationRecordRequest("pause", group.Title, selectedChannelNames, "paused", "TI"), cancellationToken);
+        await stimulationRecordService.EndChannelsAsync(
+            new StimulationChannelsEndRequest(
+                stimulationType,
+                GetChannelNames(group).Select(item => new StimulationChannelEndItem(item)).ToArray(),
+                StimulationEndType.ManualTermination,
+                StimulationEndReasonCodes.ChannelStop),
+            cancellationToken);
 
         if (useDebugMock)
         {
-            logger.Debug($"DEBUG 模拟暂停刺激：group={group.Title}, channels={selectedChannelNames}");
-            return DebugMockResult("TI", "已停止");
+            logger.Debug($"DEBUG 模拟停止刺激：group={group.Title}, channels={selectedChannelNames}");
+            return DebugMockResult(stimulationType, "已停止");
         }
 
-        logger.Hardware($"暂停/停止刺激：硬件 ACK 已确认，group={group.Title}, channels={selectedChannelNames}");
-        return Result("设备：已确认 | 模式：TI | 刺激：已暂停");
+        logger.Hardware($"停止刺激：硬件 ACK 已确认，group={group.Title}, channels={selectedChannelNames}");
+        return Result($"设备：已确认 | 模式：{stimulationType} | 刺激：已停止");
     }
 
     /// <summary>
@@ -276,7 +304,14 @@ public sealed class HardwareService : IHardwareService
             await RunDeviceOperationAsync(token => EmergencyStopGroupOnProtocolBridgeAsync(group, token), cancellationToken);
         }
 
-        await stimulationRecordService.RecordAsync(new StimulationRecordRequest("emergency_stop", group.Title, selectedChannelNames, "stopped", stimulationType), cancellationToken);
+        await stimulationRecordService.EndChannelsAsync(
+            new StimulationChannelsEndRequest(
+                stimulationType,
+                GetChannelNames(group).Select(item => new StimulationChannelEndItem(item)).ToArray(),
+                StimulationEndType.ManualTermination,
+                StimulationEndReasonCodes.EmergencyStop,
+                selectedChannelNames),
+            cancellationToken);
 
         if (useDebugMock)
         {
@@ -297,16 +332,15 @@ public sealed class HardwareService : IHardwareService
         var useDebugMock = ShouldUseDebugStimulationMock();
         if (!useDebugMock)
         {
-            await RunDeviceOperationAsync(token => PauseGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+            await RunDeviceOperationAsync(token => StopGroupOnHardwareBridgeAsync(group, token), cancellationToken);
         }
 
-        await stimulationRecordService.RecordAsync(
-            new StimulationRecordRequest(
-                "complete",
-                group.Title,
-                selectedChannelNames,
-                "completed",
-                stimulationType),
+        await stimulationRecordService.EndChannelsAsync(
+            new StimulationChannelsEndRequest(
+                stimulationType,
+                GetChannelNames(group).Select(item => new StimulationChannelEndItem(item)).ToArray(),
+                StimulationEndType.NormalCompletion,
+                StimulationEndReasonCodes.DurationCompleted),
             cancellationToken);
 
         if (useDebugMock)
@@ -344,41 +378,41 @@ public sealed class HardwareService : IHardwareService
 
     /// <summary>
     /// 协议 DLL 调用映射区。
-    /// 这些方法故意集中保留在 HardwareService 内，方便从业务动作一路追到 RuinaoTesProtocolBridge。
+    /// 这些方法集中保留在 HardwareService 内，方便从业务动作追到共用硬件 DLL 的调用入口。
     /// </summary>
     private Task<BackplaneHandshakeResult> ConnectOnProtocolBridgeAsync(CancellationToken cancellationToken)
     {
-        return protocolBridge.ConnectAsync(cancellationToken);
+        return hardwareBridge.ConnectAsync(cancellationToken);
     }
 
     /// <summary>调用 Bridge 生成/发送握手帧。</summary>
     private Task<BackplaneHandshakeResult> HandshakeOnProtocolBridgeAsync(CancellationToken cancellationToken)
     {
-        return protocolBridge.HandshakeAsync(cancellationToken);
+        return hardwareBridge.HandshakeAsync(cancellationToken);
     }
 
     /// <summary>调用 Bridge 断开设备链路。</summary>
     private Task DisconnectOnProtocolBridgeAsync(CancellationToken cancellationToken)
     {
-        return protocolBridge.DisconnectAsync(cancellationToken);
+        return hardwareBridge.DisconnectAsync(cancellationToken);
     }
 
     /// <summary>调用 Bridge 读取产品型号寄存器。</summary>
     private Task ReadProductModelOnProtocolBridgeAsync(CancellationToken cancellationToken)
     {
-        return protocolBridge.ReadProductModelAsync(cancellationToken);
+        return hardwareBridge.ReadProductModelAsync(cancellationToken);
     }
 
     /// <summary>调用 Bridge 读取板卡型号寄存器。</summary>
     private Task ReadBoardModelOnProtocolBridgeAsync(CancellationToken cancellationToken)
     {
-        return protocolBridge.ReadBoardModelAsync(cancellationToken);
+        return hardwareBridge.ReadBoardModelAsync(cancellationToken);
     }
 
     /// <summary>调用 Bridge 读取阻抗寄存器。</summary>
     private Task ReadImpedanceOnProtocolBridgeAsync(CancellationToken cancellationToken)
     {
-        return protocolBridge.ReadImpedanceAsync(cancellationToken);
+        return hardwareBridge.ReadImpedanceAsync(cancellationToken);
     }
 
     /// <summary>
@@ -386,22 +420,22 @@ public sealed class HardwareService : IHardwareService
     /// </summary>
     private async Task StartGroupOnProtocolBridgeAsync(TiGroup group, CancellationToken cancellationToken)
     {
-        await protocolBridge.SendTiParametersAsync(group, cancellationToken);
-        await protocolBridge.StartTiAsync(cancellationToken);
+        await hardwareBridge.SendTiParametersAsync(group, cancellationToken);
+        await hardwareBridge.StartTiAsync(cancellationToken);
     }
 
-    /// <summary>调用 Bridge 暂停 TI 刺激组。</summary>
-    private async Task PauseGroupOnProtocolBridgeAsync(TiGroup group, CancellationToken cancellationToken)
+    /// <summary>调用硬件桥停止刺激组。</summary>
+    private async Task StopGroupOnHardwareBridgeAsync(TiGroup group, CancellationToken cancellationToken)
     {
-        await protocolBridge.SendTiParametersAsync(group, cancellationToken);
-        await protocolBridge.PauseTiAsync(cancellationToken);
+        await hardwareBridge.SendTiParametersAsync(group, cancellationToken);
+        await hardwareBridge.StopTiAsync(cancellationToken);
     }
 
     /// <summary>调用 Bridge 对 TI 刺激组执行急停。</summary>
     private async Task EmergencyStopGroupOnProtocolBridgeAsync(TiGroup group, CancellationToken cancellationToken)
     {
-        await protocolBridge.SendTiParametersAsync(group, cancellationToken);
-        await protocolBridge.EmergencyStopAsync(cancellationToken);
+        await hardwareBridge.SendTiParametersAsync(group, cancellationToken);
+        await hardwareBridge.EmergencyStopAsync(cancellationToken);
     }
 
     private bool ShouldUseDebugStimulationMock()
@@ -420,6 +454,13 @@ public sealed class HardwareService : IHardwareService
             $"设备：DEBUG 模拟联机 | 模式：{stimulationType} | 刺激：{status}",
             "当前为 DEBUG 模拟运行，不会向真实硬件输出刺激。");
     }
+
+    private static string[] GetChannelNames(TiGroup group) =>
+        group.Channels
+            .Select(item => item.Name)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
     /// <summary>
     /// 串行执行硬件操作的辅助方法。
@@ -534,7 +575,7 @@ public sealed class HardwareService : IHardwareService
                 try
                 {
                     deviceReady = await RunDeviceOperationAsync(
-                        protocolBridge.IsBackplaneDeviceReadyAsync,
+                        hardwareBridge.IsBackplaneDeviceReadyAsync,
                         cancellationToken);
                 }
                 catch (OperationCanceledException)
@@ -570,7 +611,7 @@ public sealed class HardwareService : IHardwareService
     {
         try
         {
-            await protocolBridge.DisconnectAsync(CancellationToken.None);
+            await hardwareBridge.DisconnectAsync(CancellationToken.None);
         }
         catch (Exception exception)
         {

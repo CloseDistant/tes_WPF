@@ -18,6 +18,7 @@ public sealed class PrescriptionViewModel : ObservableObject
     private readonly IAuthorizationService authorizationService;
     private readonly IAuditTrailService auditTrail;
     private readonly IAuditLogService auditLog;
+    private readonly IToastService toastService;
     private PrescriptionDefinition? selectedPrescription;
     private bool initialized;
     private int nextOffset;
@@ -32,7 +33,8 @@ public sealed class PrescriptionViewModel : ObservableObject
         IAccountService accountService,
         IAuthorizationService authorizationService,
         IAuditTrailService auditTrail,
-        IAuditLogService auditLog)
+        IAuditLogService auditLog,
+        IToastService toastService)
     {
         this.prescriptionService = prescriptionService;
         this.dialogService = dialogService;
@@ -41,6 +43,7 @@ public sealed class PrescriptionViewModel : ObservableObject
         this.authorizationService = authorizationService;
         this.auditTrail = auditTrail;
         this.auditLog = auditLog;
+        this.toastService = toastService;
         AddCommand = new AsyncRelayCommand(AddAsync, onError: ex => ShowOperationError("新建处方", ex));
         EditCommand = new AsyncRelayCommand(EditAsync, onError: ex => ShowOperationError("编辑处方", ex));
         CopyCommand = new AsyncRelayCommand(CopyAsync, onError: ex =>
@@ -130,7 +133,7 @@ public sealed class PrescriptionViewModel : ObservableObject
             .Where(item => featureVisibilityService.IsVisible(item.Key))
             .Select(item => item.ShortName)
             .ToArray();
-        var editor = new PrescriptionEditorDialog(prescription, isNew, availableTypes)
+        var editor = new PrescriptionEditorDialog(prescription, isNew, availableTypes, toastService)
         {
             Owner = Application.Current?.MainWindow
         };

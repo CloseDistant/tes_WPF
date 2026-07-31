@@ -23,8 +23,12 @@ public interface IStimulationEngine
         string prescriptionName,
         CancellationToken cancellationToken = default);
 
-    /// <summary>暂停 TI 刺激组。</summary>
-    Task<HardwareOperationResult> PauseTiGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default);
+    /// <summary>停止刺激组；停止后不可继续，只能重新开始。</summary>
+    Task<HardwareOperationResult> StopGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string stimulationType,
+        CancellationToken cancellationToken = default);
 
     /// <summary>急停 TI 刺激组。</summary>
     Task<HardwareOperationResult> EmergencyStopTiGroupAsync(TiGroup group, string reason, CancellationToken cancellationToken = default);

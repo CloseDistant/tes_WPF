@@ -5,43 +5,96 @@ namespace RuinaoSoftwareWpf.Tests;
 public sealed class PrescriptionEditorViewModelTests
 {
     [Fact]
-    public void SwitchingToPulseCurrent_ForcesIntervalModeAndClearsTimingFields()
+    public void EditingDirectCurrent_DoesNotAllowChangingStimulationType()
     {
         var editor = new PrescriptionEditorViewModel(CreateDirectCurrentPrescription(), false, ["tDCS", "tPCS"]);
 
         editor.StimulationType = PrescriptionDefinition.PulseCurrentStimulationType;
 
-        Assert.True(editor.IsPulseCurrent);
-        Assert.False(editor.IsDeliveryModeEnabled);
-        Assert.True(editor.IsIntervalMode);
-        Assert.False(editor.IsRampDownEnabled);
-        Assert.Equal(PrescriptionDeliveryModes.Interval, editor.DeliveryMode);
-        Assert.Equal("治疗时间 (s)", editor.TotalDurationLabel);
-        Assert.Equal("间隔宽度 (ms)", editor.IntervalLabel);
-        Assert.Equal("脉冲宽度 (ms)", editor.SessionDurationLabel);
-        Assert.Equal("上升宽度 (ms)", editor.RampUpLabel);
-        Assert.Equal("渐降时间", editor.RampDownLabel);
-        Assert.Equal("/", editor.RampDownSecondsEntry);
-        Assert.Equal(string.Empty, editor.TotalDurationMinutes);
-        Assert.Equal(string.Empty, editor.IntervalMinutesEntry);
-        Assert.Equal(string.Empty, editor.SessionDurationMinutesEntry);
-        Assert.Equal(string.Empty, editor.RampUpSeconds);
+        Assert.False(editor.IsPulseCurrent);
+        Assert.True(editor.IsDirectCurrent);
+        Assert.Equal("tDCS", editor.StimulationType);
+        Assert.False(editor.IsModeSelectionStep);
     }
 
     [Fact]
-    public void SwitchingFromPulseCurrentToDirectCurrent_ClearsPulseCurrentTimingFields()
+    public void EditingPulseCurrent_DoesNotAllowChangingStimulationType()
     {
         var editor = new PrescriptionEditorViewModel(CreatePulseCurrentPrescription(), false, ["tDCS", "tPCS"]);
 
         editor.StimulationType = "tDCS";
 
-        Assert.False(editor.IsPulseCurrent);
-        Assert.True(editor.IsDeliveryModeEnabled);
-        Assert.Equal(string.Empty, editor.TotalDurationMinutes);
-        Assert.Equal(string.Empty, editor.IntervalMinutesEntry);
-        Assert.Equal(string.Empty, editor.SessionDurationMinutesEntry);
-        Assert.Equal(string.Empty, editor.RampUpSeconds);
-        Assert.Equal(string.Empty, editor.RampDownSecondsEntry);
+        Assert.True(editor.IsPulseCurrent);
+        Assert.False(editor.IsDirectCurrent);
+        Assert.Equal(PrescriptionDefinition.PulseCurrentStimulationType, editor.StimulationType);
+        Assert.False(editor.IsModeSelectionStep);
+    }
+
+    [Fact]
+    public void NewPrescription_SelectsOnlyVisibleModesAndLocksChoiceAfterNextStep()
+    {
+        var editor = new PrescriptionEditorViewModel(
+            CreateEmptyPrescription(),
+            true,
+            ["tDCS", PrescriptionDefinition.PulseCurrentStimulationType]);
+
+        Assert.True(editor.IsModeSelectionStep);
+        Assert.Equal(["tDCS", PrescriptionDefinition.PulseCurrentStimulationType],
+            editor.AvailableModeChoices.Select(item => item.ShortName));
+        Assert.Equal("tDCS", editor.StimulationType);
+        Assert.Equal(412, editor.DialogHeight);
+        Assert.True(editor.ContinueToEditor());
+
+        editor.StimulationType = PrescriptionDefinition.PulseCurrentStimulationType;
+
+        Assert.True(editor.IsEditorStep);
+        Assert.Equal(650, editor.DialogHeight);
+        Assert.Equal("tDCS", editor.StimulationType);
+        Assert.Equal(DirectCurrentParameterRules.DefaultCurrentMilliamp, editor.CurrentMilliamp);
+        Assert.Equal(DirectCurrentParameterRules.DefaultTotalDurationSeconds, editor.TotalDurationMinutes);
+    }
+
+    [Fact]
+    public void TryBuildDirectCurrent_PersistsExactSecondValuesWithoutPolarity()
+    {
+        var editor = new PrescriptionEditorViewModel(CreateEmptyPrescription(), true, ["tDCS"]);
+        Assert.True(editor.ContinueToEditor());
+        editor.Name = "直流测试处方";
+        editor.Indication = "测试";
+        editor.CurrentMilliamp = "1.23";
+        editor.RampUpSeconds = "0.4";
+        editor.RampDownSecondsEntry = "0.6";
+        editor.TotalDurationMinutes = "1234.5";
+        editor.IntervalMinutesEntry = "2.5";
+        editor.SessionDurationMinutesEntry = "60.1";
+
+        var built = editor.TryBuild(out var prescription);
+
+        Assert.True(built, editor.ErrorMessage);
+        Assert.Equal(1.23, prescription.CurrentMilliamp);
+        Assert.Equal(1234.5, prescription.DirectCurrentTotalDurationSeconds);
+        Assert.Equal(2.5, prescription.DirectCurrentIntervalDurationSeconds);
+        Assert.Equal(60.1, prescription.DirectCurrentSingleDurationSeconds);
+        Assert.Equal(0.4, prescription.DirectCurrentRampUpDurationSeconds);
+        Assert.Equal(0.6, prescription.DirectCurrentRampDownDurationSeconds);
+        Assert.Null(prescription.ChannelPolarities);
+    }
+
+    [Fact]
+    public void TryBuildDirectCurrent_RejectsSingleDurationEqualToRampSum()
+    {
+        var editor = new PrescriptionEditorViewModel(CreateEmptyPrescription(), true, ["tDCS"]);
+        Assert.True(editor.ContinueToEditor());
+        editor.Name = "直流测试处方";
+        editor.Indication = "测试";
+        editor.RampUpSeconds = "0.5";
+        editor.RampDownSecondsEntry = "0.5";
+        editor.SessionDurationMinutesEntry = "1.0";
+
+        var built = editor.TryBuild(out _);
+
+        Assert.False(built);
+        Assert.Contains("必须大于", editor.ErrorMessage);
     }
 
     [Fact]
@@ -53,7 +106,7 @@ public sealed class PrescriptionEditorViewModelTests
             Indication = "测试适应症",
             StimulationType = PrescriptionDefinition.PulseCurrentStimulationType,
             CurrentMilliamp = "2",
-            TotalDurationMinutes = "1200",
+            TotalDurationMinutes = "1200.5",
             SessionDurationMinutesEntry = "10",
             RampUpSeconds = "5",
             IntervalMinutesEntry = "20",
@@ -67,7 +120,8 @@ public sealed class PrescriptionEditorViewModelTests
         Assert.Equal(PrescriptionDefinition.PulseCurrentStimulationType, prescription.StimulationType);
         Assert.Equal(PrescriptionDeliveryModes.Interval, prescription.DeliveryMode);
         Assert.Equal(2, prescription.CurrentMilliamp);
-        Assert.Equal(1200, prescription.PulseTreatmentDurationSeconds);
+        Assert.Equal(1201, prescription.PulseTreatmentDurationSeconds);
+        Assert.Equal(1200.5, prescription.PulseTreatmentDurationSecondsValue);
         Assert.Equal(10, prescription.PulseWidthMilliseconds);
         Assert.Equal(5, prescription.PulseRiseWidthMilliseconds);
         Assert.Equal(20, prescription.PulseIntervalWidthMilliseconds);
@@ -97,6 +151,27 @@ public sealed class PrescriptionEditorViewModelTests
 
         Assert.False(built);
         Assert.Contains("脉冲宽度", editor.ErrorMessage);
+    }
+
+    [Fact]
+    public void TryBuildPulseCurrent_RejectsZeroIntervalWidth()
+    {
+        var editor = new PrescriptionEditorViewModel(CreateEmptyPrescription(), true, ["tPCS"])
+        {
+            Name = "tPCS处方",
+            Indication = "测试适应症",
+            StimulationType = PrescriptionDefinition.PulseCurrentStimulationType,
+            CurrentMilliamp = "2",
+            TotalDurationMinutes = "1200.0",
+            SessionDurationMinutesEntry = "10",
+            RampUpSeconds = "5",
+            IntervalMinutesEntry = "0"
+        };
+
+        var built = editor.TryBuild(out _);
+
+        Assert.False(built);
+        Assert.Contains("间隔宽度", editor.ErrorMessage);
     }
 
     [Theory]
@@ -136,7 +211,7 @@ public sealed class PrescriptionEditorViewModelTests
         var csv = PrescriptionViewModel.BuildCsv(CreatePulseCurrentPrescription());
 
         Assert.StartsWith("参数,内容", csv);
-        Assert.Contains("\"治疗时间\",\"1200 s\"", csv);
+        Assert.Contains("\"治疗时间\",\"1200.0 s\"", csv);
         Assert.Contains("\"脉冲宽度\",\"10 ms\"", csv);
         Assert.Contains("\"上升宽度\",\"5 ms\"", csv);
         Assert.Contains("\"间隔宽度\",\"20 ms\"", csv);
@@ -154,9 +229,9 @@ public sealed class PrescriptionEditorViewModelTests
         Assert.Equal("渐降时间", pulseCurrent.RampDownLabel);
         Assert.Equal("/", pulseCurrent.RampDownDisplay);
         Assert.Equal("渐升时间", directCurrent.RampUpLabel);
-        Assert.Equal("30 s", directCurrent.RampUpDisplay);
+        Assert.Equal("30.0 s", directCurrent.RampUpDisplay);
         Assert.Equal("渐降时间", directCurrent.RampDownLabel);
-        Assert.Equal("30 s", directCurrent.RampDownDisplay);
+        Assert.Equal("30.0 s", directCurrent.RampDownDisplay);
     }
 
     [Theory]

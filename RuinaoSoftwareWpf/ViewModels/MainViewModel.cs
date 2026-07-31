@@ -1,6 +1,7 @@
 using System.Windows.Input;
 using System.Windows;
 using System.Windows.Controls;
+using RuinaoSoftwareWpf.ApplicationContracts;
 using RuinaoSoftwareWpf.Views.Dialogs;
 
 namespace RuinaoSoftwareWpf;
@@ -111,7 +112,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         BuildNavigationItems();
 
         AppendLog("UI READY  hardware debug prototype");
-        AppendLog("PROTO DLL READY  RuinaoTesProtocol referenced");
+        AppendLog("HARDWARE SDK READY  RuinaoTesHardware loaded");
 
         // 设备菜单操作复用统一 Toast；异步命令在收到结果前会自动禁用对应按钮。
         connectCommand = new AsyncRelayCommand(
@@ -145,12 +146,12 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
             exception => HandleDeviceOperationError("安全审计打开失败", "无法打开安全审计，请稍后重试。", exception));
         OpenAuditTrailCommand = openAuditTrailCommand;
 
-        ExitCommand = CreateHardwareCommand(async _ =>
+        ExitCommand = CreateHardwareCommand(_ =>
         {
             AppendLog("EXIT requested from toolbar");
             logger.Info("用户点击退出软件");
-            await ShutdownAsync();
             CloseRequested?.Invoke(this, EventArgs.Empty);
+            return Task.CompletedTask;
         });
 
         ToggleLanguageCommand = new RelayCommand(_ => ToggleLanguage());
@@ -708,6 +709,11 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
             Config.LeaveSettingsPage();
         }
 
+        if (currentPage == AppPage.AssessmentCapture && page != AppPage.AssessmentCapture)
+        {
+            AssessmentCapture.ReleaseCameraForNavigation();
+        }
+
         var nextPageViewModel = page == AppPage.Control
             ? PrepareStimulationPageViewModel()
             : ResolvePageViewModel(page);
@@ -994,7 +1000,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     }
 
     /// <summary>
-    /// 软件退出时调用：先优雅关闭硬件服务，再触发关闭窗口事件。
+    /// 软件退出时由主窗口统一调用：停止采集、等待写入完成并安全关闭硬件和 Session。
     /// </summary>
     public async Task ShutdownAsync()
     {
@@ -1017,7 +1023,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
             if (AssessmentCapture.IsMediaRecording)
             {
-                AssessmentCapture.RequestMediaStop("interrupted", "软件退出，当前采集已中断。");
+                AssessmentCapture.RequestMediaStop(
+                    CaptureMediaStopReason.Discarded,
+                    "软件退出，当前模块尝试已取消并作废。");
             }
 
             await AssessmentCapture.WaitForMediaIdleAsync();

@@ -98,6 +98,28 @@ public sealed class PulseCurrentChannelSelectionTests
     }
 
     [Fact]
+    public void StopChannelCommand_StopsOnlyTargetAndRestoresStartState()
+    {
+        using var viewModel = CreateViewModel();
+        var first = viewModel.Channels[0];
+        var second = viewModel.Channels[1];
+        ConfigureValidPulseParameters([first, second]);
+
+        viewModel.StartChannelCommand.Execute(first);
+        viewModel.StartChannelCommand.Execute(second);
+
+        Assert.True(viewModel.StopChannelCommand.CanExecute(first));
+        viewModel.StopChannelCommand.Execute(first);
+
+        Assert.False(first.IsStimulating);
+        Assert.True(first.IsParameterEditingEnabled);
+        Assert.Equal("00:00:00", first.RemainingTime);
+        Assert.True(viewModel.StartChannelCommand.CanExecute(first));
+        Assert.False(viewModel.StopChannelCommand.CanExecute(first));
+        Assert.True(second.IsStimulating);
+    }
+
+    [Fact]
     public void TryApplyPrescription_AppliesPulseCurrentParametersToAllChannels()
     {
         var viewModel = CreateViewModel();
@@ -129,8 +151,8 @@ public sealed class PulseCurrentChannelSelectionTests
             viewModel.Channels,
             channel =>
             {
-                Assert.Equal("2", channel.CurrentMilliamp);
-                Assert.Equal("1200", channel.TreatmentDurationSeconds);
+            Assert.Equal("2.00", channel.CurrentMilliamp);
+                Assert.Equal("1200.0", channel.TreatmentDurationSeconds);
                   Assert.Equal("10", channel.PulseWidthMilliseconds);
                   Assert.Equal("5", channel.RiseWidthMilliseconds);
                   Assert.Equal("20", channel.IntervalWidthMilliseconds);

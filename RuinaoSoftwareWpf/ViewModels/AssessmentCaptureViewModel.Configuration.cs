@@ -13,7 +13,8 @@ public sealed partial class AssessmentCaptureViewModel
         Demo = 1,
         FaceCheck = 2,
         ModuleExecution = 3,
-        Completed = 4
+        Completed = 4,
+        Saving = 5
     }
 
     /// <summary>

@@ -139,15 +139,34 @@ public partial class MainWindow : Window
         IsEnabled = false;
         try
         {
-            logger.Info("主窗口正在执行统一关闭流程");
-            await viewModel.ShutdownAsync();
-            await accountService.LogoutAsync();
-            logger.Info("业务关闭流程完成，开始释放依赖注入根容器");
-            await AppComposition.DisposeAsync();
-        }
-        catch (Exception exception)
-        {
-            logger.Error("统一关闭流程失败，将继续关闭窗口", exception);
+            try
+            {
+                logger.Info("主窗口正在停止采集、硬件和 Session");
+                await viewModel.ShutdownAsync();
+            }
+            catch (Exception exception)
+            {
+                logger.Error("业务关闭流程失败，将继续尝试退出登录", exception);
+            }
+
+            try
+            {
+                await accountService.LogoutAsync();
+            }
+            catch (Exception exception)
+            {
+                logger.Error("退出登录记录失败，将继续释放依赖注入根容器", exception);
+            }
+
+            try
+            {
+                logger.Info("开始释放依赖注入根容器");
+                await AppComposition.DisposeAsync();
+            }
+            catch (Exception exception)
+            {
+                logger.Error("依赖注入根容器释放失败，将继续关闭窗口", exception);
+            }
         }
         finally
         {

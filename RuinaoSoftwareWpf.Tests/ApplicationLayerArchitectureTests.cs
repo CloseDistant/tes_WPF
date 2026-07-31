@@ -80,7 +80,6 @@ public sealed class ApplicationLayerArchitectureTests
         Assert.NotNull(services.GetService(typeof(IEegAcquisitionService)));
 
         Assert.NotNull(services.GetService(typeof(IHardwareService)));
-        Assert.NotNull(services.GetService(typeof(ICaptureMediaRecorder)));
         Assert.NotNull(services.GetService(typeof(ILegacyEegAcquisitionService)));
     }
 
@@ -94,6 +93,40 @@ public sealed class ApplicationLayerArchitectureTests
             .ToArray();
 
         Assert.DoesNotContain(typeof(IUserDialogService), constructorParameterTypes);
+        Assert.Contains(typeof(ICaptureMediaService), constructorParameterTypes);
+    }
+
+    [Fact]
+    public void AssessmentCaptureViewModel_UsesApplicationMediaService()
+    {
+        var constructorParameterTypes = typeof(AssessmentCaptureViewModel)
+            .GetConstructors()
+            .SelectMany(constructor => constructor.GetParameters())
+            .Select(parameter => parameter.ParameterType)
+            .ToArray();
+
+        Assert.Contains(typeof(ICaptureMediaService), constructorParameterTypes);
+        Assert.Contains(typeof(ICaptureVideoFrameSink), constructorParameterTypes);
+        Assert.Contains(typeof(ICaptureFormRecordService), constructorParameterTypes);
+    }
+
+    [Fact]
+    public void Views_DoNotResolveCaptureOutputPaths()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var viewsDirectory = Path.Combine(repositoryRoot, "RuinaoSoftwareWpf", "Views");
+        var violations = Directory
+            .EnumerateFiles(viewsDirectory, "*.cs", SearchOption.AllDirectories)
+            .Where(path => File.ReadAllText(path).Contains(
+                "CaptureOutputPathProvider",
+                StringComparison.Ordinal))
+            .Select(path => Path.GetRelativePath(repositoryRoot, path))
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(
+            violations.Length == 0,
+            $"View 不得直接解析采集输出路径：{string.Join(", ", violations)}");
     }
 
     private static void AssertPureType(Type type, HashSet<Type> visited)

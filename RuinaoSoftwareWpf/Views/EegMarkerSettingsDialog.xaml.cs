@@ -144,7 +144,11 @@ public partial class EegMarkerSettingsDialog : Window
         }
 
         var color = GetSelectedColor();
-        markerTags.Add(new EegMarkerTag(name, shortcut, color));
+        markerTags.Add(new EegMarkerTag(
+            name,
+            shortcut,
+            color,
+            $"eeg.marker.custom.{Guid.NewGuid():N}"));
         NameTextBox.Clear();
         ShortcutTextBox.Clear();
         RenderTagList();

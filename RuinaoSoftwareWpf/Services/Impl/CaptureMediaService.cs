@@ -3,16 +3,17 @@ namespace RuinaoSoftwareWpf;
 using RuinaoSoftwareWpf.ApplicationContracts;
 
 /// <summary>
-/// 保留旧录帧实现，同时向应用层暴露不包含 OpenCV 类型的控制契约。
+/// 向应用层暴露不包含 OpenCV 类型的媒体控制契约。
+/// OpenCV 录帧继续由底层 CaptureMediaRecorder 负责。
 /// </summary>
-public sealed class LegacyCaptureMediaServiceAdapter : ICaptureMediaService
+internal sealed class CaptureMediaService : ICaptureMediaService
 {
-    private readonly ICaptureMediaRecorder recorder;
+    private readonly ICaptureMediaBackend recorder;
     private readonly TimeProvider timeProvider;
     private CaptureMediaSession? currentSession;
 
-    public LegacyCaptureMediaServiceAdapter(
-        ICaptureMediaRecorder recorder,
+    public CaptureMediaService(
+        ICaptureMediaBackend recorder,
         TimeProvider timeProvider)
     {
         this.recorder = recorder;
@@ -33,7 +34,7 @@ public sealed class LegacyCaptureMediaServiceAdapter : ICaptureMediaService
         ArgumentNullException.ThrowIfNull(request);
         var legacySession = await recorder.StartAsync(
             new CaptureRecordingRequest(
-                CaptureOutputPathProvider.GetOutputRoot(),
+                request.AssessmentAttemptId,
                 request.SessionKey,
                 request.ModuleCode,
                 request.ModuleName,
@@ -42,11 +43,20 @@ public sealed class LegacyCaptureMediaServiceAdapter : ICaptureMediaService
 
         currentSession = new CaptureMediaSession(
             legacySession.Id,
+            legacySession.AssessmentAttemptId,
             legacySession.SessionKey,
             legacySession.ModuleCode,
             legacySession.ModuleName,
+            legacySession.OutputDirectory,
             timeProvider.GetUtcNow());
         return currentSession;
+    }
+
+    public void RequestStop(
+        CaptureMediaStopReason reason,
+        string? message = null)
+    {
+        recorder.RequestStop(ToLegacyStatus(reason), message ?? string.Empty);
     }
 
     public async Task StopAsync(
@@ -54,7 +64,7 @@ public sealed class LegacyCaptureMediaServiceAdapter : ICaptureMediaService
         string? message = null,
         CancellationToken cancellationToken = default)
     {
-        recorder.RequestStop(ToLegacyStatus(reason), message ?? string.Empty);
+        RequestStop(reason, message);
         await recorder.WaitForIdleAsync(cancellationToken);
     }
 
@@ -69,16 +79,19 @@ public sealed class LegacyCaptureMediaServiceAdapter : ICaptureMediaService
     {
         var session = currentSession ?? new CaptureMediaSession(
             eventArgs.Session.Id,
+            eventArgs.Session.AssessmentAttemptId,
             eventArgs.Session.SessionKey,
             eventArgs.Session.ModuleCode,
             eventArgs.Session.ModuleName,
+            eventArgs.Session.OutputDirectory,
             timeProvider.GetUtcNow());
         currentSession = null;
         Completed?.Invoke(
             this,
             new CaptureMediaCompleted(
                 session,
-                FromLegacyStatus(eventArgs.Status),
+                ToCompletionStatus(eventArgs.Status),
+                ToErrorCode(eventArgs.Status),
                 eventArgs.Message));
     }
 
@@ -93,14 +106,28 @@ public sealed class LegacyCaptureMediaServiceAdapter : ICaptureMediaService
         };
     }
 
-    private static CaptureMediaStopReason FromLegacyStatus(string status)
+    private static CaptureMediaCompletionStatus ToCompletionStatus(string status)
     {
         return status switch
         {
-            "completed" => CaptureMediaStopReason.Completed,
-            "discarded" => CaptureMediaStopReason.Discarded,
-            "merge_failed" => CaptureMediaStopReason.Failed,
-            _ => CaptureMediaStopReason.Interrupted
+            "completed" => CaptureMediaCompletionStatus.Completed,
+            "completed_with_probe_error" => CaptureMediaCompletionStatus.CompletedWithWarnings,
+            "discarded" => CaptureMediaCompletionStatus.Discarded,
+            "interrupted" => CaptureMediaCompletionStatus.Interrupted,
+            _ => CaptureMediaCompletionStatus.Failed
+        };
+    }
+
+    private static string? ToErrorCode(string status)
+    {
+        return status switch
+        {
+            "completed" or "discarded" or "interrupted" => null,
+            "completed_with_probe_error" => "MEDIA_SYNC_PROBE_FAILED",
+            "merge_failed" => "MEDIA_MERGE_FAILED",
+            "video_write_failed" => "VIDEO_WRITE_FAILED",
+            "finalize_failed" => "MEDIA_FINALIZE_FAILED",
+            _ => "MEDIA_CAPTURE_FAILED"
         };
     }
 }

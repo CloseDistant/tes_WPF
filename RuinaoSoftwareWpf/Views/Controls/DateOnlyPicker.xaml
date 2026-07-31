@@ -1,20 +1,65 @@
 <UserControl x:Class="RuinaoSoftwareWpf.Views.Controls.DateOnlyPicker"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root"
              Height="36"
              Focusable="False">
     <UserControl.Resources>
+        <ControlTemplate x:Key="CalendarButtonTemplate" TargetType="Button">
+            <Border x:Name="ButtonBorder"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="3"
+                    Padding="{TemplateBinding Padding}">
+                <ContentPresenter HorizontalAlignment="Center"
+                                  VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="IsEnabled" Value="True" />
+                        <Condition Property="IsMouseOver" Value="True" />
+                    </MultiTrigger.Conditions>
+                    <Setter TargetName="ButtonBorder" Property="Background" Value="#282F3D" />
+                    <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#566176" />
+                </MultiTrigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter TargetName="ButtonBorder" Property="Background" Value="#333B4B" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="ButtonBorder" Property="Background" Value="Transparent" />
+                    <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="Transparent" />
+                    <Setter Property="Foreground" Value="#5E687A" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
         <Style x:Key="DateNavigationButton" TargetType="Button">
-            <Setter Property="Width" Value="30" />
-            <Setter Property="Height" Value="26" />
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="30" />
             <Setter Property="Background" Value="#252C39" />
             <Setter Property="Foreground" Value="#E9EDF4" />
             <Setter Property="BorderBrush" Value="#465164" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template" Value="{StaticResource CalendarButtonTemplate}" />
+        </Style>
+        <Style x:Key="DateHeaderButton" TargetType="Button">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#F0F3F8" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template" Value="{StaticResource CalendarButtonTemplate}" />
         </Style>
         <Style x:Key="DateDayButton" TargetType="Button">
-            <Setter Property="Width" Value="34" />
             <Setter Property="Height" Value="30" />
             <Setter Property="Margin" Value="1" />
             <Setter Property="Background" Value="Transparent" />
@@ -23,26 +68,60 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FontSize" Value="12" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template" Value="{StaticResource CalendarButtonTemplate}" />
+        </Style>
+        <Style x:Key="DateChoiceButton" TargetType="Button" BasedOn="{StaticResource DateDayButton}">
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Margin" Value="2" />
+            <Setter Property="FontSize" Value="13" />
         </Style>
     </UserControl.Resources>
 
     <Grid>
         <Border x:Name="FieldBorder"
-                Background="#171C25"
-                BorderBrush="#4B5669"
-                BorderThickness="1"
                 Cursor="Hand"
                 MouseLeftButtonUp="Field_MouseLeftButtonUp">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="#171C25" />
+                    <Setter Property="BorderBrush" Value="#4B5669" />
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsInvalid, ElementName=Root}" Value="True">
+                            <Setter Property="BorderBrush" Value="#FF4D5A" />
+                            <Setter Property="BorderThickness" Value="1.5" />
+                            <Setter Property="Background" Value="#3A3138" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
             <Grid Margin="10,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
                 <TextBlock x:Name="DateText"
                            Foreground="#E9EDF4"
-                           FontSize="12"
-                           VerticalAlignment="Center" />
-                <TextBlock Text="▾"
-                           HorizontalAlignment="Right"
+                           FontSize="13"
                            VerticalAlignment="Center"
-                           Foreground="#98A5B8"
-                           FontSize="11" />
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="ActionTextBlock"
+                           Grid.Column="1"
+                           Text="{Binding ActionText, ElementName=Root}"
+                           Foreground="#D99B36"
+                           VerticalAlignment="Center"
+                           Margin="12,0,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <Trigger Property="Text" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </Grid>
         </Border>
 
@@ -52,38 +131,54 @@
                StaysOpen="False"
                AllowsTransparency="True"
                PopupAnimation="Fade">
-            <Border Width="272"
-                    Margin="0,2,0,0"
-                    Padding="10"
+            <Border Width="300"
+                    Margin="0,3,0,0"
+                    Padding="12"
                     Background="#1B202B"
                     BorderBrush="#4B5669"
-                    BorderThickness="1">
+                    BorderThickness="1"
+                    CornerRadius="4">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="0" Opacity="0.45" />
+                </Border.Effect>
                 <StackPanel>
-                    <Grid Margin="0,0,0,8">
+                    <Grid Margin="0,0,0,10">
                         <Button Content="‹"
                                 HorizontalAlignment="Left"
                                 Style="{StaticResource DateNavigationButton}"
-                                Click="PreviousMonthButton_Click" />
-                        <TextBlock x:Name="CalendarTitleText"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Foreground="#F0F3F8"
-                                   FontWeight="SemiBold" />
+                                Click="PreviousPeriodButton_Click" />
+                        <Button x:Name="CalendarTitleButton"
+                                HorizontalAlignment="Center"
+                                Style="{StaticResource DateHeaderButton}"
+                                Click="CalendarTitleButton_Click" />
                         <Button Content="›"
                                 HorizontalAlignment="Right"
                                 Style="{StaticResource DateNavigationButton}"
-                                Click="NextMonthButton_Click" />
+                                Click="NextPeriodButton_Click" />
                     </Grid>
-                    <UniformGrid Columns="7" Margin="0,0,0,4">
-                        <TextBlock Text="一" Foreground="#91A0B5" TextAlignment="Center" />
-                        <TextBlock Text="二" Foreground="#91A0B5" TextAlignment="Center" />
-                        <TextBlock Text="三" Foreground="#91A0B5" TextAlignment="Center" />
-                        <TextBlock Text="四" Foreground="#91A0B5" TextAlignment="Center" />
-                        <TextBlock Text="五" Foreground="#91A0B5" TextAlignment="Center" />
-                        <TextBlock Text="六" Foreground="#91A0B5" TextAlignment="Center" />
-                        <TextBlock Text="日" Foreground="#91A0B5" TextAlignment="Center" />
-                    </UniformGrid>
-                    <UniformGrid x:Name="CalendarDaysGrid" Columns="7" Rows="6" />
+
+                    <StackPanel x:Name="DayViewPanel">
+                        <UniformGrid Columns="7" Margin="0,0,0,4">
+                            <TextBlock Text="一" Foreground="#91A0B5" TextAlignment="Center" />
+                            <TextBlock Text="二" Foreground="#91A0B5" TextAlignment="Center" />
+                            <TextBlock Text="三" Foreground="#91A0B5" TextAlignment="Center" />
+                            <TextBlock Text="四" Foreground="#91A0B5" TextAlignment="Center" />
+                            <TextBlock Text="五" Foreground="#91A0B5" TextAlignment="Center" />
+                            <TextBlock Text="六" Foreground="#91A0B5" TextAlignment="Center" />
+                            <TextBlock Text="日" Foreground="#91A0B5" TextAlignment="Center" />
+                        </UniformGrid>
+                        <UniformGrid x:Name="CalendarDaysGrid" Columns="7" Rows="6" />
+                    </StackPanel>
+
+                    <UniformGrid x:Name="MonthChoicesGrid"
+                                 Columns="4"
+                                 Rows="3"
+                                 Visibility="Collapsed" />
+
+                    <UniformGrid x:Name="YearChoicesGrid"
+                                 Columns="4"
+                                 Rows="3"
+                                 Visibility="Collapsed" />
                 </StackPanel>
             </Border>
         </Popup>

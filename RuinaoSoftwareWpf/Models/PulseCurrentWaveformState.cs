@@ -154,20 +154,13 @@ public static class PulseCurrentWaveformMath
         var riseSeconds = parameters.RiseWidthMilliseconds / 1000d;
         var pulseSeconds = parameters.PulseWidthMilliseconds / 1000d;
         var intervalSeconds = parameters.IntervalWidthMilliseconds / 1000d;
-        var activeSeconds = riseSeconds + pulseSeconds;
-        var cycleSeconds = activeSeconds + intervalSeconds;
-        if (pulseSeconds <= 0 || cycleSeconds <= 0)
+        var firstPulseEnd = riseSeconds + pulseSeconds;
+        var subsequentCycleSeconds = pulseSeconds + intervalSeconds;
+        if (pulseSeconds <= 0 || subsequentCycleSeconds <= 0)
         {
             return 0;
         }
 
-        var cycleIndex = (long)Math.Floor(seconds / cycleSeconds);
-        if (cycleIndex >= parameters.PlannedTotalCount)
-        {
-            return 0;
-        }
-
-        var localSeconds = seconds - cycleIndex * cycleSeconds;
         var signedCurrent = string.Equals(
             parameters.Polarity,
             PulseCurrentPolarities.Reversed,
@@ -175,13 +168,31 @@ public static class PulseCurrentWaveformMath
             ? -parameters.CurrentMilliamp
             : parameters.CurrentMilliamp;
 
-        // 上升宽度为 0 ms 时，脉冲起点直接垂直跳到目标幅值。
-        if (riseSeconds > 0 && localSeconds < riseSeconds)
+        // 上升宽度只属于第一次脉冲；为 0 ms 时第一次也直接到达目标幅值。
+        if (riseSeconds > 0 && seconds < riseSeconds)
         {
-            return signedCurrent * localSeconds / riseSeconds;
+            return signedCurrent * seconds / riseSeconds;
         }
 
-        return localSeconds < activeSeconds ? signedCurrent : 0;
+        if (seconds < firstPulseEnd)
+        {
+            return signedCurrent;
+        }
+
+        if (parameters.PlannedTotalCount <= 1 || seconds < firstPulseEnd + intervalSeconds)
+        {
+            return 0;
+        }
+
+        var subsequentElapsed = seconds - firstPulseEnd - intervalSeconds;
+        var subsequentPulseIndex = (long)Math.Floor(subsequentElapsed / subsequentCycleSeconds) + 1;
+        if (subsequentPulseIndex >= parameters.PlannedTotalCount)
+        {
+            return 0;
+        }
+
+        var localSeconds = subsequentElapsed % subsequentCycleSeconds;
+        return localSeconds < pulseSeconds ? signedCurrent : 0;
     }
 
     public static long GetCompletedPulseCount(PulseCurrentParameters parameters, double elapsedSeconds)
@@ -190,14 +201,21 @@ public static class PulseCurrentWaveformMath
         var riseSeconds = parameters.RiseWidthMilliseconds / 1000d;
         var pulseSeconds = parameters.PulseWidthMilliseconds / 1000d;
         var intervalSeconds = parameters.IntervalWidthMilliseconds / 1000d;
-        var activeSeconds = riseSeconds + pulseSeconds;
-        var cycleSeconds = activeSeconds + intervalSeconds;
-        if (elapsedSeconds < activeSeconds || cycleSeconds <= 0)
+        var firstPulseEnd = riseSeconds + pulseSeconds;
+        var subsequentCycleSeconds = pulseSeconds + intervalSeconds;
+        if (elapsedSeconds < firstPulseEnd || subsequentCycleSeconds <= 0)
         {
             return 0;
         }
 
-        var completed = (long)Math.Floor((elapsedSeconds - activeSeconds) / cycleSeconds) + 1;
+        var completed = 1L;
+        var secondPulseEnd = firstPulseEnd + intervalSeconds + pulseSeconds;
+        if (elapsedSeconds >= secondPulseEnd)
+        {
+            completed += (long)Math.Floor(
+                (elapsedSeconds - secondPulseEnd) / subsequentCycleSeconds) + 1;
+        }
+
         return Math.Clamp(completed, 0, parameters.PlannedTotalCount);
     }
 }

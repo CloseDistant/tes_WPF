@@ -115,6 +115,7 @@
                         <controls:StimulationChannelCard Margin="0,0,14,0"
                                                          Localization="{Binding DataContext.Localization, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                          StartCommand="{Binding DataContext.StartChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                         StopCommand="{Binding DataContext.StopChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                          UsePrescriptionCommand="{Binding DataContext.UseChannelPrescriptionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                          ShowCarrierFrequency="True"
                                                          ShowPolarity="False"

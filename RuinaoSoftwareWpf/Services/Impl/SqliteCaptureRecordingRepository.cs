@@ -1,6 +1,7 @@
 namespace RuinaoSoftwareWpf;
 
 using Microsoft.EntityFrameworkCore;
+using RuinaoSoftwareWpf.ApplicationContracts;
 using System.IO;
 using System.Text.Json;
 
@@ -8,7 +9,11 @@ using System.Text.Json;
 /// 采集工作台本地 SQLite 仓储实现。
 /// 使用 EF Core SQLite，不在业务仓储中手写 INSERT/UPDATE/DELETE SQL。
 /// </summary>
-public sealed class SqliteCaptureRecordingRepository : ICaptureRecordingRepository, IEegRecordingRepository, IUnifiedSessionRepository
+public sealed class SqliteCaptureRecordingRepository :
+    ICaptureRecordingRepository,
+    IEegRecordingRepository,
+    IUnifiedSessionRepository,
+    IAssessmentRunStore
 {
     private readonly ILoggingService logger;
     private readonly IPatientService patientService;
@@ -175,6 +180,7 @@ public sealed class SqliteCaptureRecordingRepository : ICaptureRecordingReposito
 
     public async Task<CaptureSessionInfo> CreateModuleSessionAsync(
         string outputRoot,
+        long? assessmentAttemptId,
         string sessionKey,
         string moduleCode,
         string moduleName,
@@ -200,6 +206,7 @@ public sealed class SqliteCaptureRecordingRepository : ICaptureRecordingReposito
             var workbenchSession = await EnsureWorkbenchSessionAsync(context, sessionKey, patientCode, now, cancellationToken);
             var moduleRecord = CaptureRecordEntityFactory.CreateTaskModuleRecord(
                 workbenchSession.Id,
+                assessmentAttemptId,
                 moduleCode,
                 moduleName,
                 ResolveModuleType(moduleName),
@@ -228,6 +235,7 @@ public sealed class SqliteCaptureRecordingRepository : ICaptureRecordingReposito
                 moduleRecord.Id,
                 workbenchSession.Id,
                 moduleRecord.Id,
+                assessmentAttemptId,
                 sessionKey,
                 moduleCode,
                 moduleName,
@@ -300,6 +308,7 @@ public sealed class SqliteCaptureRecordingRepository : ICaptureRecordingReposito
 
     public async Task<CaptureFormRecordInfo> SaveFormModuleRecordAsync(
         string outputRoot,
+        long assessmentAttemptId,
         string sessionKey,
         string moduleCode,
         string moduleName,
@@ -319,7 +328,14 @@ public sealed class SqliteCaptureRecordingRepository : ICaptureRecordingReposito
             await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
             var workbenchSession = await EnsureWorkbenchSessionAsync(context, sessionKey, patientCode, now, cancellationToken);
 
-            var moduleRecord = CaptureRecordEntityFactory.CreateFormModuleRecord(workbenchSession.Id, moduleCode, moduleName, formPayloadJson, status, now);
+            var moduleRecord = CaptureRecordEntityFactory.CreateFormModuleRecord(
+                workbenchSession.Id,
+                assessmentAttemptId,
+                moduleCode,
+                moduleName,
+                formPayloadJson,
+                status,
+                now);
             context.AssessmentModuleRecords.Add(moduleRecord);
             var formSubmitEvent = CaptureRecordEntityFactory.CreateModuleEvent(
                 workbenchSession.Id,
@@ -333,7 +349,14 @@ public sealed class SqliteCaptureRecordingRepository : ICaptureRecordingReposito
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
-            return new CaptureFormRecordInfo(workbenchSession.Id, moduleRecord.Id, sessionKey, moduleCode, moduleName, databasePath);
+            return new CaptureFormRecordInfo(
+                workbenchSession.Id,
+                moduleRecord.Id,
+                assessmentAttemptId,
+                sessionKey,
+                moduleCode,
+                moduleName,
+                databasePath);
         }, cancellationToken);
     }
 
@@ -409,6 +432,11 @@ public sealed class SqliteCaptureRecordingRepository : ICaptureRecordingReposito
             await using var context = await OpenContextAsync(recording.CaptureSession.DatabasePath, cancellationToken);
             foreach (var marker in markers)
             {
+                if (string.IsNullOrWhiteSpace(marker.Code))
+                {
+                    throw new InvalidOperationException("新 EEG Marker 的 Code 不能为空。");
+                }
+
                 context.EegMarkers.Add(new EegMarkerEntity
                 {
                     EegRecordingId = recording.Id,
@@ -420,7 +448,8 @@ public sealed class SqliteCaptureRecordingRepository : ICaptureRecordingReposito
                     SampleIndex = marker.SampleIndex,
                     PageIndex = marker.PageIndex,
                     PageSampleIndex = marker.PageSampleIndex,
-                    Source = marker.Source
+                    Source = marker.Source,
+                    MarkerCode = marker.Code
                 });
             }
 
@@ -445,6 +474,306 @@ public sealed class SqliteCaptureRecordingRepository : ICaptureRecordingReposito
             context.EegRecordings.Update(entity);
             await context.SaveChangesAsync(cancellationToken);
         }, cancellationToken);
+    }
+
+    public Task<AssessmentProgressSnapshot> GetProgressAsync(
+        string patientCode,
+        int totalModuleCount,
+        CancellationToken cancellationToken = default)
+    {
+        var databasePath = AppDatabasePathProvider.MainDatabasePath;
+        return ExecuteWriteAsync(databasePath, async () =>
+        {
+            await using var context = await OpenContextAsync(databasePath, cancellationToken);
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            var nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var run = await context.AssessmentRuns
+                .Where(item => item.PatientCode == patientCode && item.Status == "in_progress")
+                .OrderByDescending(item => item.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (run is null)
+            {
+                return new AssessmentProgressSnapshot(
+                    null,
+                    patientCode,
+                    AssessmentRunStatus.InProgress,
+                    0,
+                    []);
+            }
+
+            var interruptedAttempts = await context.AssessmentModuleAttempts
+                .Where(item => item.RunId == run.Id && (item.Status == "running" || item.Status == "saving"))
+                .ToListAsync(cancellationToken);
+            foreach (var attempt in interruptedAttempts)
+            {
+                attempt.Status = "cancelled_invalid";
+                attempt.ErrorCode = "APPLICATION_INTERRUPTED";
+                attempt.Message = "软件退出或患者恢复时发现未结束模块，本次尝试已作废。";
+                attempt.EndedAtUnixMs = nowUnixMs;
+                attempt.UpdatedAtUnixMs = nowUnixMs;
+            }
+
+            if (interruptedAttempts.Count > 0)
+            {
+                await context.SaveChangesAsync(cancellationToken);
+            }
+
+            var completedModules = await context.AssessmentModuleAttempts
+                .Where(item => item.RunId == run.Id && item.Status == "completed")
+                .OrderBy(item => item.ModuleIndex)
+                .Select(item => item.ModuleCode)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new AssessmentProgressSnapshot(
+                run.Id,
+                patientCode,
+                AssessmentRunStatus.InProgress,
+                Math.Clamp(run.NextModuleIndex, 0, totalModuleCount),
+                completedModules);
+        }, cancellationToken);
+    }
+
+    public Task<AssessmentModuleRunContext> StartModuleAsync(
+        AssessmentModuleStartRequest request,
+        DateTimeOffset startedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var databasePath = AppDatabasePathProvider.MainDatabasePath;
+        return ExecuteWriteAsync(databasePath, async () =>
+        {
+            await using var context = await OpenContextAsync(databasePath, cancellationToken);
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            var startedAtUnixMs = startedAt.ToUnixTimeMilliseconds();
+            var run = await context.AssessmentRuns
+                .Where(item => item.PatientCode == request.PatientCode && item.Status == "in_progress")
+                .OrderByDescending(item => item.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (run is null)
+            {
+                if (request.ModuleIndex != 0)
+                {
+                    throw new InvalidOperationException("患者没有未完成评估，必须从第一个模块开始。");
+                }
+
+                run = new AssessmentRunEntity
+                {
+                    PatientCode = request.PatientCode,
+                    Status = "in_progress",
+                    TotalModuleCount = request.TotalModuleCount,
+                    NextModuleIndex = 0,
+                    StartedAtUnixMs = startedAtUnixMs,
+                    CreatedAtUnixMs = startedAtUnixMs,
+                    UpdatedAtUnixMs = startedAtUnixMs
+                };
+                context.AssessmentRuns.Add(run);
+                await context.SaveChangesAsync(cancellationToken);
+            }
+
+            if (run.TotalModuleCount != request.TotalModuleCount)
+            {
+                throw new InvalidOperationException("当前未完成评估的模块数量与正式流程不一致，请先完成数据兼容处理。");
+            }
+
+            if (run.NextModuleIndex != request.ModuleIndex)
+            {
+                throw new InvalidOperationException($"必须按顺序执行评估，当前应执行第 {run.NextModuleIndex + 1} 个模块。");
+            }
+
+            var hasActiveAttempt = await context.AssessmentModuleAttempts.AnyAsync(
+                item => item.RunId == run.Id && (item.Status == "running" || item.Status == "saving"),
+                cancellationToken);
+            if (hasActiveAttempt)
+            {
+                throw new InvalidOperationException("当前评估已有正在运行或保存中的模块。");
+            }
+
+            var attemptNumber = await context.AssessmentModuleAttempts
+                .Where(item => item.RunId == run.Id && item.ModuleIndex == request.ModuleIndex)
+                .Select(item => (int?)item.AttemptNumber)
+                .MaxAsync(cancellationToken) ?? 0;
+            var attempt = new AssessmentModuleAttemptEntity
+            {
+                RunId = run.Id,
+                SessionKey = request.SessionKey,
+                ModuleCode = request.ModuleCode,
+                ModuleName = request.ModuleName,
+                ModuleIndex = request.ModuleIndex,
+                AttemptNumber = attemptNumber + 1,
+                Status = "running",
+                StartedAtUnixMs = startedAtUnixMs,
+                CreatedAtUnixMs = startedAtUnixMs,
+                UpdatedAtUnixMs = startedAtUnixMs
+            };
+            context.AssessmentModuleAttempts.Add(attempt);
+            run.UpdatedAtUnixMs = startedAtUnixMs;
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new AssessmentModuleRunContext(
+                run.Id,
+                attempt.Id,
+                attempt.AttemptNumber,
+                request.PatientCode,
+                request.SessionKey,
+                request.ModuleCode,
+                request.ModuleName,
+                request.ModuleIndex,
+                startedAt);
+        }, cancellationToken);
+    }
+
+    public Task MarkSavingAsync(
+        long attemptId,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken = default)
+    {
+        return UpdateAttemptAsync(
+            attemptId,
+            "saving",
+            null,
+            null,
+            null,
+            updatedAt,
+            advanceRun: false,
+            cancellationToken);
+    }
+
+    public Task<AssessmentModuleResult> CompleteModuleAsync(
+        long attemptId,
+        string? resultJson,
+        DateTimeOffset endedAt,
+        CancellationToken cancellationToken = default)
+    {
+        return UpdateAttemptAsync(
+            attemptId,
+            "completed",
+            resultJson,
+            null,
+            null,
+            endedAt,
+            advanceRun: true,
+            cancellationToken);
+    }
+
+    public Task<AssessmentModuleResult> CancelModuleAsync(
+        long attemptId,
+        string reason,
+        DateTimeOffset endedAt,
+        CancellationToken cancellationToken = default)
+    {
+        return UpdateAttemptAsync(
+            attemptId,
+            "cancelled_invalid",
+            null,
+            "CANCELLED_BY_USER",
+            reason,
+            endedAt,
+            advanceRun: false,
+            cancellationToken);
+    }
+
+    public Task<AssessmentModuleResult> FailModuleAsync(
+        long attemptId,
+        string errorCode,
+        string message,
+        DateTimeOffset endedAt,
+        CancellationToken cancellationToken = default)
+    {
+        return UpdateAttemptAsync(
+            attemptId,
+            "failed",
+            null,
+            errorCode,
+            message,
+            endedAt,
+            advanceRun: false,
+            cancellationToken);
+    }
+
+    private Task<AssessmentModuleResult> UpdateAttemptAsync(
+        long attemptId,
+        string status,
+        string? resultJson,
+        string? errorCode,
+        string? message,
+        DateTimeOffset changedAt,
+        bool advanceRun,
+        CancellationToken cancellationToken)
+    {
+        var databasePath = AppDatabasePathProvider.MainDatabasePath;
+        return ExecuteWriteAsync(databasePath, async () =>
+        {
+            await using var context = await OpenContextAsync(databasePath, cancellationToken);
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            var attempt = await context.AssessmentModuleAttempts
+                .FirstOrDefaultAsync(item => item.Id == attemptId, cancellationToken)
+                ?? throw new InvalidOperationException($"未找到评估模块尝试：{attemptId}");
+            if (attempt.Status is "completed" or "cancelled_invalid" or "failed")
+            {
+                throw new InvalidOperationException($"评估模块尝试已经结束：attempt={attemptId}, status={attempt.Status}");
+            }
+
+            var run = await context.AssessmentRuns
+                .FirstOrDefaultAsync(item => item.Id == attempt.RunId, cancellationToken)
+                ?? throw new InvalidOperationException($"未找到评估批次：{attempt.RunId}");
+            if (!string.Equals(
+                    run.PatientCode,
+                    patientService.CurrentPatient?.PatientCode,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("当前患者已变化，拒绝修改其他患者的评估尝试。");
+            }
+
+            var changedAtUnixMs = changedAt.ToUnixTimeMilliseconds();
+            attempt.Status = status;
+            attempt.ResultJson = resultJson;
+            attempt.ErrorCode = errorCode;
+            attempt.Message = message;
+            attempt.UpdatedAtUnixMs = changedAtUnixMs;
+            if (status != "saving")
+            {
+                attempt.EndedAtUnixMs = changedAtUnixMs;
+            }
+
+            if (advanceRun)
+            {
+                if (run.NextModuleIndex != attempt.ModuleIndex)
+                {
+                    throw new InvalidOperationException("评估进度与完成模块不一致，拒绝推进批次。");
+                }
+
+                run.NextModuleIndex++;
+                if (run.NextModuleIndex >= run.TotalModuleCount)
+                {
+                    run.Status = "completed";
+                    run.EndedAtUnixMs = changedAtUnixMs;
+                }
+            }
+
+            run.UpdatedAtUnixMs = changedAtUnixMs;
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new AssessmentModuleResult(
+                attempt.RunId,
+                attempt.Id,
+                ParseAttemptStatus(status),
+                DateTimeOffset.FromUnixTimeMilliseconds(attempt.StartedAtUnixMs),
+                changedAt,
+                errorCode,
+                message);
+        }, cancellationToken);
+    }
+
+    private static AssessmentModuleExecutionStatus ParseAttemptStatus(string status)
+    {
+        return status switch
+        {
+            "saving" => AssessmentModuleExecutionStatus.Saving,
+            "completed" => AssessmentModuleExecutionStatus.Completed,
+            "cancelled_invalid" => AssessmentModuleExecutionStatus.CancelledInvalid,
+            "failed" => AssessmentModuleExecutionStatus.Failed,
+            _ => AssessmentModuleExecutionStatus.Running
+        };
     }
 
     private async Task<CaptureDbContext> OpenContextAsync(string databasePath, CancellationToken cancellationToken)

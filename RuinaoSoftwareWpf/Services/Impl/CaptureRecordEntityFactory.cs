@@ -8,6 +8,7 @@ internal static class CaptureRecordEntityFactory
 {
     public static AssessmentModuleRecordEntity CreateTaskModuleRecord(
         long sessionId,
+        long? assessmentAttemptId,
         string moduleCode,
         string moduleName,
         string recordType,
@@ -23,6 +24,7 @@ internal static class CaptureRecordEntityFactory
         return new AssessmentModuleRecordEntity
         {
             SessionId = sessionId,
+            AssessmentAttemptId = assessmentAttemptId,
             ModuleCode = moduleCode,
             ModuleName = moduleName,
             RecordType = recordType,
@@ -41,6 +43,7 @@ internal static class CaptureRecordEntityFactory
 
     public static AssessmentModuleRecordEntity CreateFormModuleRecord(
         long sessionId,
+        long assessmentAttemptId,
         string moduleCode,
         string moduleName,
         string formPayloadJson,
@@ -51,6 +54,7 @@ internal static class CaptureRecordEntityFactory
         return new AssessmentModuleRecordEntity
         {
             SessionId = sessionId,
+            AssessmentAttemptId = assessmentAttemptId,
             ModuleCode = moduleCode,
             ModuleName = moduleName,
             RecordType = CaptureModuleTypes.Form,

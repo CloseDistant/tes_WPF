@@ -7,7 +7,7 @@ namespace RuinaoSoftwareWpf;
 /// <summary>
 /// TI 控制页面 ViewModel。
 ///
-/// 负责维护 TI 刺激组列表、当前选中组，以及开始/暂停/急停等页面级命令。
+/// 负责维护 TI 刺激组列表、当前选中组，以及开始、停止和急停等页面级命令。
 /// Shell 只负责展示该页面，不再持有 TI 控制页的业务状态。
 /// </summary>
 public sealed class TiControlViewModel : ObservableObject
@@ -20,6 +20,7 @@ public sealed class TiControlViewModel : ObservableObject
     private readonly StimulationChannelCountdown countdown = new();
     private readonly AsyncRelayCommand startCommand;
     private readonly AsyncRelayCommand startChannelCommand;
+    private readonly AsyncRelayCommand stopChannelCommand;
     private readonly RelayCommand usePrescriptionCommand;
     private readonly RelayCommand useChannelPrescriptionCommand;
     private TiGroup? selectedGroup;
@@ -72,7 +73,19 @@ public sealed class TiControlViewModel : ObservableObject
             _ => CanStartStimulation,
             onError: HandleStartFailure);
         StartChannelCommand = startChannelCommand;
-        PauseCommand = CreateHardwareCommand(_ => PauseSelectedGroupAsync());
+        stopChannelCommand = new AsyncRelayCommand(
+            async (parameter, cancellationToken) =>
+            {
+                if (parameter is ChannelConfig channel)
+                {
+                    await StopSimulatedChannelAsync(channel, cancellationToken);
+                }
+            },
+            parameter => debugHardwareSimulation.IsConnected
+                && parameter is ChannelConfig channel
+                && countdown.IsActive(channel),
+            onError: HandleStopFailure);
+        StopChannelCommand = stopChannelCommand;
         EmergencyStopCommand = CreateHardwareCommand(_ => EmergencyStopAllChannelsAsync());
         usePrescriptionCommand = new RelayCommand(
             _ => RequestPrescription(StimulationPrescriptionApplyScope.AllChannels),
@@ -113,7 +126,7 @@ public sealed class TiControlViewModel : ObservableObject
 
     public ICommand StartChannelCommand { get; }
 
-    public ICommand PauseCommand { get; }
+    public ICommand StopChannelCommand { get; }
 
     public ICommand EmergencyStopCommand { get; }
 
@@ -240,6 +253,14 @@ public sealed class TiControlViewModel : ObservableObject
             "刺激启动命令未完成，软件未进入运行状态。具体原因已记录到运行日志。");
     }
 
+    private void HandleStopFailure(Exception exception)
+    {
+        logger.Error("TI 刺激停止失败", exception);
+        toastService.ShowError(
+            "刺激停止失败",
+            "停止命令未完成，通道仍保持运行状态，请再次点击停止或使用紧急停止。具体原因已记录到运行日志。");
+    }
+
     private void OnHardwareConnectionChanged(
         object? sender,
         HardwareConnectionChangedEventArgs eventArgs)
@@ -271,6 +292,7 @@ public sealed class TiControlViewModel : ObservableObject
     {
         startCommand.RaiseCanExecuteChanged();
         startChannelCommand.RaiseCanExecuteChanged();
+        stopChannelCommand.RaiseCanExecuteChanged();
         usePrescriptionCommand.RaiseCanExecuteChanged();
         useChannelPrescriptionCommand.RaiseCanExecuteChanged();
     }
@@ -350,22 +372,33 @@ public sealed class TiControlViewModel : ObservableObject
         HardwareOperationCompleted?.Invoke(this, result);
     }
 
-    private async Task PauseSelectedGroupAsync()
+    private async Task StopSimulatedChannelAsync(
+        ChannelConfig channel,
+        CancellationToken cancellationToken)
     {
-        if (SelectedGroup is null)
+        if (!debugHardwareSimulation.IsConnected || !countdown.IsActive(channel))
         {
-            logger.Debug("PROTO PAUSE skipped: no TI group selected");
             return;
         }
 
-        var result = await stimulationEngine.PauseTiGroupAsync(SelectedGroup, SelectedChannelNames);
-        countdown.CancelAll(SelectedGroup.Channels, reset: false);
-        foreach (var channel in SelectedGroup.Channels)
+        var owner = Groups.FirstOrDefault(group => group.Channels.Contains(channel));
+        if (owner is null)
         {
-            channel.IsParameterEditingEnabled = true;
-            channel.IsStimulating = false;
+            return;
         }
+
+        var group = new TiGroup { Title = owner.Title };
+        group.Channels.Add(channel);
+        var result = await stimulationEngine.StopGroupAsync(
+            group,
+            channel.Name,
+            "TI",
+            cancellationToken);
+        countdown.Cancel(channel, reset: true);
+        channel.IsParameterEditingEnabled = true;
+        channel.IsStimulating = false;
         RefreshStartCommandStates();
+        logger.Info($"TI DEBUG 模拟手动停止成功：{channel.Name}");
         HardwareOperationCompleted?.Invoke(this, result);
     }
 

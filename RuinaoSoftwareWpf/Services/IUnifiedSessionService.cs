@@ -60,9 +60,10 @@ public interface IUnifiedSessionService
         DateTimeOffset? sourceTime = null,
         CancellationToken cancellationToken = default);
 
-    Task EndAsync(
+    Task<bool> EndAsync(
         string status,
         string? reason = null,
+        string? expectedSessionKey = null,
         CancellationToken cancellationToken = default);
 }
 

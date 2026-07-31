@@ -297,7 +297,6 @@ internal sealed class BackupRestoreService : IBackupRestoreService
             or StimulationExecutionState.Starting
             or StimulationExecutionState.Running
             or StimulationExecutionState.Stopping
-            or StimulationExecutionState.Paused
             or StimulationExecutionState.Faulted;
         if (stimulationActive || eegRecording.IsRecording || assessmentActivity.IsActiveForSessionSecurity)
         {

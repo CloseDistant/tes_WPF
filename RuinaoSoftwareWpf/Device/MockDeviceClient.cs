@@ -8,7 +8,7 @@ namespace RuinaoSoftwareWpf;
 /// - 兼容早期测试或历史对比代码。
 /// - 后续如果恢复 IDeviceClient 测试链路，可以用它代替真实设备。
 ///
-/// 当前主链路已经改为 HardwareService -> RuinaoTesProtocolBridge -> IHardwareTransport。
+/// 当前主链路已经改为 HardwareService -> RuinaoTesHardwareBridge -> RuinaoTesHardware.dll。
 /// </summary>
 public sealed class MockDeviceClient : IDeviceClient
 {
@@ -35,8 +35,6 @@ public sealed class MockDeviceClient : IDeviceClient
     public Task SendParametersAsync(TiGroup group, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
     public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-    public Task PauseAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
     public Task EmergencyStopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

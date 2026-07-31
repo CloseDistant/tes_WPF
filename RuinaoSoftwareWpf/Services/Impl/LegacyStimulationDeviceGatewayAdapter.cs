@@ -81,7 +81,7 @@ public sealed class LegacyStimulationDeviceGatewayAdapter : IStimulationDeviceGa
             cancellationToken));
     }
 
-    public async Task<StimulationCommandResult> PauseAsync(
+    public async Task<StimulationCommandResult> StopAsync(
         CancellationToken cancellationToken = default)
     {
         if (configuredGroup is null)
@@ -89,9 +89,10 @@ public sealed class LegacyStimulationDeviceGatewayAdapter : IStimulationDeviceGa
             return Rejected("STIMULATION_NOT_CONFIGURED", "尚未配置刺激参数。");
         }
 
-        return Map(await hardwareService.PauseGroupAsync(
+        return Map(await hardwareService.StopGroupAsync(
             configuredGroup,
             configuredChannelNames,
+            configuredPrescription?.StimulationType ?? "TI",
             cancellationToken));
     }
 

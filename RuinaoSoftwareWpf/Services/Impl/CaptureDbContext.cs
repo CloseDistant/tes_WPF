@@ -32,7 +32,16 @@ internal sealed class CaptureDbContext : DbContext
 
     public DbSet<StimulationRecordEntity> StimulationRecords => Set<StimulationRecordEntity>();
 
+    public DbSet<StimulationRunEntity> StimulationRuns => Set<StimulationRunEntity>();
+
+    public DbSet<StimulationChannelTreatmentEntity> StimulationChannelTreatments =>
+        Set<StimulationChannelTreatmentEntity>();
+
     public DbSet<AssessmentSessionEntity> AssessmentSessions => Set<AssessmentSessionEntity>();
+
+    public DbSet<AssessmentRunEntity> AssessmentRuns => Set<AssessmentRunEntity>();
+
+    public DbSet<AssessmentModuleAttemptEntity> AssessmentModuleAttempts => Set<AssessmentModuleAttemptEntity>();
 
     public DbSet<AssessmentModuleRecordEntity> AssessmentModuleRecords => Set<AssessmentModuleRecordEntity>();
 

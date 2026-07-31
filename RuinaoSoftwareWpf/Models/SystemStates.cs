@@ -21,7 +21,7 @@ public enum StimulationExecutionState
     Starting,
     Running,
     Stopping,
-    Paused,
+    Stopped,
     Completed,
     EmergencyStopped,
     Faulted

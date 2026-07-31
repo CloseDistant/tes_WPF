@@ -20,7 +20,6 @@ public sealed class ReportViewModel : ObservableObject
     private int currentPage = 1;
     private int totalCount;
     private bool isLoading;
-    private bool initialized;
 
     public ReportViewModel(
         IStimulationRecordService stimulationRecordService,
@@ -122,21 +121,10 @@ public sealed class ReportViewModel : ObservableObject
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        if (initialized)
-        {
-            return;
-        }
-
-        try
-        {
-            await RefreshAsync(cancellationToken);
-            initialized = true;
-        }
-        catch
-        {
-            initialized = false;
-            throw;
-        }
+        // ReportView is recreated whenever navigation returns to the record page, while this
+        // singleton ViewModel survives. Always reload here so a treatment created on another
+        // page becomes visible immediately after navigation.
+        await RefreshAsync(cancellationToken);
     }
 
     private async Task RefreshAsync(CancellationToken cancellationToken)
@@ -253,7 +241,6 @@ public sealed class ReportViewModel : ObservableObject
         SelectedRecord = null;
         CurrentPage = 1;
         TotalCount = 0;
-        initialized = false;
     }
 
     private void RefreshPagingCommandStates()

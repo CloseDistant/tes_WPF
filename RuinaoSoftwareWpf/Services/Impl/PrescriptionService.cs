@@ -183,9 +183,15 @@ public sealed class PrescriptionService : IPrescriptionService
                 IntervalMinutes = source.IntervalMinutes,
                 SessionDurationMinutes = source.SessionDurationMinutes,
                 PulseTreatmentDurationSeconds = source.PulseTreatmentDurationSeconds,
+                PulseTreatmentDurationSecondsExact = source.PulseTreatmentDurationSecondsExact,
                 PulseWidthMilliseconds = source.PulseWidthMilliseconds,
                 PulseRiseWidthMilliseconds = source.PulseRiseWidthMilliseconds,
                 PulseIntervalWidthMilliseconds = source.PulseIntervalWidthMilliseconds,
+                DirectCurrentTotalDurationSeconds = source.DirectCurrentTotalDurationSeconds,
+                DirectCurrentIntervalSeconds = source.DirectCurrentIntervalSeconds,
+                DirectCurrentSingleDurationSeconds = source.DirectCurrentSingleDurationSeconds,
+                DirectCurrentRampUpSeconds = source.DirectCurrentRampUpSeconds,
+                DirectCurrentRampDownSeconds = source.DirectCurrentRampDownSeconds,
                 Course = source.Course,
                 RampUpSeconds = source.RampUpSeconds,
                 RampDownSeconds = source.RampDownSeconds,
@@ -263,7 +269,13 @@ public sealed class PrescriptionService : IPrescriptionService
         PulseTreatmentDurationSeconds: entity.PulseTreatmentDurationSeconds,
         PulseWidthMilliseconds: entity.PulseWidthMilliseconds,
         PulseRiseWidthMilliseconds: entity.PulseRiseWidthMilliseconds,
-        PulseIntervalWidthMilliseconds: entity.PulseIntervalWidthMilliseconds);
+        PulseIntervalWidthMilliseconds: entity.PulseIntervalWidthMilliseconds,
+        DirectCurrentTotalDurationSecondsValue: entity.DirectCurrentTotalDurationSeconds,
+        DirectCurrentIntervalSecondsValue: entity.DirectCurrentIntervalSeconds,
+        DirectCurrentSingleDurationSecondsValue: entity.DirectCurrentSingleDurationSeconds,
+        DirectCurrentRampUpSecondsValue: entity.DirectCurrentRampUpSeconds,
+        DirectCurrentRampDownSecondsValue: entity.DirectCurrentRampDownSeconds,
+        PulseTreatmentDurationSecondsValue: entity.PulseTreatmentDurationSecondsExact);
 
     private Task<int> SaveChangesAsync(CaptureDbContext context, CancellationToken cancellationToken)
     {
@@ -284,9 +296,15 @@ public sealed class PrescriptionService : IPrescriptionService
         entity.IntervalMinutes = prescription.IntervalMinutes;
         entity.SessionDurationMinutes = prescription.SessionDurationMinutes;
         entity.PulseTreatmentDurationSeconds = prescription.PulseTreatmentDurationSeconds;
+        entity.PulseTreatmentDurationSecondsExact = prescription.PulseTreatmentDurationSecondsValue;
         entity.PulseWidthMilliseconds = prescription.PulseWidthMilliseconds;
         entity.PulseRiseWidthMilliseconds = prescription.PulseRiseWidthMilliseconds;
         entity.PulseIntervalWidthMilliseconds = prescription.PulseIntervalWidthMilliseconds;
+        entity.DirectCurrentTotalDurationSeconds = prescription.DirectCurrentTotalDurationSecondsValue;
+        entity.DirectCurrentIntervalSeconds = prescription.DirectCurrentIntervalSecondsValue;
+        entity.DirectCurrentSingleDurationSeconds = prescription.DirectCurrentSingleDurationSecondsValue;
+        entity.DirectCurrentRampUpSeconds = prescription.DirectCurrentRampUpSecondsValue;
+        entity.DirectCurrentRampDownSeconds = prescription.DirectCurrentRampDownSecondsValue;
         entity.Course = prescription.Course;
         entity.RampUpSeconds = prescription.RampUpSeconds;
         entity.RampDownSeconds = prescription.RampDownSeconds;

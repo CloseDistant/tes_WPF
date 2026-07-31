@@ -78,9 +78,13 @@ public interface IHardwareService : IHardwareConnectionState
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 暂停指定 TI 组的刺激。
+    /// 停止指定刺激组。
     /// </summary>
-    Task<HardwareOperationResult> PauseGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default);
+    Task<HardwareOperationResult> StopGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string stimulationType,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 紧急停止指定 TI 组的刺激。

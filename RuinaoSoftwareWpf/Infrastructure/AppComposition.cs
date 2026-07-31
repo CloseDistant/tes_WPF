@@ -24,7 +24,7 @@ public static class AppComposition
     /// </summary>
     public static IServiceProvider Services => RootProvider.Value;
 
-    public static bool IsDisposed => Volatile.Read(ref disposeState) != 0;
+    public static bool IsDisposed => Volatile.Read(ref disposeState) == 2;
 
     /// <summary>
     /// 创建主界面 ViewModel，App 启动时调用。
@@ -41,12 +41,22 @@ public static class AppComposition
     public static async ValueTask DisposeAsync()
     {
         if (!RootProvider.IsValueCreated
-            || Interlocked.Exchange(ref disposeState, 1) != 0)
+            || Interlocked.CompareExchange(ref disposeState, 1, 0) != 0)
         {
             return;
         }
 
-        await RootProvider.Value.DisposeAsync();
+        try
+        {
+            await RootProvider.Value.DisposeAsync();
+            Volatile.Write(ref disposeState, 2);
+        }
+        catch
+        {
+            // 释放失败时允许应用退出边界再次尝试，不能把部分释放误报为完成。
+            Volatile.Write(ref disposeState, 0);
+            throw;
+        }
     }
 
     /// <summary>
@@ -84,7 +94,8 @@ public static class AppComposition
         services.AddSingleton<IUsbBackplaneDiscovery, WindowsUsbBackplaneDiscovery>();
         services.AddSingleton<IBackplaneTransport, UsbTestCompatibleBackplaneTransport>();
         services.AddSingleton<BackplaneClient>();                         // 真实libusbK链路与V1.4应答匹配
-        services.AddSingleton<RuinaoTesProtocolBridge>();                 // UI只能经Bridge调用共用硬件DLL
+        services.AddSingleton<TesHardwareDeviceClient>();                // 共用硬件 DLL 的业务 API
+        services.AddSingleton<RuinaoTesHardwareBridge>();                // WPF 只做应用模型与 DLL API 适配
         services.AddSingleton<IDeviceHal, ProtocolDeviceHal>();           // 硬件抽象层，内部同样指向协议 DLL Bridge
         services.AddSingleton<IAuditLogService, AuditLogService>();       // 兼容状态机同步接口，底层写入独立安全审计库
         services.AddSingleton<IDeviceStateMachine, DeviceStateMachine>(); // 设备状态机
@@ -101,9 +112,17 @@ public static class AppComposition
         services.AddSingleton<ICaptureRecordingRepository>(provider => provider.GetRequiredService<SqliteCaptureRecordingRepository>());
         services.AddSingleton<IEegRecordingRepository>(provider => provider.GetRequiredService<SqliteCaptureRecordingRepository>());
         services.AddSingleton<IUnifiedSessionRepository>(provider => provider.GetRequiredService<SqliteCaptureRecordingRepository>());
+        services.AddSingleton<IAssessmentRunStore>(provider => provider.GetRequiredService<SqliteCaptureRecordingRepository>());
+        services.AddSingleton<ApplicationContracts.IAssessmentModule, AssessmentModuleLifecycleService>();
         services.AddSingleton<IUnifiedSessionService, UnifiedSessionService>(); // 电刺激、EEG、数字表型共享 Session 与时间轴
-        services.AddSingleton<ICaptureMediaRecorder, CaptureMediaRecorder>(); // 采集工作台音视频录制服务
-        services.AddSingleton<ICaptureMediaService, LegacyCaptureMediaServiceAdapter>();
+        services.AddSingleton<CaptureMediaRecorder>(); // OpenCV、音频、编码和仓储的底层录制实现
+        services.AddSingleton<ICaptureMediaBackend>(
+            provider => provider.GetRequiredService<CaptureMediaRecorder>());
+        services.AddSingleton<ICaptureVideoFrameSink>(
+            provider => provider.GetRequiredService<CaptureMediaRecorder>());
+        services.AddSingleton<ICaptureFormRecordService>(
+            provider => provider.GetRequiredService<CaptureMediaRecorder>());
+        services.AddSingleton<ICaptureMediaService, CaptureMediaService>(); // 生产调用方统一使用的纯应用层媒体控制入口
         services.AddSingleton<ICaptureVideoFrameWriter, CaptureVideoFrameWriter>();
         services.AddSingleton<ICaptureAudioRecorder, CaptureAudioRecorder>();
         services.AddSingleton<ICaptureMediaEncoder, CaptureMediaEncoder>();

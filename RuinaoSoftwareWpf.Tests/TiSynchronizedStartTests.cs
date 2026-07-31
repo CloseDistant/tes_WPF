@@ -75,17 +75,79 @@ public sealed class TiSynchronizedStartTests
         Assert.False(target.IsStimulating);
     }
 
+    [Fact]
+    public void StopChannelCommand_InDebugSimulation_StopsOnlyTarget()
+    {
+        var engine = new CapturingStimulationEngine();
+        var viewModel = CreateViewModel(engine, new ConnectedDebugSimulation());
+        var channels = viewModel.Groups.SelectMany(group => group.Channels).ToArray();
+        var first = channels[0];
+        var second = channels[1];
+        first.CurrentMA = "1";
+        second.CurrentMA = "1";
+
+        viewModel.StartChannelCommand.Execute(first);
+        viewModel.StartChannelCommand.Execute(second);
+
+        Assert.True(viewModel.StopChannelCommand.CanExecute(first));
+        viewModel.StopChannelCommand.Execute(first);
+
+        Assert.False(first.IsStimulating);
+        Assert.True(first.IsParameterEditingEnabled);
+        Assert.Equal("00:00:00", first.RemainingTime);
+        Assert.True(second.IsStimulating);
+        Assert.False(viewModel.StopChannelCommand.CanExecute(first));
+    }
+
+    [Fact]
+    public void StopChannelCommand_WhenStopFails_ShowsStopFailureAndKeepsChannelRunning()
+    {
+        var engine = new CapturingStimulationEngine { FailStop = true };
+        var toast = new CapturingToastService();
+        var viewModel = CreateViewModel(
+            engine,
+            new ConnectedDebugSimulation(),
+            toast);
+        var target = viewModel.Groups[0].Channels[0];
+        target.CurrentMA = "1";
+
+        viewModel.StartChannelCommand.Execute(target);
+        viewModel.StopChannelCommand.Execute(target);
+
+        Assert.True(target.IsStimulating);
+        Assert.Equal("刺激停止失败", toast.Title);
+        Assert.Contains("停止命令未完成", toast.Message);
+    }
+
     private static TiControlViewModel CreateViewModel(
-        CapturingStimulationEngine stimulationEngine)
+        CapturingStimulationEngine stimulationEngine,
+        IDebugHardwareSimulationService? debugHardwareSimulation = null,
+        IToastService? toastService = null)
     {
         return new TiControlViewModel(
             stimulationEngine,
             new ConnectedHardwareState(),
-            new DebugHardwareSimulationService(),
+            debugHardwareSimulation ?? new DebugHardwareSimulationService(),
             new NoopLoggingService(),
             new DemoTiGroupFactory(),
             new LocalizationViewModel(new AppLocalizationService()),
-            new NoopToastService());
+            toastService ?? new NoopToastService());
+    }
+
+    private sealed class ConnectedDebugSimulation : IDebugHardwareSimulationService
+    {
+        public event EventHandler? ConnectionChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public bool IsAvailable => true;
+
+        public bool IsConnected => true;
+
+        public DebugHardwareSimulationResult Connect(bool realHardwareConnected) =>
+            new(true, "已连接");
     }
 
     private sealed class ConnectedHardwareState : IHardwareConnectionState
@@ -105,6 +167,8 @@ public sealed class TiSynchronizedStartTests
 
         public TiGroup? LastEmergencyStoppedTiGroup { get; private set; }
 
+        public bool FailStop { get; init; }
+
         public StimulationExecutionState CurrentState => StimulationExecutionState.Idle;
 
         public Task<HardwareOperationResult> StartTiGroupAsync(
@@ -123,10 +187,14 @@ public sealed class TiSynchronizedStartTests
             string prescriptionName,
             CancellationToken cancellationToken = default) => NotUsed();
 
-        public Task<HardwareOperationResult> PauseTiGroupAsync(
+        public Task<HardwareOperationResult> StopGroupAsync(
             TiGroup group,
             string selectedChannelNames,
-            CancellationToken cancellationToken = default) => NotUsed();
+            string stimulationType,
+            CancellationToken cancellationToken = default) =>
+            FailStop
+                ? Task.FromException<HardwareOperationResult>(new TimeoutException("stop timeout"))
+                : Success();
 
         public Task<HardwareOperationResult> EmergencyStopTiGroupAsync(
             TiGroup group,
@@ -179,5 +247,22 @@ public sealed class TiSynchronizedStartTests
         public void ShowInformation(string message, string title = "提示") { }
         public void ShowSuccess(string title, string message) { }
         public void ShowError(string title, string message) { }
+    }
+
+    private sealed class CapturingToastService : IToastService
+    {
+        public Visibility Visibility => Visibility.Visible;
+        public string Title { get; private set; } = string.Empty;
+        public string Message { get; private set; } = string.Empty;
+        public string Icon => string.Empty;
+        public string Accent => string.Empty;
+        public void Show(ToastKind kind, string title, string message, TimeSpan? duration = null)
+        {
+            Title = title;
+            Message = message;
+        }
+        public void ShowInformation(string message, string title = "提示") => Show(ToastKind.Information, title, message);
+        public void ShowSuccess(string title, string message) => Show(ToastKind.Success, title, message);
+        public void ShowError(string title, string message) => Show(ToastKind.Error, title, message);
     }
 }

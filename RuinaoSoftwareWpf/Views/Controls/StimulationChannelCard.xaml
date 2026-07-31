@@ -73,12 +73,40 @@
                     <Button Content="{Binding Localization.StartButtonText, ElementName=Root}"
                             Command="{Binding StartCommand, ElementName=Root}"
                             CommandParameter="{Binding}"
-                            Style="{StaticResource TopButton}"
                             Background="#27B65A"
                             Height="32"
                             MinWidth="70"
                             Padding="14,5"
-                            Margin="0,0,12,0" />
+                            Margin="0,0,12,0">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource TopButton}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsStimulating}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="停止"
+                            Command="{Binding StopCommand, ElementName=Root}"
+                            CommandParameter="{Binding}"
+                            Background="{StaticResource Danger}"
+                            Height="32"
+                            MinWidth="70"
+                            Padding="14,5"
+                            Margin="0,0,12,0">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource TopButton}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsStimulating}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                     <TextBlock Text="{Binding Localization.RemainingTimeLabel, ElementName=Root}"
                                Foreground="{StaticResource SubText}"
                                VerticalAlignment="Center"
@@ -129,7 +157,17 @@
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding Localization.AmplitudeLabel, ElementName=Root}" Foreground="{StaticResource SubText}" VerticalAlignment="Center" />
-                        <TextBox Grid.Column="1" Style="{StaticResource StimulationFieldBox}" Text="{Binding CurrentMA, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsParameterEditingEnabled}" />
+                        <TextBox x:Name="CurrentInput"
+                                 Grid.Column="1"
+                                 Tag="CurrentMilliamp"
+                                 Style="{StaticResource StimulationFieldBox}"
+                                 Text="{Binding CurrentMA, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 IsEnabled="{Binding IsParameterEditingEnabled}"
+                                 GotKeyboardFocus="RememberDirectCurrentValue"
+                                 PreviewTextInput="Decimal_PreviewTextInput"
+                                 DataObject.Pasting="Decimal_Pasting"
+                                 TextChanged="ClearNumericValidation"
+                                 LostKeyboardFocus="NormalizeDirectCurrentValue" />
                         <TextBlock Grid.Column="2" Text="mA" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource SubText}" />
                     </Grid>
                     <Grid Height="40">
@@ -139,7 +177,16 @@
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding Localization.RampUpLabel, ElementName=Root}" Foreground="{StaticResource SubText}" VerticalAlignment="Center" />
-                        <TextBox Grid.Column="1" Style="{StaticResource StimulationFieldBox}" Text="{Binding RampUpS, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsParameterEditingEnabled}" />
+                        <TextBox Grid.Column="1"
+                                 Tag="RampUpSeconds"
+                                 Style="{StaticResource StimulationFieldBox}"
+                                 Text="{Binding RampUpS, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 IsEnabled="{Binding IsParameterEditingEnabled}"
+                                 GotKeyboardFocus="RememberDirectCurrentValue"
+                                 PreviewTextInput="Decimal_PreviewTextInput"
+                                 DataObject.Pasting="Decimal_Pasting"
+                                 TextChanged="ClearNumericValidation"
+                                 LostKeyboardFocus="NormalizeDirectCurrentValue" />
                         <TextBlock Grid.Column="2" Text="s" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource SubText}" />
                     </Grid>
                     <Grid Height="40">
@@ -149,7 +196,16 @@
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding Localization.RampDownLabel, ElementName=Root}" Foreground="{StaticResource SubText}" VerticalAlignment="Center" />
-                        <TextBox Grid.Column="1" Style="{StaticResource StimulationFieldBox}" Text="{Binding RampDownS, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsParameterEditingEnabled}" />
+                        <TextBox Grid.Column="1"
+                                 Tag="RampDownSeconds"
+                                 Style="{StaticResource StimulationFieldBox}"
+                                 Text="{Binding RampDownS, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 IsEnabled="{Binding IsParameterEditingEnabled}"
+                                 GotKeyboardFocus="RememberDirectCurrentValue"
+                                 PreviewTextInput="Decimal_PreviewTextInput"
+                                 DataObject.Pasting="Decimal_Pasting"
+                                 TextChanged="ClearNumericValidation"
+                                 LostKeyboardFocus="NormalizeDirectCurrentValue" />
                         <TextBlock Grid.Column="2" Text="s" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource SubText}" />
                     </Grid>
                     <Grid Height="40"
@@ -207,7 +263,16 @@
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding Localization.DurationLabel, ElementName=Root}" Foreground="{StaticResource SubText}" VerticalAlignment="Center" />
-                        <TextBox Grid.Column="1" Style="{StaticResource StimulationFieldBox}" Text="{Binding DurationS, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsParameterEditingEnabled}" />
+                        <TextBox Grid.Column="1"
+                                 Tag="TotalDurationSeconds"
+                                 Style="{StaticResource StimulationFieldBox}"
+                                 Text="{Binding DurationS, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 IsEnabled="{Binding IsParameterEditingEnabled}"
+                                 GotKeyboardFocus="RememberDirectCurrentValue"
+                                 PreviewTextInput="Decimal_PreviewTextInput"
+                                 DataObject.Pasting="Decimal_Pasting"
+                                 TextChanged="ClearNumericValidation"
+                                 LostKeyboardFocus="NormalizeDirectCurrentValue" />
                         <TextBlock Grid.Column="2" Text="s" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource SubText}" />
                     </Grid>
                     <Grid Height="40">
@@ -218,9 +283,15 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding Localization.IntervalTimeLabel, ElementName=Root}" Foreground="{StaticResource SubText}" VerticalAlignment="Center" />
                         <TextBox Grid.Column="1"
+                                 Tag="IntervalSeconds"
                                  Style="{StaticResource StimulationFieldBox}"
                                  Text="{Binding IntervalDisplay, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 IsEnabled="{Binding AreIntervalFieldsEditable}" />
+                                 IsEnabled="{Binding AreIntervalFieldsEditable}"
+                                 GotKeyboardFocus="RememberDirectCurrentValue"
+                                 PreviewTextInput="Decimal_PreviewTextInput"
+                                 DataObject.Pasting="Decimal_Pasting"
+                                 TextChanged="ClearNumericValidation"
+                                 LostKeyboardFocus="NormalizeDirectCurrentValue" />
                         <TextBlock Grid.Column="2"
                                    Text="s"
                                    Margin="8,0,0,0"
@@ -236,9 +307,15 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding Localization.SingleDurationLabel, ElementName=Root}" Foreground="{StaticResource SubText}" VerticalAlignment="Center" />
                         <TextBox Grid.Column="1"
+                                 Tag="SingleDurationSeconds"
                                  Style="{StaticResource StimulationFieldBox}"
                                  Text="{Binding SingleDurationDisplay, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 IsEnabled="{Binding AreIntervalFieldsEditable}" />
+                                 IsEnabled="{Binding AreIntervalFieldsEditable}"
+                                 GotKeyboardFocus="RememberDirectCurrentValue"
+                                 PreviewTextInput="Decimal_PreviewTextInput"
+                                 DataObject.Pasting="Decimal_Pasting"
+                                 TextChanged="ClearNumericValidation"
+                                 LostKeyboardFocus="NormalizeDirectCurrentValue" />
                         <TextBlock Grid.Column="2"
                                    Text="s"
                                    Margin="8,0,0,0"

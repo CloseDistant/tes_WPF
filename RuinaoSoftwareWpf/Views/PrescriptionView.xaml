@@ -6,8 +6,34 @@
     <UserControl.Resources>
         <Style x:Key="ActionButton" TargetType="Button">
             <Setter Property="Height" Value="36"/><Setter Property="MinWidth" Value="104"/><Setter Property="Padding" Value="20,0"/>
-            <Setter Property="Background" Value="{StaticResource Gold}"/><Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Background" Value="#A86F2A"/><Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#815B2C"/><Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/><Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ActionSurface"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ActionSurface" Property="Background" Value="#B97C31"/>
+                                <Setter TargetName="ActionSurface" Property="BorderBrush" Value="#9A6A2F"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ActionSurface" Property="Opacity" Value="0.42"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style x:Key="IconButton" TargetType="Button">
             <Setter Property="Background" Value="#252B36"/><Setter Property="Foreground" Value="#E6EAF1"/>

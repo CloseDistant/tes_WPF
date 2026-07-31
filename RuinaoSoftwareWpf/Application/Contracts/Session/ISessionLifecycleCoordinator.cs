@@ -1,6 +1,7 @@
 namespace RuinaoSoftwareWpf;
 
 public sealed record SessionLifecycleConfirmationRequest(
+    string SessionKey,
     string Title,
     string Message,
     string ConfirmText,
@@ -21,12 +22,12 @@ public interface ISessionLifecycleCoordinator
     bool HasRunningModule { get; }
 
     Task<SessionLifecycleResult> EndCurrentAsync(
-        bool confirmed = false,
+        string? confirmedSessionKey = null,
         CancellationToken cancellationToken = default);
 
     Task<SessionLifecycleResult> PrepareForPatientChangeAsync(
         string action,
-        bool confirmed = false,
+        string? confirmedSessionKey = null,
         CancellationToken cancellationToken = default);
 
     Task InterruptForShutdownAsync(CancellationToken cancellationToken = default);

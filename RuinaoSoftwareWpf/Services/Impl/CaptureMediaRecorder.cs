@@ -10,7 +10,10 @@ using System.Text.Json;
 /// 默认音视频录制实现。
 /// UI 线程只投递摄像头帧，真正的 VideoWriter 磁盘写入在后台线程完成，避免预览卡顿。
 /// </summary>
-internal sealed class CaptureMediaRecorder : ICaptureMediaRecorder
+internal sealed class CaptureMediaRecorder :
+    ICaptureMediaBackend,
+    ICaptureVideoFrameSink,
+    ICaptureFormRecordService
 {
     private const int FrameQueueCapacity = 90;
 
@@ -80,7 +83,12 @@ internal sealed class CaptureMediaRecorder : ICaptureMediaRecorder
             }
         }
 
-        var sessionDirectory = Path.Combine(request.OutputRoot, request.SessionKey, request.ModuleCode);
+        var outputRoot = CaptureOutputPathProvider.GetOutputRoot();
+        var sessionDirectory = Path.Combine(
+            outputRoot,
+            request.SessionKey,
+            request.ModuleCode,
+            request.AssessmentAttemptId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "development");
         Directory.CreateDirectory(sessionDirectory);
 
         var rawVideoPath = Path.Combine(sessionDirectory, $"{request.ModuleCode}_raw.avi");
@@ -93,7 +101,8 @@ internal sealed class CaptureMediaRecorder : ICaptureMediaRecorder
 
         CaptureSessionInfo session;
         session = await repository.CreateModuleSessionAsync(
-            request.OutputRoot,
+            outputRoot,
+            request.AssessmentAttemptId,
             request.SessionKey,
             request.ModuleCode,
             request.ModuleName,
@@ -128,7 +137,13 @@ internal sealed class CaptureMediaRecorder : ICaptureMediaRecorder
         await TryRecordTimelineEventAsync(
             "module_recording_started",
             request.ModuleName,
-            JsonSerializer.Serialize(new { request.ModuleCode, request.ModuleName, request.CameraName }));
+            JsonSerializer.Serialize(new
+            {
+                request.AssessmentAttemptId,
+                request.ModuleCode,
+                request.ModuleName,
+                request.CameraName
+            }));
         return session;
     }
 
@@ -207,7 +222,7 @@ internal sealed class CaptureMediaRecorder : ICaptureMediaRecorder
     }
 
     public async Task<CaptureFormRecordInfo> SaveFormModuleRecordAsync(
-        string outputRoot,
+        long assessmentAttemptId,
         string sessionKey,
         string moduleCode,
         string moduleName,
@@ -221,7 +236,15 @@ internal sealed class CaptureMediaRecorder : ICaptureMediaRecorder
             throw new InvalidOperationException("数字表型表单必须使用当前统一 SessionKey。");
         }
 
-        return await repository.SaveFormModuleRecordAsync(outputRoot, sessionKey, moduleCode, moduleName, formPayloadJson, status, cancellationToken);
+        return await repository.SaveFormModuleRecordAsync(
+            CaptureOutputPathProvider.GetOutputRoot(),
+            assessmentAttemptId,
+            sessionKey,
+            moduleCode,
+            moduleName,
+            formPayloadJson,
+            status,
+            cancellationToken);
     }
 
     public void RequestStop(string status, string message)
@@ -317,6 +340,12 @@ internal sealed class CaptureMediaRecorder : ICaptureMediaRecorder
                 "module_recording_finalize_failed",
                 session.ModuleName,
                 JsonSerializer.Serialize(new { session.ModuleCode, error = exception.Message }));
+            RecordingCompleted?.Invoke(
+                this,
+                new CaptureRecordingCompletedEventArgs(
+                    session,
+                    "finalize_failed",
+                    exception.Message));
         }
     }
 
@@ -376,16 +405,39 @@ internal sealed class CaptureMediaRecorder : ICaptureMediaRecorder
         {
             try
             {
-                var rawVideoPath = timing.RawVideoPath ?? session.RawVideoPath;
-                mediaEncoder.WaitForFileReady(rawVideoPath);
-                mediaEncoder.WaitForFileReady(session.AudioPath);
-                var adjustedFrameRate = await mediaEncoder.CalculateAdjustedFrameRateAsync(session.AudioPath, writtenFrameCount);
-                timing.RecordAdjustedFrameRate(adjustedFrameRate);
-                logger.Info($"开始校正 OpenCV 视频时长：session={session.SessionKey}, adjustedFps={adjustedFrameRate?.ToString(CultureInfo.InvariantCulture) ?? "null"}");
-                await mediaEncoder.NormalizeVideoDurationAsync(rawVideoPath, session.NormalizedVideoPath, adjustedFrameRate);
-                logger.Info($"开始合成音视频：session={session.SessionKey}");
-                await mediaEncoder.MergeAsync(session.NormalizedVideoPath, session.AudioPath, session.MergedVideoPath);
-                logger.Info($"音视频合成完成：session={session.SessionKey}, output={session.MergedVideoPath}");
+                Exception? lastSaveException = null;
+                for (var saveAttempt = 1; saveAttempt <= 2; saveAttempt++)
+                {
+                    try
+                    {
+                        var rawVideoPath = timing.RawVideoPath ?? session.RawVideoPath;
+                        mediaEncoder.WaitForFileReady(rawVideoPath);
+                        mediaEncoder.WaitForFileReady(session.AudioPath);
+                        var adjustedFrameRate = await mediaEncoder.CalculateAdjustedFrameRateAsync(session.AudioPath, writtenFrameCount);
+                        timing.RecordAdjustedFrameRate(adjustedFrameRate);
+                        logger.Info($"开始校正 OpenCV 视频时长：session={session.SessionKey}, adjustedFps={adjustedFrameRate?.ToString(CultureInfo.InvariantCulture) ?? "null"}, saveAttempt={saveAttempt}");
+                        await mediaEncoder.NormalizeVideoDurationAsync(rawVideoPath, session.NormalizedVideoPath, adjustedFrameRate);
+                        logger.Info($"开始合成音视频：session={session.SessionKey}, saveAttempt={saveAttempt}");
+                        await mediaEncoder.MergeAsync(session.NormalizedVideoPath, session.AudioPath, session.MergedVideoPath);
+                        logger.Info($"音视频合成完成：session={session.SessionKey}, output={session.MergedVideoPath}, saveAttempt={saveAttempt}");
+                        lastSaveException = null;
+                        break;
+                    }
+                    catch (Exception exception) when (saveAttempt == 1)
+                    {
+                        lastSaveException = exception;
+                        logger.Error($"音视频首次保存失败，保留原始文件并自动重试：session={session.SessionKey}", exception);
+                    }
+                    catch (Exception exception)
+                    {
+                        lastSaveException = exception;
+                    }
+                }
+
+                if (lastSaveException is not null)
+                {
+                    throw new InvalidOperationException("音视频自动重新保存仍失败。", lastSaveException);
+                }
             }
             catch (Exception exception)
             {
@@ -426,6 +478,7 @@ internal sealed class CaptureMediaRecorder : ICaptureMediaRecorder
             session.ModuleName,
             JsonSerializer.Serialize(new
             {
+                session.AssessmentAttemptId,
                 session.ModuleCode,
                 status = finalStatus,
                 message = finalMessage,

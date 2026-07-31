@@ -9,6 +9,10 @@ namespace RuinaoTesHardware;
 /// </summary>
 public sealed class BackplaneClient : IAsyncDisposable
 {
+    private const ushort ProductModelRegisterAddress = 0x0002;
+    private const ushort BoardModelRegisterAddress = 0x0003;
+    private const ushort ImpedanceRegisterAddress = 0x0010;
+
     private readonly IUsbBackplaneDiscovery discovery;
     private readonly IBackplaneTransport transport;
     private readonly TesV14ProtocolApi protocolApi = new();
@@ -242,6 +246,26 @@ public sealed class BackplaneClient : IAsyncDisposable
         return result with { Registers = ordered };
     }
 
+    /// <summary>读取背板产品型号；寄存器地址由硬件 DLL 管理。</summary>
+    public Task<uint> ReadProductModelAsync(
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default) =>
+        ReadSingleBackplaneRegisterAsync(ProductModelRegisterAddress, options, cancellationToken);
+
+    /// <summary>读取背板型号；寄存器地址由硬件 DLL 管理。</summary>
+    public Task<uint> ReadBoardModelAsync(
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default) =>
+        ReadSingleBackplaneRegisterAsync(BoardModelRegisterAddress, options, cancellationToken);
+
+    /// <summary>
+    /// 读取背板阻抗寄存器。业务板接入后应由专用业务板客户端返回结构化通道数据。
+    /// </summary>
+    public Task<uint> ReadImpedanceAsync(
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default) =>
+        ReadSingleBackplaneRegisterAsync(ImpedanceRegisterAddress, options, cancellationToken);
+
     /// <summary>写入一个或多个V1.4普通寄存器。</summary>
     public async Task<BackplaneRegisterOperationResult> WriteRegistersAsync(
         byte targetAddress,
@@ -261,6 +285,19 @@ public sealed class BackplaneClient : IAsyncDisposable
 
         return await ExchangeRegistersAsync(
             request, requestSequence, targetAddress, true, cancellationToken, registers);
+    }
+
+    private async Task<uint> ReadSingleBackplaneRegisterAsync(
+        ushort registerAddress,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken)
+    {
+        var result = await ReadRegistersAsync(
+            TesV14ProtocolConstants.BackplaneAddress,
+            [registerAddress],
+            options,
+            cancellationToken);
+        return result.Registers[0].Value;
     }
 
     /// <summary>按16组或32组布局读取一个字符串组，内部每批固定读取8个寄存器。</summary>

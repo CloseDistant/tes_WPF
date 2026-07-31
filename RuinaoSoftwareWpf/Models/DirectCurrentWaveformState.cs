@@ -28,27 +28,43 @@ public sealed record DirectCurrentWaveformParameters(
         parameters = null;
         error = string.Empty;
 
-        if (!TryPositive(channel.CurrentMA, out var current))
+        if (!TryParameter(
+                DirectCurrentParameterKind.CurrentMilliamp,
+                channel.CurrentMA,
+                channel.Name,
+                out var current,
+                out error))
         {
-            error = $"{channel.Name}：幅值必须是大于 0 的数字。";
             return false;
         }
 
-        if (!TryNonNegative(channel.RampUpS, out var rampUp))
+        if (!TryParameter(
+                DirectCurrentParameterKind.RampUpSeconds,
+                channel.RampUpS,
+                channel.Name,
+                out var rampUp,
+                out error))
         {
-            error = $"{channel.Name}：渐升时间必须是大于或等于 0 的数字。";
             return false;
         }
 
-        if (!TryNonNegative(channel.RampDownS, out var rampDown))
+        if (!TryParameter(
+                DirectCurrentParameterKind.RampDownSeconds,
+                channel.RampDownS,
+                channel.Name,
+                out var rampDown,
+                out error))
         {
-            error = $"{channel.Name}：渐降时间必须是大于或等于 0 的数字。";
             return false;
         }
 
-        if (!TryPositive(channel.DurationS, out var totalDuration))
+        if (!TryParameter(
+                DirectCurrentParameterKind.TotalDurationSeconds,
+                channel.DurationS,
+                channel.Name,
+                out var totalDuration,
+                out error))
         {
-            error = $"{channel.Name}：刺激时间必须是大于 0 的数字。";
             return false;
         }
 
@@ -65,21 +81,29 @@ public sealed record DirectCurrentWaveformParameters(
         }
         else
         {
-            if (!TryNonNegative(channel.IntervalS, out interval))
+            if (!TryParameter(
+                    DirectCurrentParameterKind.IntervalSeconds,
+                    channel.IntervalS,
+                    channel.Name,
+                    out interval,
+                    out error))
             {
-                error = $"{channel.Name}：间隔时间必须是大于或等于 0 的数字。";
                 return false;
             }
 
-            if (!TryPositive(channel.SingleDurationS, out var singleStimulationDuration))
+            if (!TryParameter(
+                    DirectCurrentParameterKind.SingleDurationSeconds,
+                    channel.SingleDurationS,
+                    channel.Name,
+                    out var singleStimulationDuration,
+                    out error))
             {
-                error = $"{channel.Name}：单次时长必须是大于 0 的数字。";
                 return false;
             }
 
-            if (rampUp + rampDown > singleStimulationDuration)
+            if (rampUp + rampDown >= singleStimulationDuration)
             {
-                error = $"{channel.Name}：单次时长已包含渐升和渐降，不能小于二者之和。";
+                error = $"{channel.Name}：单次时长必须大于渐升时间与渐降时间之和。";
                 return false;
             }
 
@@ -106,14 +130,21 @@ public sealed record DirectCurrentWaveformParameters(
         return true;
     }
 
-    private static bool TryPositive(string? text, out double value) => TryFinite(text, out value) && value > 0;
-
-    private static bool TryNonNegative(string? text, out double value) => TryFinite(text, out value) && value >= 0;
-
-    private static bool TryFinite(string? text, out double value)
+    private static bool TryParameter(
+        DirectCurrentParameterKind kind,
+        string? text,
+        string channelName,
+        out double value,
+        out string error)
     {
-        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
-            && double.IsFinite(value);
+        if (DirectCurrentParameterRules.TryParseValidated(kind, text, out value, out var parameterError))
+        {
+            error = string.Empty;
+            return true;
+        }
+
+        error = $"{channelName}：{parameterError}";
+        return false;
     }
 }
 

@@ -73,7 +73,7 @@ public interface IStimulationDeviceGateway
 
     Task<StimulationCommandResult> StartAsync(CancellationToken cancellationToken = default);
 
-    Task<StimulationCommandResult> PauseAsync(CancellationToken cancellationToken = default);
+    Task<StimulationCommandResult> StopAsync(CancellationToken cancellationToken = default);
 
     Task<StimulationCommandResult> EmergencyStopAsync(
         string reason,

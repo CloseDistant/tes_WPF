@@ -1,6 +1,7 @@
 <Window x:Class="RuinaoSoftwareWpf.Views.Dialogs.PatientFormDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:RuinaoSoftwareWpf.Views.Controls"
         Width="620"
         Height="500"
         WindowStartupLocation="CenterOwner"
@@ -108,9 +109,11 @@
                 <Grid Height="40">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="105" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <TextBlock Style="{StaticResource FieldLabel}"><Run Text="出生日期" /><Run Text="*" Foreground="{StaticResource Danger}" /></TextBlock>
-                    <TextBox x:Name="BirthDateBox" Grid.Column="1" Text="{Binding BirthDateText, UpdateSourceTrigger=PropertyChanged}"
-                             Style="{StaticResource PatientFieldBox}" IsReadOnly="True" Cursor="Hand"
-                             PreviewMouseLeftButtonDown="BirthDateBox_PreviewMouseLeftButtonDown" GotKeyboardFocus="BirthDateBox_GotKeyboardFocus" />
+                    <controls:DateOnlyPicker x:Name="BirthDatePicker"
+                                             Grid.Column="1"
+                                             Height="32"
+                                             RestrictToToday="True"
+                                             SelectedDateText="{Binding BirthDateText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </Grid>
                 <StackPanel Visibility="{Binding IsEditMode, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid Height="40">
@@ -165,24 +168,6 @@
                 </StackPanel>
             </Border>
 
-            <Popup x:Name="DatePickerPopup" Placement="Bottom" StaysOpen="True" AllowsTransparency="True">
-                <Border Width="256" Background="#202532" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="4" Padding="10">
-                    <StackPanel>
-                        <DockPanel Margin="0,0,0,8">
-                            <Button Content="‹" DockPanel.Dock="Left" Style="{StaticResource CalendarNavButton}" Click="PreviousMonthButton_Click" />
-                            <Button Content="›" DockPanel.Dock="Right" Style="{StaticResource CalendarNavButton}" Click="NextMonthButton_Click" />
-                            <TextBlock x:Name="CalendarTitleText" Foreground="{StaticResource Text}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                        </DockPanel>
-                        <UniformGrid Columns="7" Margin="0,0,0,4">
-                            <TextBlock Text="一" Foreground="{StaticResource SubText}" TextAlignment="Center" /><TextBlock Text="二" Foreground="{StaticResource SubText}" TextAlignment="Center" />
-                            <TextBlock Text="三" Foreground="{StaticResource SubText}" TextAlignment="Center" /><TextBlock Text="四" Foreground="{StaticResource SubText}" TextAlignment="Center" />
-                            <TextBlock Text="五" Foreground="{StaticResource SubText}" TextAlignment="Center" /><TextBlock Text="六" Foreground="{StaticResource SubText}" TextAlignment="Center" />
-                            <TextBlock Text="日" Foreground="{StaticResource SubText}" TextAlignment="Center" />
-                        </UniformGrid>
-                        <UniformGrid x:Name="CalendarDaysGrid" Columns="7" Rows="6" />
-                    </StackPanel>
-                </Border>
-            </Popup>
         </Grid>
     </Border>
 </Window>

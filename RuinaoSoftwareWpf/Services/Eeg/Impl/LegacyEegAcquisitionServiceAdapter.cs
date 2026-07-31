@@ -70,11 +70,17 @@ public sealed class LegacyEegAcquisitionServiceAdapter : ApplicationContracts.IE
     public void AddMarker(EegMarkerDefinition marker, string source)
     {
         ArgumentNullException.ThrowIfNull(marker);
+        if (string.IsNullOrWhiteSpace(marker.Code))
+        {
+            throw new ArgumentException("EEG 标记 Code 不能为空。", nameof(marker));
+        }
+
         legacy.AddMarker(
             new EegMarkerTag(
                 marker.DisplayName,
                 marker.Shortcut,
-                ParseColor(marker.ColorHex)),
+                ParseColor(marker.ColorHex),
+                marker.Code),
             source);
     }
 
@@ -82,7 +88,7 @@ public sealed class LegacyEegAcquisitionServiceAdapter : ApplicationContracts.IE
     {
         return legacy.GetMarkers()
             .Select(marker => new EegMarker(
-                CreateMarkerCode(marker.Name),
+                marker.Code,
                 marker.Name,
                 marker.Shortcut,
                 ToColorHex(marker.Color),
@@ -130,16 +136,6 @@ public sealed class LegacyEegAcquisitionServiceAdapter : ApplicationContracts.IE
             EegAcquisitionState.Stopped => EegAcquisitionStatus.Stopped,
             _ => EegAcquisitionStatus.Idle
         };
-    }
-
-    private static string CreateMarkerCode(string name)
-    {
-        return string.Join(
-            "-",
-            name.Trim()
-                .ToUpperInvariant()
-                .Select(character => char.IsLetterOrDigit(character) ? character : '-'))
-            .Trim('-');
     }
 
     private static Color ParseColor(string colorHex)

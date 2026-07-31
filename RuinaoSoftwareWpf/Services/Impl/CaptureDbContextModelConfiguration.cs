@@ -15,7 +15,11 @@ internal static class CaptureDbContextModelConfiguration
         ConfigureFeatureVisibility(modelBuilder);
         ConfigurePrescription(modelBuilder);
         ConfigureStimulationRecord(modelBuilder);
+        ConfigureStimulationRun(modelBuilder);
+        ConfigureStimulationChannelTreatment(modelBuilder);
         ConfigureAssessmentSession(modelBuilder);
+        ConfigureAssessmentRun(modelBuilder);
+        ConfigureAssessmentModuleAttempt(modelBuilder);
         ConfigureAssessmentModuleRecord(modelBuilder);
         ConfigureAssessmentEvent(modelBuilder);
         ConfigureSensorSample(modelBuilder);
@@ -107,9 +111,15 @@ internal static class CaptureDbContextModelConfiguration
         entity.Property(item => item.IntervalMinutes).HasColumnName("interval_minutes");
         entity.Property(item => item.SessionDurationMinutes).HasColumnName("session_duration_minutes");
         entity.Property(item => item.PulseTreatmentDurationSeconds).HasColumnName("pulse_treatment_duration_seconds");
+        entity.Property(item => item.PulseTreatmentDurationSecondsExact).HasColumnName("pulse_treatment_duration_seconds_exact");
         entity.Property(item => item.PulseWidthMilliseconds).HasColumnName("pulse_width_milliseconds");
         entity.Property(item => item.PulseRiseWidthMilliseconds).HasColumnName("pulse_rise_width_milliseconds");
         entity.Property(item => item.PulseIntervalWidthMilliseconds).HasColumnName("pulse_interval_width_milliseconds");
+        entity.Property(item => item.DirectCurrentTotalDurationSeconds).HasColumnName("direct_current_total_duration_seconds");
+        entity.Property(item => item.DirectCurrentIntervalSeconds).HasColumnName("direct_current_interval_seconds");
+        entity.Property(item => item.DirectCurrentSingleDurationSeconds).HasColumnName("direct_current_single_duration_seconds");
+        entity.Property(item => item.DirectCurrentRampUpSeconds).HasColumnName("direct_current_ramp_up_seconds");
+        entity.Property(item => item.DirectCurrentRampDownSeconds).HasColumnName("direct_current_ramp_down_seconds");
         entity.Property(item => item.Course).HasColumnName("course");
         entity.Property(item => item.RampUpSeconds).HasColumnName("ramp_up_seconds");
         entity.Property(item => item.RampDownSeconds).HasColumnName("ramp_down_seconds");
@@ -141,6 +151,73 @@ internal static class CaptureDbContextModelConfiguration
         entity.Property(item => item.EventTimeUnixMs).HasColumnName("event_time_unix_ms");
     }
 
+    private static void ConfigureStimulationRun(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<StimulationRunEntity>();
+        entity.ToTable(
+            "stimulation_runs",
+            table => table.HasCheckConstraint(
+                "CK_stimulation_runs_status",
+                "status IN ('RUNNING', 'ENDED', 'INCOMPLETE')"));
+        entity.HasKey(item => item.Id);
+        entity.HasIndex(item => item.RunId).IsUnique();
+        entity.HasIndex(item => new { item.OperatorUserId, item.StartedAtUnixMs });
+        entity.HasIndex(item => new { item.PatientCode, item.StartedAtUnixMs });
+        entity.HasIndex(item => item.Status);
+        entity.Property(item => item.RunId).HasColumnName("run_id");
+        entity.Property(item => item.OperatorUserId).HasColumnName("operator_user_id");
+        entity.Property(item => item.PatientCode).HasColumnName("patient_code");
+        entity.Property(item => item.StimulationType).HasColumnName("stimulation_type");
+        entity.Property(item => item.PrescriptionName).HasColumnName("prescription_name");
+        entity.Property(item => item.GroupTitle).HasColumnName("group_title");
+        entity.Property(item => item.Status).HasColumnName("status");
+        entity.Property(item => item.StartedAtUnixMs).HasColumnName("started_at_unix_ms");
+        entity.Property(item => item.EndedAtUnixMs).HasColumnName("ended_at_unix_ms");
+        entity.Property(item => item.CreatedAtUnixMs).HasColumnName("created_at_unix_ms");
+        entity.Property(item => item.UpdatedAtUnixMs).HasColumnName("updated_at_unix_ms");
+    }
+
+    private static void ConfigureStimulationChannelTreatment(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<StimulationChannelTreatmentEntity>();
+        entity.ToTable(
+            "stimulation_channel_treatments",
+            table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_stimulation_channel_treatments_status",
+                    "status IN ('RUNNING', 'ENDED', 'INCOMPLETE')");
+                table.HasCheckConstraint(
+                    "CK_stimulation_channel_treatments_end_type",
+                    "end_type IS NULL OR end_type IN ('NORMAL_COMPLETION', 'MANUAL_TERMINATION', 'ABNORMAL_TERMINATION')");
+            });
+        entity.HasKey(item => item.Id);
+        entity.HasIndex(item => new { item.StimulationRunId, item.ChannelName }).IsUnique();
+        entity.HasIndex(item => new { item.ChannelName, item.Status });
+        entity.Property(item => item.StimulationRunId).HasColumnName("stimulation_run_id");
+        entity.Property(item => item.ChannelName).HasColumnName("channel_name");
+        entity.Property(item => item.Status).HasColumnName("status");
+        entity.Property(item => item.StartedAtUnixMs).HasColumnName("started_at_unix_ms");
+        entity.Property(item => item.EndedAtUnixMs).HasColumnName("ended_at_unix_ms");
+        entity.Property(item => item.EndType).HasColumnName("end_type");
+        entity.Property(item => item.EndReasonCode).HasColumnName("end_reason_code");
+        entity.Property(item => item.EndReasonDetail).HasColumnName("end_reason_detail");
+        entity.Property(item => item.CurrentMilliamp).HasColumnName("current_milliamp");
+        entity.Property(item => item.PlannedDurationSeconds).HasColumnName("planned_duration_seconds");
+        entity.Property(item => item.Polarity).HasColumnName("polarity");
+        entity.Property(item => item.ParameterSchemaVersion).HasColumnName("parameter_schema_version");
+        entity.Property(item => item.ParameterSnapshotJson).HasColumnName("parameter_snapshot_json");
+        entity.Property(item => item.PlannedTotalCount).HasColumnName("planned_total_count");
+        entity.Property(item => item.CompletedCount).HasColumnName("completed_count");
+        entity.Property(item => item.DeviceErrorCode).HasColumnName("device_error_code");
+        entity.Property(item => item.CreatedAtUnixMs).HasColumnName("created_at_unix_ms");
+        entity.Property(item => item.UpdatedAtUnixMs).HasColumnName("updated_at_unix_ms");
+        entity.HasOne(item => item.Run)
+            .WithMany(item => item.Channels)
+            .HasForeignKey(item => item.StimulationRunId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+
     private static void ConfigureAssessmentSession(ModelBuilder modelBuilder)
     {
         var entity = modelBuilder.Entity<AssessmentSessionEntity>();
@@ -164,6 +241,8 @@ internal static class CaptureDbContextModelConfiguration
         entity.HasKey(item => item.Id);
         entity.HasIndex(item => new { item.SessionId, item.ModuleCode });
         entity.Property(item => item.SessionId).HasColumnName("session_id");
+        entity.Property(item => item.AssessmentAttemptId).HasColumnName("assessment_attempt_id");
+        entity.HasIndex(item => item.AssessmentAttemptId).IsUnique();
         entity.Property(item => item.ModuleCode).HasColumnName("module_code");
         entity.Property(item => item.ModuleName).HasColumnName("module_name");
         entity.Property(item => item.RecordType).HasColumnName("record_type");
@@ -179,6 +258,53 @@ internal static class CaptureDbContextModelConfiguration
         entity.Property(item => item.EndedAtUnixMs).HasColumnName("ended_at_unix_ms");
         entity.Property(item => item.CreatedAtUnixMs).HasColumnName("created_at_unix_ms");
         entity.Property(item => item.UpdatedAtUnixMs).HasColumnName("updated_at_unix_ms");
+    }
+
+    private static void ConfigureAssessmentRun(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<AssessmentRunEntity>();
+        entity.ToTable("assessment_runs");
+        entity.HasKey(item => item.Id);
+        entity.HasIndex(item => new { item.PatientCode, item.Status });
+        entity.HasIndex(item => item.PatientCode)
+            .HasDatabaseName("IX_assessment_runs_patient_active")
+            .HasFilter("status = 'in_progress'")
+            .IsUnique();
+        entity.Property(item => item.PatientCode).HasColumnName("patient_code");
+        entity.Property(item => item.Status).HasColumnName("status");
+        entity.Property(item => item.TotalModuleCount).HasColumnName("total_module_count");
+        entity.Property(item => item.NextModuleIndex).HasColumnName("next_module_index");
+        entity.Property(item => item.StartedAtUnixMs).HasColumnName("started_at_unix_ms");
+        entity.Property(item => item.EndedAtUnixMs).HasColumnName("ended_at_unix_ms");
+        entity.Property(item => item.CreatedAtUnixMs).HasColumnName("created_at_unix_ms");
+        entity.Property(item => item.UpdatedAtUnixMs).HasColumnName("updated_at_unix_ms");
+    }
+
+    private static void ConfigureAssessmentModuleAttempt(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<AssessmentModuleAttemptEntity>();
+        entity.ToTable("assessment_module_attempts");
+        entity.HasKey(item => item.Id);
+        entity.HasIndex(item => new { item.RunId, item.ModuleIndex, item.AttemptNumber }).IsUnique();
+        entity.HasIndex(item => new { item.RunId, item.Status });
+        entity.Property(item => item.RunId).HasColumnName("run_id");
+        entity.Property(item => item.SessionKey).HasColumnName("session_key");
+        entity.Property(item => item.ModuleCode).HasColumnName("module_code");
+        entity.Property(item => item.ModuleName).HasColumnName("module_name");
+        entity.Property(item => item.ModuleIndex).HasColumnName("module_index");
+        entity.Property(item => item.AttemptNumber).HasColumnName("attempt_number");
+        entity.Property(item => item.Status).HasColumnName("status");
+        entity.Property(item => item.ResultJson).HasColumnName("result_json");
+        entity.Property(item => item.ErrorCode).HasColumnName("error_code");
+        entity.Property(item => item.Message).HasColumnName("message");
+        entity.Property(item => item.StartedAtUnixMs).HasColumnName("started_at_unix_ms");
+        entity.Property(item => item.EndedAtUnixMs).HasColumnName("ended_at_unix_ms");
+        entity.Property(item => item.CreatedAtUnixMs).HasColumnName("created_at_unix_ms");
+        entity.Property(item => item.UpdatedAtUnixMs).HasColumnName("updated_at_unix_ms");
+        entity.HasOne(item => item.Run)
+            .WithMany()
+            .HasForeignKey(item => item.RunId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureAssessmentEvent(ModelBuilder modelBuilder)
@@ -271,5 +397,6 @@ internal static class CaptureDbContextModelConfiguration
         entity.Property(item => item.PageIndex).HasColumnName("page_index");
         entity.Property(item => item.PageSampleIndex).HasColumnName("page_sample_index");
         entity.Property(item => item.Source).HasColumnName("source");
+        entity.Property(item => item.MarkerCode).HasColumnName("marker_code");
     }
 }

@@ -22,6 +22,7 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
     private string rampDownValue;
     private string evidenceGrade;
     private string errorMessage = string.Empty;
+    private bool isModeSelectionStep;
 
     public PrescriptionEditorViewModel(
         PrescriptionDefinition prescription,
@@ -31,8 +32,11 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         Original = prescription;
         IsNew = isNew;
         AvailableStimulationTypes = new ObservableCollection<string>(availableStimulationTypes);
+        AvailableModeChoices = new ObservableCollection<PrescriptionStimulationModeChoice>(
+            AvailableStimulationTypes.Select(PrescriptionStimulationModeChoice.Create));
+        isModeSelectionStep = isNew;
         stimulationType = isNew
-            ? string.Empty
+            ? AvailableStimulationTypes.FirstOrDefault() ?? string.Empty
             : AvailableStimulationTypes.Contains(prescription.StimulationType)
             ? prescription.StimulationType
             : string.Empty;
@@ -47,14 +51,33 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         sessionDurationValue = LoadSessionDurationValue(prescription, isNew);
         course = prescription.Course;
         rampUpValue = LoadRampUpValue(prescription, isNew);
-        rampDownValue = IsPulseCurrent ? string.Empty : isNew ? string.Empty : prescription.RampDownSeconds.ToString(CultureInfo.InvariantCulture);
+        rampDownValue = LoadRampDownValue(prescription, isNew);
         evidenceGrade = prescription.EvidenceGrade;
     }
 
     public PrescriptionDefinition Original { get; }
     public bool IsNew { get; }
     public string Title => IsNew ? "新增处方" : "编辑处方";
+    public string DialogTitle => IsModeSelectionStep ? "选择刺激模式" : Title;
+    public double DialogHeight => IsModeSelectionStep
+        ? Math.Clamp(228 + (AvailableModeChoices.Count * 92), 388, 570)
+        : 650;
     public ObservableCollection<string> AvailableStimulationTypes { get; }
+    public ObservableCollection<PrescriptionStimulationModeChoice> AvailableModeChoices { get; }
+    public bool IsModeSelectionStep
+    {
+        get => isModeSelectionStep;
+        private set
+        {
+            if (SetProperty(ref isModeSelectionStep, value))
+            {
+                OnPropertyChanged(nameof(IsEditorStep));
+                OnPropertyChanged(nameof(DialogTitle));
+                OnPropertyChanged(nameof(DialogHeight));
+            }
+        }
+    }
+    public bool IsEditorStep => !IsModeSelectionStep;
     public IReadOnlyList<string> DeliveryModes => PrescriptionDeliveryModes.All;
     public string Name { get => name; set => SetProperty(ref name, value); }
     public string Indication { get => indication; set => SetProperty(ref indication, value); }
@@ -64,6 +87,11 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         get => stimulationType;
         set
         {
+            if (!IsModeSelectionStep)
+            {
+                return;
+            }
+
             if (stimulationType == value)
             {
                 return;
@@ -107,14 +135,21 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
     }
 
     public bool IsPulseCurrent => StimulationType == PrescriptionDefinition.PulseCurrentStimulationType;
+    public bool IsDirectCurrent => StimulationType == "tDCS";
     public bool IsDeliveryModeEnabled => !IsPulseCurrent;
     public bool IsIntervalMode => IsPulseCurrent || DeliveryMode == PrescriptionDeliveryModes.Interval;
     public bool IsContinuousMode => !IsPulseCurrent && DeliveryMode == PrescriptionDeliveryModes.Continuous;
     public bool IsRampDownEnabled => !IsPulseCurrent;
     public string CurrentLabel => "幅值 (mA)";
-    public string TotalDurationLabel => IsPulseCurrent ? "治疗时间 (s)" : "总时长 (min)";
-    public string IntervalLabel => IsPulseCurrent ? "间隔宽度 (ms)" : "间隔时间 (min)";
-    public string SessionDurationLabel => IsPulseCurrent ? "脉冲宽度 (ms)" : "单次时长 (min)";
+    public string TotalDurationLabel => IsPulseCurrent
+        ? "治疗时间 (s)"
+        : IsDirectCurrent ? "刺激时间 (s)" : "总时长 (min)";
+    public string IntervalLabel => IsPulseCurrent
+        ? "间隔宽度 (ms)"
+        : IsDirectCurrent ? "间隔时间 (s)" : "间隔时间 (min)";
+    public string SessionDurationLabel => IsPulseCurrent
+        ? "脉冲宽度 (ms)"
+        : IsDirectCurrent ? "单次时长 (s)" : "单次时长 (min)";
     public string RampUpLabel => IsPulseCurrent ? "上升宽度 (ms)" : "渐升时间 (s)";
     public string RampDownLabel => IsPulseCurrent ? "渐降时间" : "渐降时间 (s)";
     public string TotalDurationMinutes { get => totalDurationValue; set => SetProperty(ref totalDurationValue, value); }
@@ -142,6 +177,31 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
 
     public string EvidenceGrade { get => evidenceGrade; set => SetProperty(ref evidenceGrade, value); }
     public string ErrorMessage { get => errorMessage; private set => SetProperty(ref errorMessage, value); }
+
+    public bool SelectStimulationType(string stimulationType)
+    {
+        if (!IsModeSelectionStep || !AvailableStimulationTypes.Contains(stimulationType))
+        {
+            return false;
+        }
+
+        StimulationType = stimulationType;
+        return true;
+    }
+
+    public bool ContinueToEditor()
+    {
+        if (!IsModeSelectionStep || string.IsNullOrWhiteSpace(StimulationType))
+        {
+            ErrorMessage = "请选择刺激模式。";
+            return false;
+        }
+
+        ApplyNewPrescriptionDefaults();
+        ErrorMessage = string.Empty;
+        IsModeSelectionStep = false;
+        return true;
+    }
 
     public bool TryBuild(out PrescriptionDefinition prescription)
     {
@@ -188,52 +248,79 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
             return TryBuildPulseCurrent(current, out prescription);
         }
 
+        if (IsDirectCurrent)
+        {
+            return TryBuildDirectCurrent(current, out prescription);
+        }
+
         return TryBuildMinuteBased(current, out prescription);
     }
+
+    public DirectCurrentParameterNormalization NormalizeDirectCurrentEntry(
+        DirectCurrentParameterKind kind,
+        string text,
+        string fallbackValue) =>
+        DirectCurrentParameterRules.Normalize(kind, text, fallbackValue);
+
+    public PulseCurrentParameterNormalization NormalizePulseCurrentEntry(
+        PulseCurrentParameterKind kind,
+        string text,
+        string fallbackValue) =>
+        PulseCurrentParameterRules.Normalize(kind, text, fallbackValue);
+
+    public void ReportInputError(string message) => ErrorMessage = message;
 
     private bool TryBuildPulseCurrent(double current, out PrescriptionDefinition prescription)
     {
         prescription = Original;
-        if (current > PulseCurrentParameters.MaxCurrentMilliamp)
+        if (!TryPulseCurrentParameter(
+                PulseCurrentParameterKind.CurrentMilliamp,
+                CurrentMilliamp,
+                out current))
         {
-            ErrorMessage = "幅值必须大于 0 且不超过 15 mA。";
             return false;
         }
 
-        if (!TryPositiveInt(TotalDurationMinutes, out var treatmentDurationSeconds))
+        if (!TryPulseCurrentParameter(
+                PulseCurrentParameterKind.TreatmentDurationSeconds,
+                TotalDurationMinutes,
+                out var treatmentDurationSeconds))
         {
-            ErrorMessage = "治疗时间必须为大于 0 的整数秒。";
             return false;
         }
 
-        if (!TryPositiveInt(SessionDurationMinutesEntry, out var pulseWidthMilliseconds)
-            || pulseWidthMilliseconds > PulseCurrentParameters.MaxPulseWidthMilliseconds)
+        if (!TryPulseCurrentIntegerParameter(
+                PulseCurrentParameterKind.PulseWidthMilliseconds,
+                SessionDurationMinutesEntry,
+                out var pulseWidthMilliseconds))
         {
-            ErrorMessage = "脉冲宽度必须大于 0 且不超过 1000 ms。";
             return false;
         }
 
-        if (!TryNonNegativeInt(RampUpSeconds, out var riseWidthMilliseconds)
-            || riseWidthMilliseconds > PulseCurrentParameters.MaxRiseWidthMilliseconds)
+        if (!TryPulseCurrentIntegerParameter(
+                PulseCurrentParameterKind.RiseWidthMilliseconds,
+                RampUpSeconds,
+                out var riseWidthMilliseconds))
         {
-            ErrorMessage = "上升宽度必须在 0–1000 ms 范围内。";
             return false;
         }
 
-        if (!TryNonNegativeInt(IntervalMinutesEntry, out var intervalWidthMilliseconds)
-            || intervalWidthMilliseconds > PulseCurrentParameters.MaxIntervalWidthMilliseconds)
+        if (!TryPulseCurrentIntegerParameter(
+                PulseCurrentParameterKind.IntervalWidthMilliseconds,
+                IntervalMinutesEntry,
+                out var intervalWidthMilliseconds))
         {
-            ErrorMessage = "间隔宽度必须在 0–10000 ms 范围内。";
             return false;
         }
 
         var channel = new PulseCurrentChannelConfig
         {
-            CurrentMilliamp = current.ToString("0.##", CultureInfo.InvariantCulture),
+            CurrentMilliamp = PulseCurrentParameterRules.FormatCurrent(current),
             PulseWidthMilliseconds = pulseWidthMilliseconds.ToString(CultureInfo.InvariantCulture),
             RiseWidthMilliseconds = riseWidthMilliseconds.ToString(CultureInfo.InvariantCulture),
             IntervalWidthMilliseconds = intervalWidthMilliseconds.ToString(CultureInfo.InvariantCulture),
-            TreatmentDurationSeconds = treatmentDurationSeconds.ToString(CultureInfo.InvariantCulture),
+            TreatmentDurationSeconds = PulseCurrentParameterRules.FormatTreatmentDuration(
+                treatmentDurationSeconds),
             Polarity = PulseCurrentPolarities.NotReversed
         };
         if (!PulseCurrentParameters.TryCreate(channel, out _, out var pulseError))
@@ -257,7 +344,9 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
             RampDownSeconds = 0,
             EvidenceGrade = EvidenceGrade.Trim(),
             ChannelPolarities = null,
-            PulseTreatmentDurationSeconds = treatmentDurationSeconds,
+            // 旧整数字段用于兼容旧版本；新版本读取精确秒字段。
+            PulseTreatmentDurationSeconds = (int)Math.Ceiling(treatmentDurationSeconds),
+            PulseTreatmentDurationSecondsValue = treatmentDurationSeconds,
             PulseWidthMilliseconds = pulseWidthMilliseconds,
             PulseRiseWidthMilliseconds = riseWidthMilliseconds,
             PulseIntervalWidthMilliseconds = intervalWidthMilliseconds
@@ -313,9 +402,101 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
             EvidenceGrade = EvidenceGrade.Trim(),
             ChannelPolarities = null,
             PulseTreatmentDurationSeconds = null,
+            PulseTreatmentDurationSecondsValue = null,
             PulseWidthMilliseconds = null,
             PulseRiseWidthMilliseconds = null,
             PulseIntervalWidthMilliseconds = null
+        };
+        ErrorMessage = string.Empty;
+        return true;
+    }
+
+    private bool TryBuildDirectCurrent(double current, out PrescriptionDefinition prescription)
+    {
+        prescription = Original;
+        if (!TryDirectCurrentParameter(
+                DirectCurrentParameterKind.CurrentMilliamp,
+                CurrentMilliamp,
+                out current))
+        {
+            return false;
+        }
+
+        if (!TryDirectCurrentParameter(
+                DirectCurrentParameterKind.TotalDurationSeconds,
+                TotalDurationMinutes,
+                out var totalDuration)
+            || !TryDirectCurrentParameter(
+                DirectCurrentParameterKind.RampUpSeconds,
+                RampUpSeconds,
+                out var rampUp)
+            || !TryDirectCurrentParameter(
+                DirectCurrentParameterKind.RampDownSeconds,
+                RampDownSecondsEntry,
+                out var rampDown))
+        {
+            return false;
+        }
+
+        double? interval = null;
+        double? singleDuration = null;
+        if (totalDuration < rampUp + rampDown)
+        {
+            ErrorMessage = "刺激时间不能小于渐升时间与渐降时间之和。";
+            return false;
+        }
+
+        if (IsIntervalMode)
+        {
+            if (!TryDirectCurrentParameter(
+                    DirectCurrentParameterKind.IntervalSeconds,
+                    IntervalMinutesEntry,
+                    out var parsedInterval)
+                || !TryDirectCurrentParameter(
+                    DirectCurrentParameterKind.SingleDurationSeconds,
+                    SessionDurationMinutesEntry,
+                    out var parsedSingleDuration))
+            {
+                return false;
+            }
+
+            if (parsedSingleDuration <= rampUp + rampDown)
+            {
+                ErrorMessage = "单次时长必须大于渐升时间与渐降时间之和。";
+                return false;
+            }
+
+            interval = parsedInterval;
+            singleDuration = parsedSingleDuration;
+        }
+        prescription = Original with
+        {
+            Name = Name.Trim(),
+            Indication = Indication.Trim(),
+            StimulationType = StimulationType,
+            CurrentMilliamp = current,
+            DeliveryMode = DeliveryMode,
+            // 旧分钟字段仅用于老版本读取；新版本始终使用下方的秒制字段。
+            TotalDurationMinutes = Math.Max(1, (int)Math.Ceiling(totalDuration / 60d)),
+            IntervalMinutes = interval.HasValue ? (int)Math.Ceiling(interval.Value / 60d) : null,
+            SessionDurationMinutes = singleDuration.HasValue
+                ? Math.Max(1, (int)Math.Ceiling(singleDuration.Value / 60d))
+                : null,
+            Course = Course.Trim(),
+            RampUpSeconds = (int)Math.Round(rampUp, MidpointRounding.AwayFromZero),
+            RampDownSeconds = (int)Math.Round(rampDown, MidpointRounding.AwayFromZero),
+            EvidenceGrade = EvidenceGrade.Trim(),
+            ChannelPolarities = null,
+            PulseTreatmentDurationSeconds = null,
+            PulseTreatmentDurationSecondsValue = null,
+            PulseWidthMilliseconds = null,
+            PulseRiseWidthMilliseconds = null,
+            PulseIntervalWidthMilliseconds = null,
+            DirectCurrentTotalDurationSecondsValue = totalDuration,
+            DirectCurrentIntervalSecondsValue = interval,
+            DirectCurrentSingleDurationSecondsValue = singleDuration,
+            DirectCurrentRampUpSecondsValue = rampUp,
+            DirectCurrentRampDownSecondsValue = rampDown
         };
         ErrorMessage = string.Empty;
         return true;
@@ -337,6 +518,7 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
     private void NotifyModePropertiesChanged()
     {
         OnPropertyChanged(nameof(IsPulseCurrent));
+        OnPropertyChanged(nameof(IsDirectCurrent));
         OnPropertyChanged(nameof(IsDeliveryModeEnabled));
         OnPropertyChanged(nameof(IsIntervalMode));
         OnPropertyChanged(nameof(IsContinuousMode));
@@ -359,8 +541,11 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         }
 
         return prescription.IsPulseCurrent
-            ? prescription.PulseTreatmentDurationSeconds?.ToString(CultureInfo.InvariantCulture) ?? string.Empty
-            : prescription.TotalDurationMinutes.ToString(CultureInfo.InvariantCulture);
+            ? PulseCurrentParameterRules.FormatTreatmentDuration(
+                prescription.PulseTreatmentDurationSecondsResolved)
+            : string.Equals(prescription.StimulationType, "tDCS", StringComparison.Ordinal)
+                ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentTotalDurationSeconds)
+                : prescription.TotalDurationMinutes.ToString(CultureInfo.InvariantCulture);
     }
 
     private static string LoadIntervalValue(PrescriptionDefinition prescription, bool isNew)
@@ -372,7 +557,9 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
 
         return prescription.IsPulseCurrent
             ? prescription.PulseIntervalWidthMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? string.Empty
-            : prescription.IntervalMinutes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            : string.Equals(prescription.StimulationType, "tDCS", StringComparison.Ordinal)
+                ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentIntervalDurationSeconds)
+                : prescription.IntervalMinutes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     }
 
     private static string LoadSessionDurationValue(PrescriptionDefinition prescription, bool isNew)
@@ -384,7 +571,9 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
 
         return prescription.IsPulseCurrent
             ? prescription.PulseWidthMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? string.Empty
-            : prescription.SessionDurationMinutes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            : string.Equals(prescription.StimulationType, "tDCS", StringComparison.Ordinal)
+                ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentSingleDurationSeconds)
+                : prescription.SessionDurationMinutes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     }
 
     private static string LoadRampUpValue(PrescriptionDefinition prescription, bool isNew)
@@ -396,7 +585,97 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
 
         return prescription.IsPulseCurrent
             ? prescription.PulseRiseWidthMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? string.Empty
-            : prescription.RampUpSeconds.ToString(CultureInfo.InvariantCulture);
+            : string.Equals(prescription.StimulationType, "tDCS", StringComparison.Ordinal)
+                ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentRampUpDurationSeconds)
+                : prescription.RampUpSeconds.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string LoadRampDownValue(PrescriptionDefinition prescription, bool isNew)
+    {
+        if (isNew || prescription.IsPulseCurrent)
+        {
+            return string.Empty;
+        }
+
+        return string.Equals(prescription.StimulationType, "tDCS", StringComparison.Ordinal)
+            ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentRampDownDurationSeconds)
+            : prescription.RampDownSeconds.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private void ApplyNewPrescriptionDefaults()
+    {
+        if (!IsNew)
+        {
+            return;
+        }
+
+        if (IsDirectCurrent)
+        {
+            CurrentMilliamp = DirectCurrentParameterRules.DefaultCurrentMilliamp;
+            DeliveryMode = PrescriptionDeliveryModes.Interval;
+            TotalDurationMinutes = DirectCurrentParameterRules.DefaultTotalDurationSeconds;
+            intervalValue = DirectCurrentParameterRules.DefaultIntervalSeconds;
+            sessionDurationValue = DirectCurrentParameterRules.DefaultSingleDurationSeconds;
+            RampUpSeconds = DirectCurrentParameterRules.DefaultRampUpSeconds;
+            rampDownValue = DirectCurrentParameterRules.DefaultRampDownSeconds;
+        }
+        else if (IsPulseCurrent)
+        {
+            CurrentMilliamp = PulseCurrentParameterRules.DefaultCurrentMilliamp;
+            DeliveryMode = PrescriptionDeliveryModes.Interval;
+            TotalDurationMinutes = PulseCurrentParameterRules.DefaultTreatmentDurationSeconds;
+            intervalValue = PulseCurrentParameterRules.DefaultIntervalWidthMilliseconds;
+            sessionDurationValue = PulseCurrentParameterRules.DefaultPulseWidthMilliseconds;
+            RampUpSeconds = PulseCurrentParameterRules.DefaultRiseWidthMilliseconds;
+            rampDownValue = string.Empty;
+        }
+
+        OnPropertyChanged(nameof(IntervalMinutesEntry));
+        OnPropertyChanged(nameof(SessionDurationMinutesEntry));
+        OnPropertyChanged(nameof(RampDownSecondsEntry));
+    }
+
+    private bool TryDirectCurrentParameter(
+        DirectCurrentParameterKind kind,
+        string text,
+        out double value)
+    {
+        if (DirectCurrentParameterRules.TryParseValidated(kind, text, out value, out var error))
+        {
+            return true;
+        }
+
+        ErrorMessage = error;
+        return false;
+    }
+
+    private bool TryPulseCurrentParameter(
+        PulseCurrentParameterKind kind,
+        string text,
+        out double value)
+    {
+        if (PulseCurrentParameterRules.TryParseValidated(kind, text, out value, out var error))
+        {
+            return true;
+        }
+
+        ErrorMessage = error;
+        return false;
+    }
+
+    private bool TryPulseCurrentIntegerParameter(
+        PulseCurrentParameterKind kind,
+        string text,
+        out int value)
+    {
+        value = 0;
+        if (!TryPulseCurrentParameter(kind, text, out var parsed))
+        {
+            return false;
+        }
+
+        value = checked((int)parsed);
+        return true;
     }
 
     private static bool TryParseDouble(string value, out double result) =>
@@ -406,4 +685,22 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         values.Any(InputTextRules.ContainsControlCharacters);
     private static bool TryPositiveInt(string value, out int result) => int.TryParse(value, out result) && result > 0;
     private static bool TryNonNegativeInt(string value, out int result) => int.TryParse(value, out result) && result >= 0;
+}
+
+public sealed record PrescriptionStimulationModeChoice(
+    string ShortName,
+    string DisplayName,
+    string IconGlyph)
+{
+    public static PrescriptionStimulationModeChoice Create(string shortName)
+    {
+        return shortName switch
+        {
+            "TI" => new(shortName, "时间相干电刺激", "≈"),
+            "tDCS" => new(shortName, "经颅直流电刺激", "━"),
+            PrescriptionDefinition.PulseCurrentStimulationType =>
+                new(shortName, "经颅脉冲电刺激", "⌁"),
+            _ => new(shortName, shortName, "—")
+        };
+    }
 }

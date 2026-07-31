@@ -5,6 +5,17 @@ using System.Text.Json;
 
 public sealed partial class AssessmentCaptureViewModel
 {
+    private async Task EnsureCurrentModuleAttemptStartedAsync(CancellationToken cancellationToken = default)
+    {
+        if (!IsFormModule || IsDevelopmentModuleOverride || activeModuleAttempt is not null)
+        {
+            return;
+        }
+
+        var sessionKey = await GetOrStartUnifiedSessionKeyAsync(cancellationToken);
+        await BeginCurrentModuleAttemptAsync(sessionKey, cancellationToken);
+    }
+
     private void BeginBasicInfoForm()
     {
         StopModuleExecutionTimers();
@@ -382,11 +393,14 @@ public sealed partial class AssessmentCaptureViewModel
     {
         try
         {
-            var outputRoot = CaptureOutputPathProvider.GetOutputRoot();
             var sessionKey = await GetOrStartUnifiedSessionKeyAsync();
+            await EnsureCurrentModuleAttemptStartedAsync();
+            var attempt = activeModuleAttempt
+                ?? throw new InvalidOperationException("当前表单没有有效的评估尝试。");
             var payloadJson = JsonSerializer.Serialize(payload);
-            await captureMediaRecorder.SaveFormModuleRecordAsync(
-                outputRoot,
+            await assessmentModuleLifecycle.MarkSavingAsync(attempt.AttemptId);
+            await captureFormRecordService.SaveFormModuleRecordAsync(
+                attempt.AttemptId,
                 sessionKey,
                 moduleCode,
                 moduleName,
@@ -396,13 +410,38 @@ public sealed partial class AssessmentCaptureViewModel
                 SessionModuleCodes.DigitalPhenotype,
                 "form_submitted",
                 moduleName,
-                payloadJson,
+                JsonSerializer.Serialize(new
+                {
+                    AssessmentAttemptId = attempt.AttemptId,
+                    FormPayload = payload
+                }),
                 submittedAt);
 
+            await assessmentModuleLifecycle.CompleteAsync(attempt.AttemptId, payloadJson);
+            activeModuleAttempt = null;
+            formalNextModuleIndex = Math.Min(attempt.ModuleIndex + 1, FormalModuleCount);
+            toastService.ShowSuccess("数据保存完成", $"{moduleName} 已保存，可以进入下一模块。");
             onSuccess();
         }
         catch (Exception exception)
         {
+            if (activeModuleAttempt is { } attempt)
+            {
+                try
+                {
+                    await assessmentModuleLifecycle.FailAsync(
+                        attempt.AttemptId,
+                        "FORM_SAVE_FAILED",
+                        exception.Message);
+                }
+                catch
+                {
+                    // 原始保存异常优先呈现；恢复进度时会把遗留尝试标记为无效。
+                }
+
+                activeModuleAttempt = null;
+            }
+
             onError(exception.Message);
         }
     }

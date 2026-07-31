@@ -58,7 +58,15 @@ public sealed class NullPatientService : IPatientService
 
 public sealed class NullStimulationRecordService : IStimulationRecordService
 {
-    public Task RecordAsync(StimulationRecordRequest request, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<string> StartRunAsync(
+        StimulationRunStartRequest request,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(Guid.NewGuid().ToString("N"));
+
+    public Task EndChannelsAsync(
+        StimulationChannelsEndRequest request,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 
     public Task<PageResult<StimulationTreatmentRecord>> GetTreatmentRecordsPageAsync(
         PageRequest request,

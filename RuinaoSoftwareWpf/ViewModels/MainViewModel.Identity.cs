@@ -24,6 +24,7 @@ public sealed partial class MainViewModel
         try
         {
             await Patient.InitializeAsync();
+            await AssessmentCapture.LoadPatientProgressAsync();
             ShellState.FooterStatus = patientService.CurrentPatient is null ? "请新增或选择患者" : $"当前患者：{patientService.CurrentPatient.PatientCode}";
         }
         catch (Exception ex)
@@ -38,6 +39,12 @@ public sealed partial class MainViewModel
         if (!CanManagePatients)
         {
             ShellState.FooterStatus = "只有 Admin 或 Doctor 可以新增患者";
+            return;
+        }
+
+        if (IsPatientOperationLocked)
+        {
+            toastService.ShowInformation("当前模块正在运行或保存，不能切换患者。", "患者切换已禁用");
             return;
         }
 
@@ -57,6 +64,7 @@ public sealed partial class MainViewModel
         }
 
         var patient = await patientService.CreatePatientAsync(dialog.Request);
+        await AssessmentCapture.LoadPatientProgressAsync();
         ShellState.FooterStatus = $"患者已新增并切换为当前患者：{patient.Name}";
     }
 
@@ -97,6 +105,12 @@ public sealed partial class MainViewModel
             return;
         }
 
+        if (IsPatientOperationLocked)
+        {
+            toastService.ShowInformation("当前模块正在运行或保存，不能切换患者。", "患者切换已禁用");
+            return;
+        }
+
         var firstPage = await patientService.GetPatientsPageAsync(new PageRequest(0, 30));
         if (firstPage.Items.Count == 0)
         {
@@ -129,6 +143,7 @@ public sealed partial class MainViewModel
         }
 
         var patient = await patientService.SwitchCurrentPatientAsync(dialog.SelectedPatient.PatientCode);
+        await AssessmentCapture.LoadPatientProgressAsync();
         ShellState.FooterStatus = $"已切换到患者：{patient.Name}。";
     }
 
@@ -143,7 +158,8 @@ public sealed partial class MainViewModel
                 return;
             }
 
-            result = await sessionLifecycleCoordinator.EndCurrentAsync(confirmed: true);
+            result = await sessionLifecycleCoordinator.EndCurrentAsync(
+                confirmation.SessionKey);
         }
 
         ShellState.FooterStatus = result.Message;
@@ -162,7 +178,7 @@ public sealed partial class MainViewModel
 
             result = await sessionLifecycleCoordinator.PrepareForPatientChangeAsync(
                 action,
-                confirmed: true);
+                confirmation.SessionKey);
         }
 
         if (!result.Succeeded && !string.IsNullOrWhiteSpace(result.Message))

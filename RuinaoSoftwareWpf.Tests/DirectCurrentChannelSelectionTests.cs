@@ -109,6 +109,61 @@ public sealed class DirectCurrentChannelSelectionTests
     }
 
     [Fact]
+    public void StopChannelCommand_InDebugSimulation_StopsOnlyTarget()
+    {
+        var viewModel = CreateViewModel(
+            debugHardwareSimulation: new ConnectedDebugSimulation());
+        var first = viewModel.Channels[0];
+        var second = viewModel.Channels[1];
+        first.CurrentMA = "1";
+        second.CurrentMA = "1";
+
+        viewModel.StartChannelCommand.Execute(first);
+        viewModel.StartChannelCommand.Execute(second);
+
+        Assert.True(viewModel.StopChannelCommand.CanExecute(first));
+        viewModel.StopChannelCommand.Execute(first);
+
+        Assert.False(first.IsStimulating);
+        Assert.True(first.IsParameterEditingEnabled);
+        Assert.Equal("00:00:00", first.RemainingTime);
+        Assert.True(second.IsStimulating);
+        Assert.False(viewModel.StopChannelCommand.CanExecute(first));
+    }
+
+    [Fact]
+    public void StopChannelCommand_WhenStopFails_ShowsStopFailureAndKeepsChannelRunning()
+    {
+        var engine = new NoopStimulationEngine { FailStop = true };
+        var toast = new CapturingToastService();
+        var viewModel = CreateViewModel(
+            engine,
+            new ConnectedDebugSimulation(),
+            toast);
+        var target = viewModel.Channels[0];
+        target.CurrentMA = "1";
+
+        viewModel.StartChannelCommand.Execute(target);
+        viewModel.StopChannelCommand.Execute(target);
+
+        Assert.True(target.IsStimulating);
+        Assert.Equal("刺激停止失败", toast.Title);
+        Assert.Contains("停止命令未完成", toast.Message);
+    }
+
+    [Fact]
+    public void ParameterValidationFailedCommand_ShowsWarningToast()
+    {
+        var toast = new CapturingToastService();
+        var viewModel = CreateViewModel(toastService: toast);
+
+        viewModel.ParameterValidationFailedCommand.Execute("幅值最小设置步进为 0.01 mA。");
+
+        Assert.Equal(ToastKind.Warning, toast.Kind);
+        Assert.Equal("幅值最小设置步进为 0.01 mA。", toast.Message);
+    }
+
+    [Fact]
     public void ApplyPrescription_PreservesEachChannelsPolarity()
     {
         var viewModel = CreateViewModel();
@@ -143,15 +198,33 @@ public sealed class DirectCurrentChannelSelectionTests
         IsBuiltin: false);
 
     private static DirectCurrentControlViewModel CreateViewModel(
-        NoopStimulationEngine? stimulationEngine = null)
+        NoopStimulationEngine? stimulationEngine = null,
+        IDebugHardwareSimulationService? debugHardwareSimulation = null,
+        IToastService? toastService = null)
     {
         return new DirectCurrentControlViewModel(
             stimulationEngine ?? new NoopStimulationEngine(),
             new ConnectedHardwareState(),
-            new DebugHardwareSimulationService(),
+            debugHardwareSimulation ?? new DebugHardwareSimulationService(),
             new NoopLoggingService(),
             new LocalizationViewModel(new AppLocalizationService()),
-            new NoopToastService());
+            toastService ?? new NoopToastService());
+    }
+
+    private sealed class ConnectedDebugSimulation : IDebugHardwareSimulationService
+    {
+        public event EventHandler? ConnectionChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public bool IsAvailable => true;
+
+        public bool IsConnected => true;
+
+        public DebugHardwareSimulationResult Connect(bool realHardwareConnected) =>
+            new(true, "已连接");
     }
 
     private sealed class ConnectedHardwareState : IHardwareConnectionState
@@ -168,6 +241,8 @@ public sealed class DirectCurrentChannelSelectionTests
     private sealed class NoopStimulationEngine : IStimulationEngine
     {
         public TiGroup? LastStartedDirectCurrentGroup { get; private set; }
+
+        public bool FailStop { get; init; }
 
         public StimulationExecutionState CurrentState => StimulationExecutionState.Idle;
 
@@ -187,10 +262,14 @@ public sealed class DirectCurrentChannelSelectionTests
             return Success();
         }
 
-        public Task<HardwareOperationResult> PauseTiGroupAsync(
+        public Task<HardwareOperationResult> StopGroupAsync(
             TiGroup group,
             string selectedChannelNames,
-            CancellationToken cancellationToken = default) => NotUsed();
+            string stimulationType,
+            CancellationToken cancellationToken = default) =>
+            FailStop
+                ? Task.FromException<HardwareOperationResult>(new TimeoutException("stop timeout"))
+                : Success();
 
         public Task<HardwareOperationResult> EmergencyStopTiGroupAsync(
             TiGroup group,
@@ -239,5 +318,24 @@ public sealed class DirectCurrentChannelSelectionTests
         public void ShowInformation(string message, string title = "提示") { }
         public void ShowSuccess(string title, string message) { }
         public void ShowError(string title, string message) { }
+    }
+
+    private sealed class CapturingToastService : IToastService
+    {
+        public Visibility Visibility => Visibility.Visible;
+        public ToastKind Kind { get; private set; }
+        public string Title { get; private set; } = string.Empty;
+        public string Message { get; private set; } = string.Empty;
+        public string Icon => string.Empty;
+        public string Accent => string.Empty;
+        public void Show(ToastKind kind, string title, string message, TimeSpan? duration = null)
+        {
+            Kind = kind;
+            Title = title;
+            Message = message;
+        }
+        public void ShowInformation(string message, string title = "提示") => Show(ToastKind.Information, title, message);
+        public void ShowSuccess(string title, string message) => Show(ToastKind.Success, title, message);
+        public void ShowError(string title, string message) => Show(ToastKind.Error, title, message);
     }
 }

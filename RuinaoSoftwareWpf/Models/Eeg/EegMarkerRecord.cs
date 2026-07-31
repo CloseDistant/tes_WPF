@@ -2,7 +2,11 @@ using System.Windows.Media;
 
 namespace RuinaoSoftwareWpf;
 
-public sealed record EegMarkerTag(string Name, string KeyText, Color Color);
+public sealed record EegMarkerTag(
+    string Name,
+    string KeyText,
+    Color Color,
+    string Code);
 
 public sealed record EegMarkerRecord(
     string Name,
@@ -13,4 +17,5 @@ public sealed record EegMarkerRecord(
     int PageIndex,
     int PageSampleIndex,
     long SampleIndex,
-    string Source);
+    string Source,
+    string Code);

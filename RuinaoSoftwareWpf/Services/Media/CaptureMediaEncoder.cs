@@ -105,6 +105,7 @@ internal sealed class CaptureMediaEncoder : ICaptureMediaEncoder
 
     public void DeleteDiscardedRecording(CaptureSessionInfo session)
     {
+        Exception? lastException = null;
         for (var attempt = 0; attempt < 10; attempt++)
         {
             try
@@ -120,9 +121,21 @@ internal sealed class CaptureMediaEncoder : ICaptureMediaEncoder
 
                 return;
             }
-            catch (IOException) { Thread.Sleep(150); }
-            catch (UnauthorizedAccessException) { Thread.Sleep(150); }
+            catch (IOException exception)
+            {
+                lastException = exception;
+                Thread.Sleep(150);
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                lastException = exception;
+                Thread.Sleep(150);
+            }
         }
+
+        throw new InvalidOperationException(
+            $"取消模块后无法删除音视频文件：{session.OutputDirectory}",
+            lastException);
     }
 
     internal static string ResolveFfmpegPath(string? applicationDirectory = null)

@@ -6,6 +6,26 @@ using Xunit;
 public sealed class DirectCurrentWaveformTests
 {
     [Theory]
+    [InlineData(0, "0.0")]
+    [InlineData(0.5, "0.5")]
+    [InlineData(1.25, "1.25")]
+    [InlineData(2, "2.0")]
+    public void CurrentAxis_UsesOneOrTwoDecimalPlaces(double value, string expected)
+    {
+        Assert.Equal(expected, DirectCurrentWaveformSurface.FormatAxisValue(value));
+    }
+
+    [Theory]
+    [InlineData(0, "0.0")]
+    [InlineData(31, "31.0")]
+    [InlineData(31.25, "31.3")]
+    [InlineData(3600, "3600.0")]
+    public void TimeAxis_UsesOneDecimalPlace(double seconds, string expected)
+    {
+        Assert.Equal(expected, DirectCurrentWaveformSurface.FormatSeconds(seconds));
+    }
+
+    [Theory]
     [InlineData(0, 0)]
     [InlineData(15, 1)]
     [InlineData(30, 2)]
@@ -106,7 +126,7 @@ public sealed class DirectCurrentWaveformTests
         };
 
         Assert.False(DirectCurrentWaveformParameters.TryCreate(channel, out _, out var error));
-        Assert.Contains("已包含渐升和渐降", error);
+        Assert.Contains("必须大于渐升时间与渐降时间之和", error);
     }
 
     [Fact]

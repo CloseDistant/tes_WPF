@@ -20,6 +20,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     private readonly Dictionary<ChannelConfig, ChannelRuntime> activeChannels = [];
     private readonly AsyncRelayCommand synchronizedStartCommand;
     private readonly AsyncRelayCommand startChannelCommand;
+    private readonly AsyncRelayCommand stopChannelCommand;
     private readonly AsyncRelayCommand emergencyStopCommand;
     private readonly RelayCommand usePrescriptionCommand;
     private readonly RelayCommand useChannelPrescriptionCommand;
@@ -86,6 +87,19 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
                 && !activeChannels.ContainsKey(channel),
             onError: HandleStartFailure);
         StartChannelCommand = startChannelCommand;
+        stopChannelCommand = new AsyncRelayCommand(
+            async (parameter, cancellationToken) =>
+            {
+                if (parameter is ChannelConfig channel)
+                {
+                    await StopSimulatedChannelAsync(channel, cancellationToken);
+                }
+            },
+            parameter => debugHardwareSimulation.IsConnected
+                && parameter is ChannelConfig channel
+                && activeChannels.ContainsKey(channel),
+            onError: HandleStopFailure);
+        StopChannelCommand = stopChannelCommand;
         emergencyStopCommand = new AsyncRelayCommand(
             (_, _) => EmergencyStopAsync(),
             _ => activeChannels.Count > 0,
@@ -101,6 +115,13 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
                 && Channels.Contains(channel)
                 && !activeChannels.ContainsKey(channel));
         UseChannelPrescriptionCommand = useChannelPrescriptionCommand;
+        ParameterValidationFailedCommand = new RelayCommand(parameter =>
+        {
+            if (parameter is string message && !string.IsNullOrWhiteSpace(message))
+            {
+                toastService.Show(ToastKind.Warning, "参数已调整", message);
+            }
+        });
         hardwareConnectionState.ConnectionChanged += OnHardwareConnectionChanged;
         debugHardwareSimulation.ConnectionChanged += OnDebugSimulationConnectionChanged;
         SelectedChannelPair = ChannelPairs[0];
@@ -155,11 +176,15 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
 
     public ICommand StartChannelCommand { get; }
 
+    public ICommand StopChannelCommand { get; }
+
     public ICommand EmergencyStopCommand { get; }
 
     public ICommand UsePrescriptionCommand { get; }
 
     public ICommand UseChannelPrescriptionCommand { get; }
+
+    public ICommand ParameterValidationFailedCommand { get; }
 
     public string AppliedPrescriptionName
     {
@@ -190,18 +215,17 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(prescription);
         AppliedPrescriptionName = prescription.Name;
-        var current = prescription.CurrentMilliamp.ToString("0.##", CultureInfo.InvariantCulture);
-        var duration = (prescription.TotalDurationMinutes * 60).ToString(CultureInfo.InvariantCulture);
-        var interval = ((prescription.IntervalMinutes ?? 0) * 60).ToString(CultureInfo.InvariantCulture);
-        var singleDuration = ((prescription.SessionDurationMinutes ?? prescription.TotalDurationMinutes) * 60)
-            .ToString(CultureInfo.InvariantCulture);
+        var current = DirectCurrentParameterRules.FormatCurrent(prescription.CurrentMilliamp);
+        var duration = DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentTotalDurationSeconds);
+        var interval = DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentIntervalDurationSeconds);
+        var singleDuration = DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentSingleDurationSeconds);
         var mode = prescription.DeliveryMode == PrescriptionDeliveryModes.Interval ? "间隔" : "连续";
 
         foreach (var channel in targetChannels)
         {
             channel.CurrentMA = current;
-            channel.RampUpS = prescription.RampUpSeconds.ToString(CultureInfo.InvariantCulture);
-            channel.RampDownS = prescription.RampDownSeconds.ToString(CultureInfo.InvariantCulture);
+            channel.RampUpS = DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentRampUpDurationSeconds);
+            channel.RampDownS = DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentRampDownDurationSeconds);
             channel.DurationS = duration;
             channel.IntervalS = interval;
             channel.SingleDurationS = singleDuration;
@@ -228,12 +252,12 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         return new ChannelConfig
         {
             Name = name,
-            CurrentMA = string.Empty,
-            RampUpS = "0.5",
-            RampDownS = "0.5",
-            DurationS = "1200",
-            IntervalS = "0",
-            SingleDurationS = "60",
+            CurrentMA = DirectCurrentParameterRules.DefaultCurrentMilliamp,
+            RampUpS = DirectCurrentParameterRules.DefaultRampUpSeconds,
+            RampDownS = DirectCurrentParameterRules.DefaultRampDownSeconds,
+            DurationS = DirectCurrentParameterRules.DefaultTotalDurationSeconds,
+            IntervalS = DirectCurrentParameterRules.DefaultIntervalSeconds,
+            SingleDurationS = DirectCurrentParameterRules.DefaultSingleDurationSeconds,
             FrequencyHz = string.Empty,
             Polarity = "不掉转",
             StimulationMode = "间隔",
@@ -254,6 +278,14 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         toastService.ShowError(
             "刺激启动失败",
             "刺激启动命令未完成，软件未进入运行状态。具体原因已记录到运行日志。");
+    }
+
+    private void HandleStopFailure(Exception exception)
+    {
+        logger.Error("tDCS 刺激停止失败", exception);
+        toastService.ShowError(
+            "刺激停止失败",
+            "停止命令未完成，通道仍保持运行状态，请再次点击停止或使用紧急停止。具体原因已记录到运行日志。");
     }
 
     private async Task StartSynchronizedAsync()
@@ -352,6 +384,34 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         HardwareOperationCompleted?.Invoke(this, result);
     }
 
+    private async Task StopSimulatedChannelAsync(
+        ChannelConfig channel,
+        CancellationToken cancellationToken)
+    {
+        if (!debugHardwareSimulation.IsConnected
+            || !activeChannels.TryGetValue(channel, out var runtime))
+        {
+            return;
+        }
+
+        var group = CreateExecutionGroup([channel]);
+        var result = await stimulationEngine.StopGroupAsync(
+            group,
+            channel.Name,
+            "tDCS",
+            cancellationToken);
+        activeChannels.Remove(channel);
+        var elapsed = Stopwatch.GetElapsedTime(runtime.StartTimestamp, Stopwatch.GetTimestamp()).TotalSeconds;
+        channel.DirectCurrentWaveform.EmergencyStop(elapsed);
+        channel.RemainingTime = "00:00:00";
+        channel.IsParameterEditingEnabled = true;
+        channel.IsStimulating = false;
+        StopTimerWhenIdle();
+        RefreshCommandStates();
+        logger.Info($"tDCS DEBUG 模拟手动停止成功：{channel.Name}");
+        HardwareOperationCompleted?.Invoke(this, result);
+    }
+
     private void BeginChannelRuntime(
         ChannelConfig channel,
         DirectCurrentWaveformParameters snapshot,
@@ -436,6 +496,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     {
         synchronizedStartCommand.RaiseCanExecuteChanged();
         startChannelCommand.RaiseCanExecuteChanged();
+        stopChannelCommand.RaiseCanExecuteChanged();
         emergencyStopCommand.RaiseCanExecuteChanged();
         usePrescriptionCommand.RaiseCanExecuteChanged();
         useChannelPrescriptionCommand.RaiseCanExecuteChanged();

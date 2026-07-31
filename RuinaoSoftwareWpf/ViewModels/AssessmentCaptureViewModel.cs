@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using OpenCvSharp;
+using RuinaoSoftwareWpf.ApplicationContracts;
 
 /// <summary>
 /// 采集工作台 ViewModel。
@@ -22,10 +23,14 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private readonly IUserDialogService userDialogService;
     private readonly IModuleEventRecorder moduleEventRecorder;
     private readonly IUnifiedSessionService unifiedSessionService;
+    private readonly ApplicationContracts.IAssessmentModule assessmentModuleLifecycle;
     private readonly IPatientService patientService;
+    private readonly IToastService toastService;
     private readonly AssessmentWorkbenchCoordinator workbenchCoordinator;
     private readonly ICameraCaptureService cameraCaptureService;
-    private readonly ICaptureMediaRecorder captureMediaRecorder;
+    private readonly ICaptureMediaService captureMediaService;
+    private readonly ICaptureVideoFrameSink captureVideoFrameSink;
+    private readonly ICaptureFormRecordService captureFormRecordService;
     private readonly DispatcherTimer calibrationTimer = new();
     private readonly DispatcherTimer pictureBrowseTimer = new();
     private readonly DispatcherTimer videoBrowseTimer = new();
@@ -55,6 +60,15 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     private void MoveToStep(CaptureWorkbenchStep step)
     {
+        if (step == CaptureWorkbenchStep.Completed
+            && activeModuleAttempt is not null
+            && !IsFormModule
+            && captureMediaService.IsCapturing)
+        {
+            BeginModuleDataSaving();
+            return;
+        }
+
         currentStep = step;
     }
     private bool isDemoCompleted;
@@ -121,34 +135,61 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private int syncTestRemainingSeconds = SyncTestDurationSeconds;
     private bool isSyncTestRunning;
     private int savedFrameCount;
+    private AssessmentModuleRunContext? activeModuleAttempt;
+    private Task pendingLifecycleOperation = Task.CompletedTask;
+    private bool isModuleSaveFailed;
+    private bool isWorkbenchVisible;
+    private int formalNextModuleIndex;
+
+    private static int FormalModuleCount => CaptureWorkbenchModules.Count(static module => !module.IsDevelopmentOnly);
+
+#if DEBUG
+    public bool IsDevelopmentModuleNavigationEnabled => true;
+#else
+    public bool IsDevelopmentModuleNavigationEnabled => false;
+#endif
+
+    public bool IsDevelopmentModuleOverride =>
+        IsDevelopmentModuleNavigationEnabled && currentModuleIndex != formalNextModuleIndex;
 
     public AssessmentCaptureViewModel(
-        ICaptureMediaRecorder captureMediaRecorder,
+        ICaptureMediaService captureMediaService,
+        ICaptureVideoFrameSink captureVideoFrameSink,
+        ICaptureFormRecordService captureFormRecordService,
         ICameraCaptureService cameraCaptureService,
         ILocalizationService localization,
         IUserDialogService userDialogService,
         IModuleEventRecorder moduleEventRecorder,
         IUnifiedSessionService unifiedSessionService,
+        ApplicationContracts.IAssessmentModule assessmentModuleLifecycle,
         IPatientService patientService,
+        IToastService toastService,
         AssessmentWorkbenchCoordinator workbenchCoordinator)
     {
-        this.captureMediaRecorder = captureMediaRecorder;
+        this.captureMediaService = captureMediaService;
+        this.captureVideoFrameSink = captureVideoFrameSink;
+        this.captureFormRecordService = captureFormRecordService;
         this.cameraCaptureService = cameraCaptureService;
         this.localization = localization;
         this.userDialogService = userDialogService;
         this.moduleEventRecorder = moduleEventRecorder;
         this.unifiedSessionService = unifiedSessionService;
+        this.assessmentModuleLifecycle = assessmentModuleLifecycle;
         this.patientService = patientService;
+        this.toastService = toastService;
         this.workbenchCoordinator = workbenchCoordinator;
         this.localization.LanguageChanged += (_, _) =>
         {
             RefreshModuleDisplayNames();
             NotifyStageChanged();
         };
-        captureMediaRecorder.RecordingCompleted += OnRecordingCompleted;
+        captureMediaService.Completed += OnRecordingCompleted;
         DevNextStepCommand = new RelayCommand(_ => MoveToNextDevStep());
-        GoNextModuleCommand = new RelayCommand(_ => GoNextModule());
-        SwitchModuleCommand = new RelayCommand(SwitchModule);
+        GoNextModuleCommand = new AsyncRelayCommand(_ => GoNextModuleAsync());
+        RetryFailedModuleCommand = new RelayCommand(_ => ResetFailedModule());
+        SwitchModuleCommand = new AsyncRelayCommand(
+            (parameter, cancellationToken) => SwitchModuleAsync(parameter, cancellationToken),
+            parameter => IsDevelopmentModuleNavigationEnabled && parameter is ModuleProgressItem);
         RefreshCameraDevicesCommand = new RelayCommand(_ => LoadCameraDevices());
         SubmitBasicInfoCommand = new AsyncRelayCommand(_ => SubmitBasicInfoAsync());
         OpenBasicInfoOptionCommand = new RelayCommand(OpenBasicInfoOptionPanel);
@@ -209,6 +250,40 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         cameraCaptureService.Close();
     }
 
+    public void ReleaseCameraForNavigation()
+    {
+        isWorkbenchVisible = false;
+        if (activeModuleAttempt is { } attempt)
+        {
+            if (captureMediaService.IsCapturing)
+            {
+                captureMediaService.RequestStop(
+                    CaptureMediaStopReason.Discarded,
+                    "用户离开采集工作台，当前模块尝试已取消。");
+            }
+            else if (IsFormModule)
+            {
+                activeModuleAttempt = null;
+                pendingLifecycleOperation = RunLifecycleOperationAsync(
+                    pendingLifecycleOperation,
+                    () => assessmentModuleLifecycle.CancelAsync(
+                        attempt.AttemptId,
+                        "用户离开表单页面，未提交内容已作废。"));
+                if (IsBasicInfoModule)
+                {
+                    ResetBasicInfoFormState(clearValues: true);
+                }
+                else
+                {
+                    ResetQuestionnaireState(clearAnswers: true);
+                }
+            }
+        }
+
+        cameraCaptureService.Close();
+        NotifyStageChanged();
+    }
+
     public async Task<string> GetOrStartUnifiedSessionKeyAsync(CancellationToken cancellationToken = default)
     {
         if (patientService.CurrentPatient is null)
@@ -220,28 +295,126 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         return (await unifiedSessionService.GetOrStartAsync(cancellationToken)).SessionKey;
     }
 
-    internal bool IsMediaRecording => captureMediaRecorder.IsRecording;
-
-    internal Task<CaptureSessionInfo> StartMediaRecordingAsync(
-        CaptureRecordingRequest request,
-        CancellationToken cancellationToken = default)
+    public async Task LoadPatientProgressAsync(CancellationToken cancellationToken = default)
     {
-        return captureMediaRecorder.StartAsync(request, cancellationToken);
+        await pendingLifecycleOperation.WaitAsync(cancellationToken);
+        activeModuleAttempt = null;
+        isModuleSaveFailed = false;
+        StopModuleExecutionTimers();
+        ResetBasicInfoFormState(clearValues: true);
+        ResetQuestionnaireState(clearAnswers: true);
+
+        var patient = patientService.CurrentPatient;
+        var nextModuleIndex = 0;
+        if (patient is not null)
+        {
+            var progress = await assessmentModuleLifecycle.GetProgressAsync(
+                patient.PatientCode,
+                FormalModuleCount,
+                cancellationToken);
+            nextModuleIndex = Math.Clamp(progress.NextModuleIndex, 0, FormalModuleCount - 1);
+        }
+
+        currentModuleIndex = nextModuleIndex;
+        formalNextModuleIndex = nextModuleIndex;
+        MoveToStep(IsFormModuleCode(CurrentModuleCode)
+            ? CaptureWorkbenchStep.ModuleExecution
+            : CaptureWorkbenchStep.Demo);
+        isDemoCompleted = IsFormModule;
+        isDemoPlaying = false;
+        ResetFrameSavingStatus();
+        StageNoticeText = string.Empty;
+        UpdateModuleProgressItems();
+        NotifyStageChanged();
+        if (isWorkbenchVisible && IsFormModule)
+        {
+            await EnsureCurrentModuleAttemptStartedAsync(cancellationToken);
+        }
     }
 
-    internal void RequestMediaStop(string status, string message)
+    public async Task EnterWorkbenchAsync(CancellationToken cancellationToken = default)
     {
-        captureMediaRecorder.RequestStop(status, message);
+        isWorkbenchVisible = true;
+        if (IsFormModule && currentStep == CaptureWorkbenchStep.ModuleExecution)
+        {
+            await EnsureCurrentModuleAttemptStartedAsync(cancellationToken);
+        }
+
+        NotifyStageChanged();
+    }
+
+    public async Task<AssessmentModuleRunContext> BeginCurrentModuleAttemptAsync(
+        string sessionKey,
+        CancellationToken cancellationToken = default)
+    {
+        if (activeModuleAttempt is not null)
+        {
+            if (activeModuleAttempt.ModuleIndex != currentModuleIndex)
+            {
+                throw new InvalidOperationException("上一模块尝试尚未结束，不能启动其他模块。");
+            }
+
+            return activeModuleAttempt;
+        }
+
+        var patientCode = await patientService.GetRequiredCurrentPatientCodeAsync(cancellationToken);
+        activeModuleAttempt = await assessmentModuleLifecycle.StartAsync(
+            new AssessmentModuleStartRequest(
+                patientCode,
+                sessionKey,
+                CurrentModuleCode,
+                CurrentModule,
+                currentModuleIndex,
+                FormalModuleCount),
+            cancellationToken);
+        isModuleSaveFailed = false;
+        UpdateModuleProgressItems();
+        NotifyStageChanged();
+        return activeModuleAttempt;
+    }
+
+    public async Task FailCurrentModuleAttemptAsync(
+        string errorCode,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        var attempt = activeModuleAttempt;
+        if (attempt is null)
+        {
+            return;
+        }
+
+        await pendingLifecycleOperation.WaitAsync(cancellationToken);
+        await assessmentModuleLifecycle.FailAsync(attempt.AttemptId, errorCode, message, cancellationToken);
+        activeModuleAttempt = null;
+        isModuleSaveFailed = true;
+        UpdateModuleProgressItems();
+        NotifyStageChanged();
+    }
+
+    internal bool IsMediaRecording => captureMediaService.IsCapturing;
+
+    internal Task<CaptureMediaSession> StartMediaRecordingAsync(
+        CaptureMediaStartRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return captureMediaService.StartAsync(request, cancellationToken);
+    }
+
+    internal void RequestMediaStop(CaptureMediaStopReason reason, string message)
+    {
+        captureMediaService.RequestStop(reason, message);
     }
 
     internal int RecordMediaFrame(Mat frame)
     {
-        return captureMediaRecorder.RecordFrame(frame);
+        return captureVideoFrameSink.RecordFrame(frame);
     }
 
-    internal Task WaitForMediaIdleAsync(CancellationToken cancellationToken = default)
+    internal async Task WaitForMediaIdleAsync(CancellationToken cancellationToken = default)
     {
-        return captureMediaRecorder.WaitForIdleAsync(cancellationToken);
+        await captureMediaService.WaitForIdleAsync(cancellationToken);
+        await pendingLifecycleOperation.WaitAsync(cancellationToken);
     }
 
     public string DemoVideoPath => CurrentModuleCode switch
@@ -317,6 +490,8 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public ICommand GoNextModuleCommand { get; }
 
+    public ICommand RetryFailedModuleCommand { get; }
+
     public ICommand SwitchModuleCommand { get; }
 
     public ICommand RefreshCameraDevicesCommand { get; }
@@ -383,6 +558,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     public string CurrentDevStepText => currentStep switch
     {
         CaptureWorkbenchStep.ModuleExecution when IsFormModule => T("CaptureWorkspaceFormFillStep"),
+        CaptureWorkbenchStep.Saving => "3. 数据保存中",
         CaptureWorkbenchStep.Completed when IsFormModule => T("CaptureWorkspaceFormCompletedStep"),
         CaptureWorkbenchStep.Demo => T("CaptureWorkspaceDemoStep"),
         CaptureWorkbenchStep.FaceCheck => T("CaptureWorkspaceFaceStep"),
@@ -413,13 +589,20 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     /// 当前是否处于模块正式采集阶段。
     /// 离开采集工作台前会读取该状态，避免用户误切页面导致本次未完成录制被丢弃。
     /// </summary>
-    public bool IsExecutingCaptureTask => currentStep == CaptureWorkbenchStep.ModuleExecution && !IsCompletionStage && !IsFormModule;
+    public bool IsExecutingCaptureTask => currentStep == CaptureWorkbenchStep.ModuleExecution && !IsFormModule;
 
-    public bool IsQuestionnaireInProgress => IsQuestionnaireStage;
+    public bool IsQuestionnaireInProgress =>
+        IsFormModule && currentStep == CaptureWorkbenchStep.ModuleExecution;
 
-    public bool IsActiveForSessionSecurity => ShouldConfirmLeavingWorkbench || captureMediaRecorder.IsRecording;
+    public bool IsActiveForSessionSecurity => ShouldConfirmLeavingWorkbench
+        || IsSavingStage
+        || captureMediaService.IsCapturing
+        || activeModuleAttempt is not null;
 
-    public bool ShouldConfirmLeavingWorkbench => IsDemoPlaying || IsExecutingCaptureTask || IsQuestionnaireInProgress;
+    public bool ShouldConfirmLeavingWorkbench => IsDemoPlaying
+        || IsExecutingCaptureTask
+        || IsQuestionnaireInProgress
+        || IsSavingStage;
 
     public string CaptureLeaveWarningMessage => T("CaptureWorkspaceLeaveCaptureWarning", CurrentModule);
 
@@ -545,9 +728,23 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public bool ShowWordReadingStartAction => IsWordReadingWaiting && wordReadingIndex == 0;
 
-    public bool IsFallbackStage => !IsDemoStage && !IsEyeCalibrationStage && !IsPictureBrowseStage && !IsVideoBrowseStage && !IsVoiceBaselineStage && !IsWordReadingStage && !IsShortTextReadingStage && !IsEmotionQuestionStage && !IsDotProbeStage && !IsEmotionOddballStage && !IsEmotionLetterSearchStage && !IsEmotionStroopStage && !IsBasicInfoStage && !IsQuestionnaireStage && !IsSyncTestStage;
+    public bool IsFallbackStage => !IsDemoStage && !IsEyeCalibrationStage && !IsPictureBrowseStage && !IsVideoBrowseStage && !IsVoiceBaselineStage && !IsWordReadingStage && !IsShortTextReadingStage && !IsEmotionQuestionStage && !IsDotProbeStage && !IsEmotionOddballStage && !IsEmotionLetterSearchStage && !IsEmotionStroopStage && !IsBasicInfoStage && !IsQuestionnaireStage && !IsSyncTestStage && !IsSavingStage;
 
     public bool IsCompletionStage => currentStep == CaptureWorkbenchStep.Completed;
+
+    public bool IsSavingStage => currentStep == CaptureWorkbenchStep.Saving;
+
+    public bool IsModuleSaveFailed => isModuleSaveFailed;
+
+    public bool IsModuleSavingInProgress => IsSavingStage && !isModuleSaveFailed;
+
+    public string SavingStageTitleText => isModuleSaveFailed
+        ? "数据保存失败"
+        : "任务完成，数据保存中";
+
+    public string SavingStageDescriptionText => isModuleSaveFailed
+        ? "本模块结果未生效，不能进入下一模块。请从本模块第 1 步重新完成。"
+        : "正在整理音视频并写入本次评估记录，请勿切换患者或关闭软件。";
 
     public bool IsGenericFallbackStage => IsFallbackStage && !IsCompletionStage;
 
@@ -959,6 +1156,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         CaptureWorkbenchStep.ModuleExecution when IsPictureBrowseModule => T("CaptureWorkspaceMainPictureBrowse"),
         CaptureWorkbenchStep.ModuleExecution when IsVideoBrowseModule => T("CaptureWorkspaceMainVideoBrowse"),
         CaptureWorkbenchStep.ModuleExecution => T("CaptureWorkspaceMainEyeCalibration"),
+        CaptureWorkbenchStep.Saving => SavingStageTitleText,
         CaptureWorkbenchStep.Completed => T("CaptureWorkspaceMainCompleted", NextModule),
         _ => T("CaptureWorkspaceMainDemo")
     };
@@ -1282,50 +1480,166 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         FrameSaveStatusText = T("CaptureWorkspaceMergedWithProbeError", savedFrameCount);
     }
 
-    private void OnRecordingCompleted(object? sender, CaptureRecordingCompletedEventArgs args)
+    private void BeginModuleDataSaving()
     {
-        // 录制合成在后台线程完成，需要切回 UI 线程更新界面状态。
-        // 如果用户已经切换到别的模块，不把上一模块的完成状态覆盖到当前模块。
-        void ApplyResult()
+        if (activeModuleAttempt is null || currentStep == CaptureWorkbenchStep.Saving)
         {
-            if (!string.Equals(CurrentModuleCode, args.Session.ModuleCode, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            if (args.Status == "completed")
-            {
-                CompleteMergedVideo();
-                return;
-            }
-
-            if (args.Status == "completed_with_probe_error")
-            {
-                CompleteMergedVideoWithProbeError();
-                return;
-            }
-
-            if (args.Status == "merge_failed")
-            {
-                FailMergedVideo("请检查 FFmpeg");
-                return;
-            }
-
-            if (args.Status == "discarded")
-            {
-                DiscardFrameSavingStatus();
-            }
+            return;
         }
 
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
+        StopModuleExecutionTimers();
+        currentStep = CaptureWorkbenchStep.Saving;
+        isModuleSaveFailed = false;
+        StopFrameSaving();
+        var attemptId = activeModuleAttempt.AttemptId;
+        pendingLifecycleOperation = RunLifecycleOperationAsync(
+            pendingLifecycleOperation,
+            () => assessmentModuleLifecycle.MarkSavingAsync(attemptId));
+        captureMediaService.RequestStop(
+            CaptureMediaStopReason.Completed,
+            $"模块 {CurrentModule} 已完成，开始保存音视频数据。");
+        UpdateModuleProgressItems();
+        NotifyStageChanged();
+    }
+
+    private void OnRecordingCompleted(object? sender, CaptureMediaCompleted args)
+    {
+        pendingLifecycleOperation = HandleRecordingCompletedAsync(pendingLifecycleOperation, args);
+    }
+
+    private async Task HandleRecordingCompletedAsync(Task previous, CaptureMediaCompleted args)
+    {
+        try
         {
-            ApplyResult();
+            await previous.ConfigureAwait(false);
+            var attempt = activeModuleAttempt;
+            if (attempt is null
+                || attempt.AttemptId != args.Session.AssessmentAttemptId
+                || !string.Equals(attempt.ModuleCode, args.Session.ModuleCode, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (args.Status is CaptureMediaCompletionStatus.Completed
+                or CaptureMediaCompletionStatus.CompletedWithWarnings)
+            {
+                await assessmentModuleLifecycle.CompleteAsync(
+                    attempt.AttemptId,
+                    JsonSerializer.Serialize(new
+                    {
+                        args.Session.SessionId,
+                        args.Session.OutputDirectory,
+                        CompletionStatus = args.Status.ToString(),
+                        args.ErrorCode,
+                        args.Message
+                    })).ConfigureAwait(false);
+            }
+            else if (args.Status is CaptureMediaCompletionStatus.Discarded
+                or CaptureMediaCompletionStatus.Interrupted)
+            {
+                await assessmentModuleLifecycle.CancelAsync(
+                    attempt.AttemptId,
+                    args.Message ?? "采集过程被用户中断。").ConfigureAwait(false);
+            }
+            else
+            {
+                await assessmentModuleLifecycle.FailAsync(
+                    attempt.AttemptId,
+                    args.ErrorCode ?? "MEDIA_CAPTURE_FAILED",
+                    args.Message ?? "音视频保存失败。").ConfigureAwait(false);
+            }
+
+            await RunOnUiThreadAsync(() => ApplyRecordingCompletion(attempt, args));
+        }
+        catch (Exception exception)
+        {
+            await RunOnUiThreadAsync(() =>
+            {
+                activeModuleAttempt = null;
+                isModuleSaveFailed = true;
+                currentStep = CaptureWorkbenchStep.Saving;
+                FailMergedVideo(exception.Message);
+                StageNoticeText = $"数据保存状态写入失败：{exception.Message}";
+                UpdateModuleProgressItems();
+                NotifyStageChanged();
+            });
+        }
+    }
+
+    private void ApplyRecordingCompletion(
+        AssessmentModuleRunContext attempt,
+        CaptureMediaCompleted args)
+    {
+        if (activeModuleAttempt?.AttemptId != attempt.AttemptId)
+        {
+            return;
+        }
+
+        activeModuleAttempt = null;
+        if (args.Status is CaptureMediaCompletionStatus.Completed
+            or CaptureMediaCompletionStatus.CompletedWithWarnings)
+        {
+            if (args.Status == CaptureMediaCompletionStatus.Completed)
+            {
+                CompleteMergedVideo();
+            }
+            else
+            {
+                CompleteMergedVideoWithProbeError();
+            }
+
+            isModuleSaveFailed = false;
+            formalNextModuleIndex = Math.Min(attempt.ModuleIndex + 1, FormalModuleCount);
+            currentStep = CaptureWorkbenchStep.Completed;
+            StageNoticeText = "数据保存完成，请手动进入下一模块。";
+            toastService.ShowSuccess("数据保存完成", $"{attempt.ModuleName} 已保存，可以进入下一模块。");
+        }
+        else if (args.Status is CaptureMediaCompletionStatus.Discarded
+            or CaptureMediaCompletionStatus.Interrupted)
+        {
+            isModuleSaveFailed = false;
+            DiscardFrameSavingStatus();
+            currentStep = IsSyncTestModule ? CaptureWorkbenchStep.ModuleExecution : CaptureWorkbenchStep.Demo;
+            isDemoCompleted = IsSyncTestModule;
+            isDemoPlaying = false;
+            StageNoticeText = "本次尝试已取消，产生的数据不会参与正式结果统计。";
         }
         else
         {
-            dispatcher.Invoke(ApplyResult);
+            isModuleSaveFailed = true;
+            currentStep = CaptureWorkbenchStep.Saving;
+            FailMergedVideo(args.Message ?? "请检查音视频采集环境");
+            StageNoticeText = "音视频自动重新保存仍失败；本模块未完成，不能进入下一模块。";
         }
+
+        UpdateModuleProgressItems();
+        NotifyStageChanged();
+    }
+
+    private static async Task RunOnUiThreadAsync(Action action)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        await dispatcher.InvokeAsync(action);
+    }
+
+    private static async Task RunLifecycleOperationAsync(Task previous, Func<Task> operation)
+    {
+        try
+        {
+            await previous.ConfigureAwait(false);
+        }
+        catch
+        {
+            // 上一个操作已自行呈现错误；后续取消仍需尝试落库。
+        }
+
+        await operation().ConfigureAwait(false);
     }
 
     public void UpdatePlaybackTime(TimeSpan position, TimeSpan? duration)
@@ -1406,14 +1720,18 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         NotifyStageChanged();
     }
 
-    private void GoNextModule()
+    private async Task GoNextModuleAsync(CancellationToken cancellationToken = default)
     {
-        if (currentModuleIndex + 1 >= ModuleProgressItems.Count)
+        await pendingLifecycleOperation.WaitAsync(cancellationToken);
+        if (currentStep != CaptureWorkbenchStep.Completed
+            || activeModuleAttempt is not null
+            || currentModuleIndex + 1 >= FormalModuleCount)
         {
             return;
         }
 
         currentModuleIndex++;
+        formalNextModuleIndex = currentModuleIndex;
         MoveToStep(IsFormModuleCode(CurrentModuleCode) ? CaptureWorkbenchStep.ModuleExecution : CaptureWorkbenchStep.Demo);
         isDemoCompleted = IsFormModule;
         isDemoPlaying = false;
@@ -1434,22 +1752,63 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         StageNoticeText = string.Empty;
         UpdateModuleProgressItems();
         NotifyStageChanged();
+        if (IsFormModule && isWorkbenchVisible)
+        {
+            await EnsureCurrentModuleAttemptStartedAsync(cancellationToken);
+        }
+    }
+
+    private void ResetFailedModule()
+    {
+        if (!isModuleSaveFailed || activeModuleAttempt is not null)
+        {
+            return;
+        }
+
+        isModuleSaveFailed = false;
+        StopModuleExecutionTimers();
+        ResetFrameSavingStatus();
+        MoveToStep(IsFormModule ? CaptureWorkbenchStep.ModuleExecution : CaptureWorkbenchStep.Demo);
+        isDemoCompleted = IsFormModule;
+        isDemoPlaying = false;
+        StageNoticeText = "请重新完成当前模块。";
+        UpdateModuleProgressItems();
+        NotifyStageChanged();
     }
 
     /// <summary>
     /// 开发阶段允许点击右侧模块流程直接切换模块。
     /// 切换模块只重置当前模块内步骤，不清空整个采集工作台结果。
     /// </summary>
-    private void SwitchModule(object? parameter)
+    private async Task SwitchModuleAsync(object? parameter, CancellationToken cancellationToken)
     {
-        if (parameter is not ModuleProgressItem item)
+        if (!IsDevelopmentModuleNavigationEnabled || parameter is not ModuleProgressItem item)
         {
             return;
         }
 
-        if (item.Index != currentModuleIndex && IsQuestionnaireInProgress && !ConfirmDiscardActiveQuestionnaire())
+        if (item.Index != currentModuleIndex && activeModuleAttempt is { } attempt)
         {
-            return;
+            if (IsQuestionnaireInProgress && !ConfirmDiscardActiveQuestionnaire())
+            {
+                return;
+            }
+
+            if (captureMediaService.IsCapturing)
+            {
+                captureMediaService.RequestStop(
+                    CaptureMediaStopReason.Discarded,
+                    "开发调试切换模块，当前尝试已取消。");
+                await captureMediaService.WaitForIdleAsync(cancellationToken);
+            }
+            else
+            {
+                await assessmentModuleLifecycle.CancelAsync(
+                    attempt.AttemptId,
+                    "开发调试切换模块，当前尝试已取消。",
+                    cancellationToken);
+                activeModuleAttempt = null;
+            }
         }
 
         currentModuleIndex = item.Index;
@@ -1479,6 +1838,10 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(CurrentModuleCode));
         OnPropertyChanged(nameof(NextModule));
         OnPropertyChanged(nameof(SharedDisplayTitle));
+        if (IsFormModule && isWorkbenchVisible && item.Index < FormalModuleCount)
+        {
+            await EnsureCurrentModuleAttemptStartedAsync(cancellationToken);
+        }
     }
 
     public void DiscardActiveQuestionnaireAnswers()
@@ -1527,6 +1890,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         {
             item.UpdateState(
                 currentModuleIndex,
+                currentStep == CaptureWorkbenchStep.Completed,
+                currentStep == CaptureWorkbenchStep.Saving,
+                isModuleSaveFailed,
                 T("CaptureWorkspaceModuleCompleted"),
                 T("CaptureWorkspaceModuleInProgress"),
                 T("CaptureWorkspaceModulePending"));
@@ -1608,8 +1974,11 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         moduleEventRecorder.Enqueue(eventType, message, payload, startedAt, endedAt);
     }
 
-    public Task FlushPendingModuleEventsAsync(CancellationToken cancellationToken = default)
-        => moduleEventRecorder.FlushAsync(cancellationToken);
+    public async Task FlushPendingModuleEventsAsync(CancellationToken cancellationToken = default)
+    {
+        await moduleEventRecorder.FlushAsync(cancellationToken);
+        await pendingLifecycleOperation.WaitAsync(cancellationToken);
+    }
 
     /// <summary>
     /// 清理图片浏览内部状态。
@@ -1629,7 +1998,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     /// <summary>
     /// 停止当前模块第三步内部计时器。
-    /// 注意：只停止流程计时，不处理音视频录制；录制由 ICaptureMediaRecorder 管理。
+    /// 注意：只停止流程计时，不处理音视频录制；录制由 ICaptureMediaService 管理。
     /// </summary>
     private void StopModuleExecutionTimers()
     {
@@ -1766,6 +2135,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(IsFormModule));
         OnPropertyChanged(nameof(IsCaptureTaskModule));
         OnPropertyChanged(nameof(IsSyncTestModule));
+        OnPropertyChanged(nameof(IsDevelopmentModuleOverride));
         OnPropertyChanged(nameof(IsEyeCalibrationStage));
         OnPropertyChanged(nameof(IsPictureBrowseStage));
         OnPropertyChanged(nameof(IsVideoBrowseStage));
@@ -1821,6 +2191,11 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         NotifyEmotionStroopStateChanged();
         OnPropertyChanged(nameof(IsFallbackStage));
         OnPropertyChanged(nameof(IsCompletionStage));
+        OnPropertyChanged(nameof(IsSavingStage));
+        OnPropertyChanged(nameof(IsModuleSaveFailed));
+        OnPropertyChanged(nameof(IsModuleSavingInProgress));
+        OnPropertyChanged(nameof(SavingStageTitleText));
+        OnPropertyChanged(nameof(SavingStageDescriptionText));
         OnPropertyChanged(nameof(IsGenericFallbackStage));
         OnPropertyChanged(nameof(ShowDemoPlayAction));
         OnPropertyChanged(nameof(ShowFaceCheckAction));
@@ -2085,7 +2460,14 @@ public sealed class ModuleProgressItem : ObservableObject
         Name = displayName;
     }
 
-    public void UpdateState(int currentIndex, string completedText, string currentText, string pendingText)
+    public void UpdateState(
+        int currentIndex,
+        bool currentCompleted,
+        bool currentSaving,
+        bool currentFailed,
+        string completedText,
+        string currentText,
+        string pendingText)
     {
         if (Index < currentIndex)
         {
@@ -2100,10 +2482,16 @@ public sealed class ModuleProgressItem : ObservableObject
 
         if (Index == currentIndex)
         {
-            StatusText = currentText;
-            DotBrush = CurrentBrush;
-            TitleBrush = CurrentTextBrush;
-            StatusBrush = CurrentBrush;
+            StatusText = currentCompleted
+                ? completedText
+                : currentFailed
+                    ? "保存失败"
+                    : currentSaving
+                        ? "保存中"
+                        : currentText;
+            DotBrush = currentCompleted ? CompletedBrush : CurrentBrush;
+            TitleBrush = currentCompleted ? CompletedTextBrush : CurrentTextBrush;
+            StatusBrush = currentCompleted ? CompletedTextBrush : CurrentBrush;
             BackgroundBrush = CurrentBackgroundBrush;
             BorderBrush = CurrentBrush;
             return;

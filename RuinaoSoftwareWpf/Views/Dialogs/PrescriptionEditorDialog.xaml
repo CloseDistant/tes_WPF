@@ -1,9 +1,13 @@
 <Window x:Class="RuinaoSoftwareWpf.Views.Dialogs.PrescriptionEditorDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Width="660" Height="650" WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize" WindowStyle="None" AllowsTransparency="True" Background="Transparent">
+        Width="660" Height="{Binding DialogHeight}" WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        PreviewMouseLeftButtonDown="CommitFocusedInputOnBlankClick">
     <Window.Resources>
+        <SolidColorBrush x:Key="MutedGold" Color="#A86F2A"/>
+        <SolidColorBrush x:Key="MutedGoldHover" Color="#B97C31"/>
+        <SolidColorBrush x:Key="MutedGoldBorder" Color="#815B2C"/>
         <Style x:Key="EditorLabel" TargetType="TextBlock">
             <Setter Property="Foreground" Value="#AAB2C2"/><Setter Property="FontSize" Value="13"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -16,6 +20,14 @@
                     <Setter Property="BorderBrush" Value="#303644"/><Setter Property="Opacity" Value="1"/>
                 </Trigger>
             </Style.Triggers>
+        </Style>
+        <Style x:Key="LockedEditorBox" TargetType="TextBox" BasedOn="{StaticResource EditorBox}">
+            <Setter Property="Background" Value="#222733"/>
+            <Setter Property="Foreground" Value="#737D90"/>
+            <Setter Property="BorderBrush" Value="#303746"/>
+            <Setter Property="CaretBrush" Value="Transparent"/>
+            <Setter Property="Cursor" Value="Arrow"/>
+            <Setter Property="Focusable" Value="False"/>
         </Style>
         <Style x:Key="EditorComboItem" TargetType="ComboBoxItem">
             <Setter Property="Height" Value="32"/><Setter Property="Padding" Value="12,0"/>
@@ -111,6 +123,41 @@
             <Setter Property="Background" Value="#272C38"/><Setter Property="Foreground" Value="{StaticResource Text}"/>
             <Setter Property="BorderBrush" Value="{StaticResource Line}"/><Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/><Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonSurface"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#303746"/>
+                    <Setter Property="BorderBrush" Value="#505A6C"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.48"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="PrimaryDialogButton" TargetType="Button" BasedOn="{StaticResource DialogButton}">
+            <Setter Property="Background" Value="{StaticResource MutedGold}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource MutedGoldBorder}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource MutedGoldHover}"/>
+                    <Setter Property="BorderBrush" Value="#9A6A2F"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
     </Window.Resources>
     <Border Background="#181D28" BorderBrush="#3A4150" BorderThickness="1" CornerRadius="6">
@@ -121,10 +168,104 @@
                 <DockPanel Margin="22,0">
                     <Button Content="×" DockPanel.Dock="Right" Width="30" Height="30" Background="Transparent"
                             Foreground="#AAB2C2" BorderThickness="0" FontSize="20" Click="CancelButton_Click"/>
-                    <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding DialogTitle}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
                 </DockPanel>
             </Border>
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Grid Grid.Row="1"
+                  Margin="28,18,28,10"
+                  Visibility="{Binding IsModeSelectionStep, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="选择后不可修改"
+                           Foreground="#8F98AA"
+                           FontSize="13"
+                           Margin="2,0,0,16"/>
+                <ListBox Grid.Row="1"
+                         ItemsSource="{Binding AvailableModeChoices}"
+                         SelectedValuePath="ShortName"
+                         SelectedValue="{Binding StimulationType, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         MaxHeight="360"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,0,0,8"/>
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="ModeBorder"
+                                                Height="82"
+                                                Background="#202632"
+                                                BorderBrush="#3D4657"
+                                                BorderThickness="1"
+                                                CornerRadius="6">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="4"/>
+                                                    <ColumnDefinition Width="64"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border x:Name="SelectionBar"
+                                                        Width="4"
+                                                        Background="{StaticResource MutedGold}"
+                                                        CornerRadius="5,0,0,5"
+                                                        Visibility="Collapsed"/>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding IconGlyph}"
+                                                           Foreground="#778195"
+                                                           FontSize="25"
+                                                           FontWeight="Light"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                                <StackPanel Grid.Column="2"
+                                                            Margin="10,0,18,0"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding DisplayName}"
+                                                               Foreground="#F1F3F7"
+                                                               FontSize="16"
+                                                               FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{Binding ShortName}"
+                                                               Foreground="#929CAF"
+                                                               FontSize="13"
+                                                               Margin="0,4,0,0"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="ModeBorder" Property="Background" Value="#252C38"/>
+                                                <Setter TargetName="ModeBorder" Property="BorderBrush" Value="#566174"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="ModeBorder" Property="Background" Value="#27251F"/>
+                                                <Setter TargetName="ModeBorder" Property="BorderBrush" Value="{StaticResource MutedGoldBorder}"/>
+                                                <Setter TargetName="SelectionBar" Property="Visibility" Value="Visible"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+                <TextBlock Grid.Row="2"
+                           Text="{Binding ErrorMessage}"
+                           Foreground="{StaticResource Danger}"
+                           FontSize="12"
+                           Margin="2,2,0,0"/>
+            </Grid>
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Visibility="{Binding IsEditorStep, Converter={StaticResource BoolToVisibilityConverter}}">
                 <Grid Margin="34,14,42,8">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="142"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
@@ -138,33 +279,68 @@
                     <TextBlock Grid.Row="1" Text="适应症" Style="{StaticResource EditorLabel}"/>
                     <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Indication, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource EditorBox}"/>
                     <TextBlock Grid.Row="2" Text="刺激模式" Style="{StaticResource EditorLabel}"/>
-                    <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding AvailableStimulationTypes}"
-                              SelectedItem="{Binding StimulationType, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource EditorCombo}"/>
+                    <TextBox Grid.Row="2"
+                             Grid.Column="1"
+                             Text="{Binding StimulationType}"
+                             IsReadOnly="True"
+                             IsTabStop="False"
+                             Style="{StaticResource LockedEditorBox}"/>
                     <TextBlock Grid.Row="3" Text="{Binding CurrentLabel}" Style="{StaticResource EditorLabel}"/>
-                    <TextBox Grid.Row="3" Grid.Column="1" Tag="decimal" Text="{Binding CurrentMilliamp, UpdateSourceTrigger=PropertyChanged}"
-                             Style="{StaticResource EditorBox}" PreviewTextInput="Decimal_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
+                    <TextBox x:Name="PrescriptionCurrentInput"
+                             Grid.Row="3"
+                             Grid.Column="1"
+                             Tag="CurrentMilliamp"
+                             Text="{Binding CurrentMilliamp, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource EditorBox}"
+                             GotKeyboardFocus="RememberDirectCurrentValue"
+                             PreviewTextInput="Decimal_PreviewTextInput"
+                             DataObject.Pasting="Numeric_Pasting"
+                             TextChanged="ClearNumericValidation"
+                             LostKeyboardFocus="NormalizeDirectCurrentValue"/>
                     <TextBlock Grid.Row="4" Text="模式" Style="{StaticResource EditorLabel}"/>
                     <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding DeliveryModes}"
                               SelectedItem="{Binding DeliveryMode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsDeliveryModeEnabled}" Style="{StaticResource EditorCombo}"/>
                     <TextBlock Grid.Row="5" Text="{Binding TotalDurationLabel}" Style="{StaticResource EditorLabel}"/>
-                    <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding TotalDurationMinutes, UpdateSourceTrigger=PropertyChanged}"
-                             Style="{StaticResource EditorBox}" PreviewTextInput="Integer_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
+                    <TextBox Grid.Row="5"
+                             Grid.Column="1"
+                             Tag="TotalDurationSeconds"
+                             Text="{Binding TotalDurationMinutes, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource EditorBox}"
+                             GotKeyboardFocus="RememberDirectCurrentValue"
+                             PreviewTextInput="ModeNumeric_PreviewTextInput"
+                             DataObject.Pasting="Numeric_Pasting"
+                             TextChanged="ClearNumericValidation"
+                             LostKeyboardFocus="NormalizeDirectCurrentValue"/>
                     <TextBlock Grid.Row="6" Text="{Binding IntervalLabel}" Style="{StaticResource EditorLabel}"/>
-                    <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding IntervalMinutesEntry, UpdateSourceTrigger=PropertyChanged}"
-                             IsEnabled="{Binding IsIntervalMode}" Style="{StaticResource EditorBox}"
-                             PreviewTextInput="Integer_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
+                    <TextBox Grid.Row="6" Grid.Column="1" Tag="IntervalSeconds" Text="{Binding IntervalMinutesEntry, UpdateSourceTrigger=PropertyChanged}"
+                              IsEnabled="{Binding IsIntervalMode}" Style="{StaticResource EditorBox}"
+                              GotKeyboardFocus="RememberDirectCurrentValue"
+                              PreviewTextInput="ModeNumeric_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"
+                              TextChanged="ClearNumericValidation"
+                              LostKeyboardFocus="NormalizeDirectCurrentValue"/>
                     <TextBlock Grid.Row="7" Text="{Binding SessionDurationLabel}" Style="{StaticResource EditorLabel}"/>
-                    <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding SessionDurationMinutesEntry, UpdateSourceTrigger=PropertyChanged}"
-                             IsEnabled="{Binding IsIntervalMode}" Style="{StaticResource EditorBox}"
-                             PreviewTextInput="Integer_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
+                    <TextBox Grid.Row="7" Grid.Column="1" Tag="SingleDurationSeconds" Text="{Binding SessionDurationMinutesEntry, UpdateSourceTrigger=PropertyChanged}"
+                              IsEnabled="{Binding IsIntervalMode}" Style="{StaticResource EditorBox}"
+                              GotKeyboardFocus="RememberDirectCurrentValue"
+                              PreviewTextInput="ModeNumeric_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"
+                              TextChanged="ClearNumericValidation"
+                              LostKeyboardFocus="NormalizeDirectCurrentValue"/>
                     <TextBlock Grid.Row="8" Text="疗程" Style="{StaticResource EditorLabel}"/>
                     <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding Course, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" Style="{StaticResource EditorBox}"/>
                     <TextBlock Grid.Row="9" Text="{Binding RampUpLabel}" Style="{StaticResource EditorLabel}"/>
-                    <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding RampUpSeconds, UpdateSourceTrigger=PropertyChanged}"
-                             Style="{StaticResource EditorBox}" PreviewTextInput="Integer_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
+                    <TextBox Grid.Row="9" Grid.Column="1" Tag="RampUpSeconds" Text="{Binding RampUpSeconds, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource EditorBox}"
+                             GotKeyboardFocus="RememberDirectCurrentValue"
+                             PreviewTextInput="ModeNumeric_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"
+                             TextChanged="ClearNumericValidation"
+                             LostKeyboardFocus="NormalizeDirectCurrentValue"/>
                     <TextBlock Grid.Row="10" Text="{Binding RampDownLabel}" Style="{StaticResource EditorLabel}"/>
-                    <TextBox Grid.Row="10" Grid.Column="1" Text="{Binding RampDownSecondsEntry, UpdateSourceTrigger=PropertyChanged}"
-                             IsEnabled="{Binding IsRampDownEnabled}" Style="{StaticResource EditorBox}" PreviewTextInput="Integer_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"/>
+                    <TextBox Grid.Row="10" Grid.Column="1" Tag="RampDownSeconds" Text="{Binding RampDownSecondsEntry, UpdateSourceTrigger=PropertyChanged}"
+                             IsEnabled="{Binding IsRampDownEnabled}" Style="{StaticResource EditorBox}"
+                             GotKeyboardFocus="RememberDirectCurrentValue"
+                             PreviewTextInput="ModeNumeric_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"
+                             TextChanged="ClearNumericValidation"
+                             LostKeyboardFocus="NormalizeDirectCurrentValue"/>
                     <TextBlock Grid.Row="11" Text="证据等级" Style="{StaticResource EditorLabel}"/>
                     <TextBox Grid.Row="11" Grid.Column="1" Text="{Binding EvidenceGrade, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" Style="{StaticResource EditorBox}"/>
                     <TextBlock Grid.Row="12" Grid.ColumnSpan="2" Text="{Binding ErrorMessage}" Foreground="{StaticResource Danger}"
@@ -172,10 +348,26 @@
                 </Grid>
             </ScrollViewer>
             <Border Grid.Row="2" Background="#202632" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" CornerRadius="0,0,6,6">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,24,0">
-                    <Button Content="取消" Style="{StaticResource DialogButton}" Margin="0,0,10,0" Click="CancelButton_Click"/>
-                    <Button Content="保存" Style="{StaticResource DialogButton}" Background="{StaticResource Gold}" BorderBrush="{StaticResource Gold}" Click="SaveButton_Click"/>
-                </StackPanel>
+                <Grid>
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,24,0"
+                                Visibility="{Binding IsEditorStep, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Button Content="取消" Style="{StaticResource DialogButton}" Margin="0,0,10,0" Click="CancelButton_Click"/>
+                        <Button Content="保存" Style="{StaticResource PrimaryDialogButton}" Click="SaveButton_Click"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,24,0"
+                                Visibility="{Binding IsModeSelectionStep, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Button Content="取消" Style="{StaticResource DialogButton}" Margin="0,0,10,0" Click="CancelButton_Click"/>
+                        <Button Content="下一步"
+                                Style="{StaticResource PrimaryDialogButton}"
+                                Click="NextButton_Click"/>
+                    </StackPanel>
+                </Grid>
             </Border>
         </Grid>
     </Border>

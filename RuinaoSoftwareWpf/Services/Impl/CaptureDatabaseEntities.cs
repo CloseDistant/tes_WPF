@@ -50,9 +50,15 @@ internal sealed class PrescriptionEntity
     public int? IntervalMinutes { get; set; }
     public int? SessionDurationMinutes { get; set; }
     public int? PulseTreatmentDurationSeconds { get; set; }
+    public double? PulseTreatmentDurationSecondsExact { get; set; }
     public int? PulseWidthMilliseconds { get; set; }
     public int? PulseRiseWidthMilliseconds { get; set; }
     public int? PulseIntervalWidthMilliseconds { get; set; }
+    public double? DirectCurrentTotalDurationSeconds { get; set; }
+    public double? DirectCurrentIntervalSeconds { get; set; }
+    public double? DirectCurrentSingleDurationSeconds { get; set; }
+    public double? DirectCurrentRampUpSeconds { get; set; }
+    public double? DirectCurrentRampDownSeconds { get; set; }
     public string Course { get; set; } = string.Empty;
     public int RampUpSeconds { get; set; }
     public int RampDownSeconds { get; set; }
@@ -80,6 +86,47 @@ internal sealed class StimulationRecordEntity
     public long EventTimeUnixMs { get; set; }
 }
 
+internal sealed class StimulationRunEntity
+{
+    public long Id { get; set; }
+    public string RunId { get; set; } = string.Empty;
+    public long? OperatorUserId { get; set; }
+    public string? PatientCode { get; set; }
+    public string StimulationType { get; set; } = string.Empty;
+    public string? PrescriptionName { get; set; }
+    public string GroupTitle { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public long StartedAtUnixMs { get; set; }
+    public long? EndedAtUnixMs { get; set; }
+    public long CreatedAtUnixMs { get; set; }
+    public long UpdatedAtUnixMs { get; set; }
+    public ICollection<StimulationChannelTreatmentEntity> Channels { get; set; } = [];
+}
+
+internal sealed class StimulationChannelTreatmentEntity
+{
+    public long Id { get; set; }
+    public long StimulationRunId { get; set; }
+    public string ChannelName { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public long StartedAtUnixMs { get; set; }
+    public long? EndedAtUnixMs { get; set; }
+    public string? EndType { get; set; }
+    public string? EndReasonCode { get; set; }
+    public string? EndReasonDetail { get; set; }
+    public double CurrentMilliamp { get; set; }
+    public double PlannedDurationSeconds { get; set; }
+    public string Polarity { get; set; } = string.Empty;
+    public int ParameterSchemaVersion { get; set; }
+    public string ParameterSnapshotJson { get; set; } = string.Empty;
+    public long? PlannedTotalCount { get; set; }
+    public long? CompletedCount { get; set; }
+    public string? DeviceErrorCode { get; set; }
+    public long CreatedAtUnixMs { get; set; }
+    public long UpdatedAtUnixMs { get; set; }
+    public StimulationRunEntity? Run { get; set; }
+}
+
 internal sealed class AssessmentSessionEntity
 {
     public long Id { get; set; }
@@ -94,10 +141,44 @@ internal sealed class AssessmentSessionEntity
     public long UpdatedAtUnixMs { get; set; }
 }
 
+internal sealed class AssessmentRunEntity
+{
+    public long Id { get; set; }
+    public string PatientCode { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public int TotalModuleCount { get; set; }
+    public int NextModuleIndex { get; set; }
+    public long StartedAtUnixMs { get; set; }
+    public long? EndedAtUnixMs { get; set; }
+    public long CreatedAtUnixMs { get; set; }
+    public long UpdatedAtUnixMs { get; set; }
+}
+
+internal sealed class AssessmentModuleAttemptEntity
+{
+    public long Id { get; set; }
+    public long RunId { get; set; }
+    public string SessionKey { get; set; } = string.Empty;
+    public string ModuleCode { get; set; } = string.Empty;
+    public string ModuleName { get; set; } = string.Empty;
+    public int ModuleIndex { get; set; }
+    public int AttemptNumber { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string? ResultJson { get; set; }
+    public string? ErrorCode { get; set; }
+    public string? Message { get; set; }
+    public long StartedAtUnixMs { get; set; }
+    public long? EndedAtUnixMs { get; set; }
+    public long CreatedAtUnixMs { get; set; }
+    public long UpdatedAtUnixMs { get; set; }
+    public AssessmentRunEntity? Run { get; set; }
+}
+
 internal sealed class AssessmentModuleRecordEntity
 {
     public long Id { get; set; }
     public long SessionId { get; set; }
+    public long? AssessmentAttemptId { get; set; }
     public string ModuleCode { get; set; } = string.Empty;
     public string ModuleName { get; set; } = string.Empty;
     public string RecordType { get; set; } = string.Empty;
@@ -205,4 +286,5 @@ internal sealed class EegMarkerEntity
     public int PageIndex { get; set; }
     public int PageSampleIndex { get; set; }
     public string Source { get; set; } = string.Empty;
+    public string? MarkerCode { get; set; }
 }

@@ -1400,25 +1400,10 @@
 
                                                                     <StackPanel Grid.Column="1" Margin="10,0,0,0">
                                                                         <TextBlock Text="{Binding BasicInfoBirthDateLabelText}" Style="{StaticResource FormFieldLabel}" />
-                                                                        <Button x:Name="BasicInfoBirthDateButton"
-                                                                                Style="{StaticResource FormPickerButton}"
-                                                                                Click="BasicInfoBirthDateButton_Click">
-                                                                            <Grid>
-                                                                                <Grid.ColumnDefinitions>
-                                                                                    <ColumnDefinition Width="*" />
-                                                                                    <ColumnDefinition Width="Auto" />
-                                                                                </Grid.ColumnDefinitions>
-                                                                                <TextBlock Text="{Binding BasicInfoBirthDateDisplay}"
-                                                                                           Foreground="{StaticResource Text}"
-                                                                                           VerticalAlignment="Center"
-                                                                                           TextTrimming="CharacterEllipsis" />
-                                                                                <TextBlock Text="{Binding BasicInfoEditOptionText}"
-                                                                                           Grid.Column="1"
-                                                                                           Foreground="{StaticResource Gold}"
-                                                                                           VerticalAlignment="Center"
-                                                                                           Margin="12,0,0,0" />
-                                                                            </Grid>
-                                                                        </Button>
+                                                                        <controls:DateOnlyPicker Height="40"
+                                                                                                 ActionText="{Binding BasicInfoEditOptionText}"
+                                                                                                 RestrictToToday="True"
+                                                                                                 SelectedDateText="{Binding BasicInfoBirthDateText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                                                     </StackPanel>
                                                                 </Grid>
 
@@ -1599,6 +1584,31 @@
                                                        HorizontalAlignment="Center"
                                                        VerticalAlignment="Center"
                                                        Visibility="{Binding IsGenericFallbackStage, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                            <StackPanel HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Width="460"
+                                                        Visibility="{Binding IsSavingStage, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock Text="{Binding SavingStageTitleText}"
+                                                           Foreground="{StaticResource Text}"
+                                                           FontSize="24"
+                                                           FontWeight="SemiBold"
+                                                           TextAlignment="Center"
+                                                           Margin="0,0,0,12" />
+                                                <TextBlock Text="{Binding SavingStageDescriptionText}"
+                                                           Foreground="{StaticResource SubText}"
+                                                           FontSize="14"
+                                                           TextWrapping="Wrap"
+                                                           TextAlignment="Center"
+                                                           Margin="0,0,0,18" />
+                                                <ProgressBar Height="6"
+                                                             IsIndeterminate="True"
+                                                             Visibility="{Binding IsModuleSavingInProgress, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                <Button Content="从第 1 步重新完成"
+                                                        Style="{StaticResource PrimaryCaptureButton}"
+                                                        MinWidth="200"
+                                                        Command="{Binding RetryFailedModuleCommand}"
+                                                        Visibility="{Binding IsModuleSaveFailed, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                            </StackPanel>
                                             <StackPanel HorizontalAlignment="Center"
                                                         VerticalAlignment="Center"
                                                         Visibility="{Binding IsCompletionStage, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -1940,52 +1950,5 @@
             </Grid>
         </Border>
 
-        <Popup x:Name="BasicInfoDatePickerPopup"
-               PlacementTarget="{Binding ElementName=BasicInfoBirthDateButton}"
-               Placement="Bottom"
-               StaysOpen="True"
-               AllowsTransparency="True">
-            <Border Width="256"
-                    Background="#202532"
-                    BorderBrush="{StaticResource Line}"
-                    BorderThickness="1"
-                    CornerRadius="4"
-                    Padding="10">
-                <Border.Effect>
-                    <DropShadowEffect Color="#000000"
-                                      BlurRadius="16"
-                                      ShadowDepth="0"
-                                      Opacity="0.45" />
-                </Border.Effect>
-                <StackPanel>
-                    <DockPanel Margin="0,0,0,8">
-                        <Button Content="‹"
-                                DockPanel.Dock="Left"
-                                Style="{StaticResource CalendarNavButton}"
-                                Click="BasicInfoPreviousMonthButton_Click" />
-                        <Button Content="›"
-                                DockPanel.Dock="Right"
-                                Style="{StaticResource CalendarNavButton}"
-                                Click="BasicInfoNextMonthButton_Click" />
-                        <TextBlock x:Name="BasicInfoCalendarTitleText"
-                                   Foreground="{StaticResource Text}"
-                                   FontWeight="SemiBold"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center" />
-                    </DockPanel>
-
-                    <UniformGrid Columns="7" Rows="1" Margin="0,0,0,4">
-                        <TextBlock Text="一" Foreground="{StaticResource SubText}" FontSize="12" TextAlignment="Center" />
-                        <TextBlock Text="二" Foreground="{StaticResource SubText}" FontSize="12" TextAlignment="Center" />
-                        <TextBlock Text="三" Foreground="{StaticResource SubText}" FontSize="12" TextAlignment="Center" />
-                        <TextBlock Text="四" Foreground="{StaticResource SubText}" FontSize="12" TextAlignment="Center" />
-                        <TextBlock Text="五" Foreground="{StaticResource SubText}" FontSize="12" TextAlignment="Center" />
-                        <TextBlock Text="六" Foreground="{StaticResource SubText}" FontSize="12" TextAlignment="Center" />
-                        <TextBlock Text="日" Foreground="{StaticResource SubText}" FontSize="12" TextAlignment="Center" />
-                    </UniformGrid>
-                    <UniformGrid x:Name="BasicInfoCalendarDaysGrid" Columns="7" Rows="6" />
-                </StackPanel>
-            </Border>
-        </Popup>
     </Grid>
 </UserControl>

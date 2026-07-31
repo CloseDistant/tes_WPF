@@ -32,11 +32,11 @@ public sealed class MockEegAcquisitionService : ILegacyEegAcquisitionService, ID
         pageSamples = CreatePageBuffer(config);
         markerTags.AddRange(
         [
-            new EegMarkerTag("刺激", "F8", Color.FromRgb(181, 61, 63)),
-            new EegMarkerTag("发作", "F9", Color.FromRgb(174, 128, 45)),
-            new EegMarkerTag("运动", "F10", Color.FromRgb(61, 156, 85)),
-            new EegMarkerTag("睁眼", "F11", Color.FromRgb(92, 100, 118)),
-            new EegMarkerTag("闭眼", "F12", Color.FromRgb(155, 105, 45))
+            new EegMarkerTag("刺激", "F8", Color.FromRgb(181, 61, 63), "eeg.marker.stimulation"),
+            new EegMarkerTag("发作", "F9", Color.FromRgb(174, 128, 45), "eeg.marker.seizure"),
+            new EegMarkerTag("运动", "F10", Color.FromRgb(61, 156, 85), "eeg.marker.movement"),
+            new EegMarkerTag("睁眼", "F11", Color.FromRgb(92, 100, 118), "eeg.marker.eyes-open"),
+            new EegMarkerTag("闭眼", "F12", Color.FromRgb(155, 105, 45), "eeg.marker.eyes-closed")
         ]);
     }
 
@@ -147,6 +147,12 @@ public sealed class MockEegAcquisitionService : ILegacyEegAcquisitionService, ID
 
     public void AddMarker(EegMarkerTag tag, string source)
     {
+        ArgumentNullException.ThrowIfNull(tag);
+        if (string.IsNullOrWhiteSpace(tag.Code))
+        {
+            throw new ArgumentException("EEG 标记 Code 不能为空。", nameof(tag));
+        }
+
         EegMarkerRecord? record = null;
         lock (syncRoot)
         {
@@ -164,7 +170,8 @@ public sealed class MockEegAcquisitionService : ILegacyEegAcquisitionService, ID
                 pageIndex,
                 pageSampleIndex,
                 totalSamples,
-                source);
+                source,
+                tag.Code);
             markerRecords.Add(record);
         }
 
@@ -177,6 +184,12 @@ public sealed class MockEegAcquisitionService : ILegacyEegAcquisitionService, ID
 
     public void ReplaceMarkerTags(IReadOnlyList<EegMarkerTag> nextMarkerTags)
     {
+        ArgumentNullException.ThrowIfNull(nextMarkerTags);
+        if (nextMarkerTags.Any(static marker => string.IsNullOrWhiteSpace(marker.Code)))
+        {
+            throw new ArgumentException("EEG 标记 Code 不能为空。", nameof(nextMarkerTags));
+        }
+
         lock (syncRoot)
         {
             markerTags.Clear();

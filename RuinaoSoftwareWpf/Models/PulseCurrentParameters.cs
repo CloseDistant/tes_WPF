@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace RuinaoSoftwareWpf;
 
 public static class PulseCurrentPolarities
@@ -14,17 +12,17 @@ public static class PulseCurrentPolarities
 /// </summary>
 public sealed record PulseCurrentParameters(
     double CurrentMilliamp,
-    double PulseWidthMilliseconds,
-    double RiseWidthMilliseconds,
-    double IntervalWidthMilliseconds,
-    int TreatmentDurationSeconds,
+    int PulseWidthMilliseconds,
+    int RiseWidthMilliseconds,
+    int IntervalWidthMilliseconds,
+    double TreatmentDurationSeconds,
     string Polarity,
     long PlannedTotalCount)
 {
-    public const double MaxCurrentMilliamp = 15;
-    public const int MaxPulseWidthMilliseconds = 1000;
-    public const int MaxRiseWidthMilliseconds = 1000;
-    public const int MaxIntervalWidthMilliseconds = 10000;
+    public const double MaxCurrentMilliamp = (double)PulseCurrentParameterRules.MaximumCurrentMilliamp;
+    public const int MaxPulseWidthMilliseconds = PulseCurrentParameterRules.MaximumPulseWidthMilliseconds;
+    public const int MaxRiseWidthMilliseconds = PulseCurrentParameterRules.MaximumRiseWidthMilliseconds;
+    public const int MaxIntervalWidthMilliseconds = PulseCurrentParameterRules.MaximumIntervalWidthMilliseconds;
 
     public static bool TryCreate(
         PulseCurrentChannelConfig channel,
@@ -33,42 +31,54 @@ public sealed record PulseCurrentParameters(
     {
         ArgumentNullException.ThrowIfNull(channel);
 
-        if (!TryDouble(channel.CurrentMilliamp, out var current) || current <= 0 || current > MaxCurrentMilliamp)
+        if (!PulseCurrentParameterRules.TryParseValidated(
+                PulseCurrentParameterKind.CurrentMilliamp,
+                channel.CurrentMilliamp,
+                out var current,
+                out error))
         {
-            return Fail("幅值必须大于 0 且不超过 15 mA。", out parameters, out error);
+            parameters = null;
+            return false;
         }
 
-        if (!TryDouble(channel.PulseWidthMilliseconds, out var pulseWidth)
-            || pulseWidth <= 0
-            || pulseWidth > MaxPulseWidthMilliseconds)
+        if (!TryValidatedInteger(
+                PulseCurrentParameterKind.PulseWidthMilliseconds,
+                channel.PulseWidthMilliseconds,
+                out var pulseWidth,
+                out error))
         {
-            return Fail("脉冲宽度必须大于 0 且不超过 1000 ms。", out parameters, out error);
+            parameters = null;
+            return false;
         }
 
-        if (!TryDouble(channel.RiseWidthMilliseconds, out var riseWidth)
-            || riseWidth < 0
-            || riseWidth > MaxRiseWidthMilliseconds)
+        if (!TryValidatedInteger(
+                PulseCurrentParameterKind.RiseWidthMilliseconds,
+                channel.RiseWidthMilliseconds,
+                out var riseWidth,
+                out error))
         {
-            return Fail("上升宽度必须在 0–1000 ms 范围内。", out parameters, out error);
+            parameters = null;
+            return false;
         }
 
-        var activeWidth = pulseWidth + riseWidth;
-
-        if (!TryDouble(channel.IntervalWidthMilliseconds, out var intervalWidth)
-            || intervalWidth < 0
-            || intervalWidth > MaxIntervalWidthMilliseconds)
+        if (!TryValidatedInteger(
+                PulseCurrentParameterKind.IntervalWidthMilliseconds,
+                channel.IntervalWidthMilliseconds,
+                out var intervalWidth,
+                out error))
         {
-            return Fail("间隔宽度必须在 0–10000 ms 范围内。", out parameters, out error);
+            parameters = null;
+            return false;
         }
 
-        if (!int.TryParse(
+        if (!PulseCurrentParameterRules.TryParseValidated(
+                PulseCurrentParameterKind.TreatmentDurationSeconds,
                 channel.TreatmentDurationSeconds,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var treatmentDuration)
-            || treatmentDuration <= 0)
+                out var treatmentDuration,
+                out error))
         {
-            return Fail("治疗时间必须为大于 0 的整数秒。", out parameters, out error);
+            parameters = null;
+            return false;
         }
 
         if (!PulseCurrentPolarities.All.Contains(channel.Polarity, StringComparer.Ordinal))
@@ -76,10 +86,12 @@ public sealed record PulseCurrentParameters(
             return Fail("极性必须为“不掉转”或“调转”。", out parameters, out error);
         }
 
-        var treatmentMilliseconds = treatmentDuration * 1000d;
-        var totalCountValue = Math.Floor(
-            (treatmentMilliseconds + intervalWidth) / (activeWidth + intervalWidth));
-        if (totalCountValue < 1 || totalCountValue > long.MaxValue)
+        var totalCount = PulseCurrentParameterRules.CalculatePlannedTotalCount(
+            treatmentDuration,
+            riseWidth,
+            pulseWidth,
+            intervalWidth);
+        if (totalCount < 1)
         {
             return Fail("治疗时间不足以完成一次完整脉冲。", out parameters, out error);
         }
@@ -91,19 +103,25 @@ public sealed record PulseCurrentParameters(
             intervalWidth,
             treatmentDuration,
             channel.Polarity,
-            (long)totalCountValue);
+            totalCount);
         error = string.Empty;
         return true;
     }
 
-    private static bool TryDouble(string value, out double result)
+    private static bool TryValidatedInteger(
+        PulseCurrentParameterKind kind,
+        string value,
+        out int result,
+        out string error)
     {
-        return double.TryParse(
-                value,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out result)
-            && double.IsFinite(result);
+        result = 0;
+        if (!PulseCurrentParameterRules.TryParseValidated(kind, value, out var parsed, out error))
+        {
+            return false;
+        }
+
+        result = checked((int)parsed);
+        return true;
     }
 
     private static bool Fail(

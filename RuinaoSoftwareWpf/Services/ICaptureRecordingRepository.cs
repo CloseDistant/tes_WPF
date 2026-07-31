@@ -8,6 +8,7 @@ public sealed record CaptureSessionInfo(
     long Id,
     long WorkbenchSessionId,
     long ModuleRecordId,
+    long? AssessmentAttemptId,
     string SessionKey,
     string ModuleCode,
     string ModuleName,
@@ -25,6 +26,7 @@ public sealed record CaptureSessionInfo(
 public sealed record CaptureFormRecordInfo(
     long WorkbenchSessionId,
     long ModuleRecordId,
+    long AssessmentAttemptId,
     string SessionKey,
     string ModuleCode,
     string ModuleName,
@@ -51,6 +53,7 @@ public interface ICaptureRecordingRepository
 {
     Task<CaptureSessionInfo> CreateModuleSessionAsync(
         string outputRoot,
+        long? assessmentAttemptId,
         string sessionKey,
         string moduleCode,
         string moduleName,
@@ -84,6 +87,7 @@ public interface ICaptureRecordingRepository
     /// <summary>创建或保存一次表单型模块记录。</summary>
     Task<CaptureFormRecordInfo> SaveFormModuleRecordAsync(
         string outputRoot,
+        long assessmentAttemptId,
         string sessionKey,
         string moduleCode,
         string moduleName,

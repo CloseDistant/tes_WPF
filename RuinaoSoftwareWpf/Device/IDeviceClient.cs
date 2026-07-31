@@ -4,7 +4,7 @@ namespace RuinaoSoftwareWpf;
 /// 旧版硬件通讯抽象层。
 ///
 /// 当前主链路已经改为：
-/// HardwareService -> RuinaoTesProtocolBridge -> RuinaoTesProtocol.dll。
+/// 当前主链路为 HardwareService -> RuinaoTesHardwareBridge -> RuinaoTesHardware.dll。
 ///
 /// 该接口暂时保留给旧版 Mock/Client 代码和后续对比迁移使用，不作为 WPF 当前硬件调用主入口。
 /// </summary>
@@ -45,9 +45,6 @@ public interface IDeviceClient
 
     /// <summary>启动刺激输出。</summary>
     Task StartAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>暂停刺激输出。</summary>
-    Task PauseAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 急停接口。真实实现必须优先调用硬件级急停命令，并返回硬件确认结果。

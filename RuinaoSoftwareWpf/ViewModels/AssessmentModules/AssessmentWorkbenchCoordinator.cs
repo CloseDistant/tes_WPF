@@ -3,7 +3,7 @@ namespace RuinaoSoftwareWpf;
 using System.Collections.ObjectModel;
 using RuinaoSoftwareWpf.ApplicationContracts;
 
-public abstract class AssessmentModuleViewModel : ObservableObject, IAssessmentModule
+public abstract class AssessmentModuleViewModel : ObservableObject, IAssessmentModuleDescriptor
 {
     protected AssessmentModuleViewModel(string code, string displayNameKey, bool isDevelopmentOnly)
     {

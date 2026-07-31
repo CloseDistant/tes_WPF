@@ -8,7 +8,17 @@ public enum CaptureMediaStopReason
     Failed
 }
 
+public enum CaptureMediaCompletionStatus
+{
+    Completed,
+    CompletedWithWarnings,
+    Interrupted,
+    Discarded,
+    Failed
+}
+
 public sealed record CaptureMediaStartRequest(
+    long? AssessmentAttemptId,
     string SessionKey,
     string ModuleCode,
     string ModuleName,
@@ -16,14 +26,17 @@ public sealed record CaptureMediaStartRequest(
 
 public sealed record CaptureMediaSession(
     long SessionId,
+    long? AssessmentAttemptId,
     string SessionKey,
     string ModuleCode,
     string ModuleName,
+    string OutputDirectory,
     DateTimeOffset StartedAt);
 
 public sealed record CaptureMediaCompleted(
     CaptureMediaSession Session,
-    CaptureMediaStopReason Reason,
+    CaptureMediaCompletionStatus Status,
+    string? ErrorCode,
     string? Message);
 
 public interface ICaptureMediaService
@@ -37,6 +50,10 @@ public interface ICaptureMediaService
     Task<CaptureMediaSession> StartAsync(
         CaptureMediaStartRequest request,
         CancellationToken cancellationToken = default);
+
+    void RequestStop(
+        CaptureMediaStopReason reason,
+        string? message = null);
 
     Task StopAsync(
         CaptureMediaStopReason reason,

@@ -22,7 +22,13 @@ public sealed record PrescriptionDefinition(
     int? PulseTreatmentDurationSeconds = null,
     int? PulseWidthMilliseconds = null,
     int? PulseRiseWidthMilliseconds = null,
-    int? PulseIntervalWidthMilliseconds = null)
+    int? PulseIntervalWidthMilliseconds = null,
+    double? DirectCurrentTotalDurationSecondsValue = null,
+    double? DirectCurrentIntervalSecondsValue = null,
+    double? DirectCurrentSingleDurationSecondsValue = null,
+    double? DirectCurrentRampUpSecondsValue = null,
+    double? DirectCurrentRampDownSecondsValue = null,
+    double? PulseTreatmentDurationSecondsValue = null)
 {
     public const string PulseCurrentStimulationType = "tPCS";
 
@@ -35,24 +41,41 @@ public sealed record PrescriptionDefinition(
     public string SessionDurationLabel => IsPulseCurrent ? "脉冲宽度" : "单次时长";
     public string RampUpLabel => IsPulseCurrent ? "上升宽度" : "渐升时间";
     public string RampDownLabel => "渐降时间";
+    public double DirectCurrentTotalDurationSeconds =>
+        DirectCurrentTotalDurationSecondsValue ?? TotalDurationMinutes * 60d;
+    public double DirectCurrentIntervalDurationSeconds =>
+        IsContinuous ? 0d : DirectCurrentIntervalSecondsValue ?? (IntervalMinutes ?? 0) * 60d;
+    public double DirectCurrentSingleDurationSeconds =>
+        IsContinuous
+            ? 0d
+            : DirectCurrentSingleDurationSecondsValue
+                ?? (SessionDurationMinutes ?? TotalDurationMinutes) * 60d;
+    public double DirectCurrentRampUpDurationSeconds =>
+        DirectCurrentRampUpSecondsValue ?? RampUpSeconds;
+    public double DirectCurrentRampDownDurationSeconds =>
+        DirectCurrentRampDownSecondsValue ?? RampDownSeconds;
+    public double PulseTreatmentDurationSecondsResolved =>
+        PulseTreatmentDurationSecondsValue ?? PulseTreatmentDurationSeconds ?? 0d;
     public string TotalDurationDisplay => IsPulseCurrent
-        ? FormatPulseValue(PulseTreatmentDurationSeconds, "s")
-        : $"{TotalDurationMinutes} min";
+        ? $"{PulseCurrentParameterRules.FormatTreatmentDuration(PulseTreatmentDurationSecondsResolved)} s"
+        : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentTotalDurationSeconds)} s";
     public string IntervalDisplay => IsPulseCurrent
         ? FormatPulseValue(PulseIntervalWidthMilliseconds, "ms")
-        : IsContinuous ? "/" : $"{IntervalMinutes} min";
+        : IsContinuous ? "/" : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentIntervalDurationSeconds)} s";
     public string SessionDurationDisplay => IsPulseCurrent
         ? FormatPulseValue(PulseWidthMilliseconds, "ms")
-        : IsContinuous ? "/" : $"{SessionDurationMinutes} min";
+        : IsContinuous ? "/" : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentSingleDurationSeconds)} s";
     public string RampUpDisplay => IsPulseCurrent
         ? FormatPulseValue(PulseRiseWidthMilliseconds, "ms")
-        : $"{RampUpSeconds} s";
-    public string RampDownDisplay => IsPulseCurrent ? "/" : $"{RampDownSeconds} s";
+        : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentRampUpDurationSeconds)} s";
+    public string RampDownDisplay => IsPulseCurrent
+        ? "/"
+        : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentRampDownDurationSeconds)} s";
     public string DisplayName => string.IsNullOrWhiteSpace(StimulationType)
         ? Name
         : $"{Name} ({StimulationType})";
     public bool HasPulseCurrentParameters =>
-        PulseTreatmentDurationSeconds.HasValue
+        (PulseTreatmentDurationSecondsValue.HasValue || PulseTreatmentDurationSeconds.HasValue)
         && PulseWidthMilliseconds.HasValue
         && PulseRiseWidthMilliseconds.HasValue
         && PulseIntervalWidthMilliseconds.HasValue;

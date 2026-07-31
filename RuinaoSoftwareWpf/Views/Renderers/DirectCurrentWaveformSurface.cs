@@ -300,27 +300,17 @@ public sealed class DirectCurrentWaveformSurface : FrameworkElement
         return plot.Bottom - Math.Clamp(normalized, 0, 1) * plot.Height;
     }
 
-    private static string FormatSeconds(double seconds)
-    {
-        if (seconds >= 3600)
-        {
-            var span = TimeSpan.FromSeconds(seconds);
-            return $"{(int)span.TotalHours}:{span.Minutes:00}";
-        }
+    internal static string FormatSeconds(double seconds) =>
+        seconds.ToString("0.0", CultureInfo.InvariantCulture);
 
-        return seconds < 10
-            ? seconds.ToString("0.0", CultureInfo.InvariantCulture)
-            : Math.Round(seconds).ToString("0", CultureInfo.InvariantCulture);
-    }
-
-    private static string FormatAxisValue(double value)
+    internal static string FormatAxisValue(double value)
     {
         if (Math.Abs(value) < 0.0000001)
         {
             value = 0;
         }
 
-        return value.ToString("0.##", CultureInfo.InvariantCulture);
+        return value.ToString("0.0#", CultureInfo.InvariantCulture);
     }
 
     private static void DrawRightAlignedText(DrawingContext context, string text, double right, double y)

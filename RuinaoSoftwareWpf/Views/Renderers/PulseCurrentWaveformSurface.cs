@@ -88,14 +88,16 @@ public sealed class PulseCurrentWaveformSurface : FrameworkElement
         if (state.IsGlobalView)
         {
             // 全程模式只压缩已经实际运行的部分，急停后固定在急停时刻。
-            return (0, Math.Max(1, elapsed));
+            return (0, Math.Max(0.001, elapsed));
         }
 
-        var page = elapsed >= parameters.TreatmentDurationSeconds
-            ? Math.Max(0, Math.Ceiling(parameters.TreatmentDurationSeconds / 60d) - 1)
-            : Math.Floor(elapsed / 60d);
-        var start = page * 60d;
-        return (start, start + 60d);
+        // 毫秒级脉冲在固定 60 秒窗口中容易被压成色块。细节模式根据周期
+        // 展示最近约 8 次脉冲，同时限制窗口过短或过长。
+        var cycleSeconds = (parameters.PulseWidthMilliseconds
+            + parameters.IntervalWidthMilliseconds) / 1000d;
+        var detailDuration = Math.Clamp(cycleSeconds * 8d, 0.5, 60d);
+        var end = Math.Max(0.001, elapsed);
+        return (Math.Max(0, end - detailDuration), end);
     }
 
     private static void DrawGrid(DrawingContext context, Rect plot, int horizontalDivisions)
@@ -171,17 +173,25 @@ public sealed class PulseCurrentWaveformSurface : FrameworkElement
         var geometry = new StreamGeometry();
         using (var geometryContext = geometry.Open())
         {
+            var hasOpenFigure = false;
             for (var index = 0; index < points.Count; index++)
             {
+                if (double.IsNaN(points[index].CurrentMilliamp))
+                {
+                    hasOpenFigure = false;
+                    continue;
+                }
+
                 var point = new Point(
                     plot.Left
                         + (points[index].Seconds - windowStart)
                         / Math.Max(0.001, windowEnd - windowStart)
                         * plot.Width,
                     CurrentToY(scale, plot, points[index].CurrentMilliamp));
-                if (index == 0)
+                if (!hasOpenFigure)
                 {
                     geometryContext.BeginFigure(point, false, false);
+                    hasOpenFigure = true;
                 }
                 else
                 {
@@ -217,12 +227,12 @@ public sealed class PulseCurrentWaveformSurface : FrameworkElement
         var rise = parameters.RiseWidthMilliseconds / 1000d;
         var pulse = parameters.PulseWidthMilliseconds / 1000d;
         var interval = parameters.IntervalWidthMilliseconds / 1000d;
-        var active = rise + pulse;
-        var cycle = active + interval;
-        var firstCycle = cycle <= 0 ? 0 : Math.Max(0, (long)Math.Floor(visibleStart / cycle));
-        var finalCycle = cycle <= 0 ? 0 : (long)Math.Ceiling(visibleEnd / cycle);
-        var visibleCycles = Math.Max(0, finalCycle - firstCycle);
-        if (visibleCycles > 700)
+        var firstPulseEnd = rise + pulse;
+        var cycle = pulse + interval;
+        var estimatedVisiblePulses = cycle <= 0
+            ? 0
+            : Math.Max(0, (long)Math.Ceiling((visibleEnd - Math.Max(visibleStart, firstPulseEnd)) / cycle)) + 1;
+        if (estimatedVisiblePulses > 700)
         {
             return CreateBoundedSample(parameters, visibleStart, visibleEnd, plotWidth);
         }
@@ -233,59 +243,101 @@ public sealed class PulseCurrentWaveformSurface : FrameworkElement
             StringComparison.Ordinal)
             ? -parameters.CurrentMilliamp
             : parameters.CurrentMilliamp;
-        var points = new List<WaveformPoint>((int)Math.Min(visibleCycles * 5 + 2, 3502))
-        {
-            new(
-                visibleStart,
-                PulseCurrentWaveformMath.GetSimulatedCurrent(parameters, visibleStart))
-        };
+        var points = new List<WaveformPoint>((int)Math.Min(estimatedVisiblePulses * 5 + 8, 3508));
 
-        for (var index = firstCycle;
-             index < finalCycle && index < parameters.PlannedTotalCount;
-             index++)
-        {
-            var start = index * cycle;
-            if (start > visibleEnd)
-            {
-                break;
-            }
+        AddFirstPulseSegment(
+            points,
+            visibleStart,
+            visibleEnd,
+            rise,
+            firstPulseEnd,
+            amplitude);
 
-            if (rise <= 0)
+        if (parameters.PlannedTotalCount > 1)
+        {
+            var firstSubsequentStart = firstPulseEnd + interval;
+            var firstVisibleIndex = cycle <= 0
+                ? 1
+                : Math.Max(
+                    1,
+                    (long)Math.Floor((visibleStart - firstSubsequentStart) / cycle) + 1);
+            for (var pulseIndex = firstVisibleIndex;
+                 pulseIndex < parameters.PlannedTotalCount;
+                 pulseIndex++)
             {
-                AddPointInWindow(points, visibleStart, visibleEnd, start, 0);
-                AddPointInWindow(points, visibleStart, visibleEnd, start, amplitude);
-            }
-            else
-            {
-                AddPointInWindow(points, visibleStart, visibleEnd, start, 0);
-                AddPointInWindow(
-                    points,
-                    visibleStart,
-                    visibleEnd,
-                    start + rise,
-                    amplitude);
-                if (visibleEnd < start + rise)
+                var start = firstSubsequentStart + (pulseIndex - 1) * cycle;
+                if (start > visibleEnd)
                 {
                     break;
                 }
-            }
 
-            var pulseEnd = start + active;
-            AddPointInWindow(points, visibleStart, visibleEnd, pulseEnd, amplitude);
-            if (visibleEnd < pulseEnd)
-            {
-                break;
+                AddConstantSegment(
+                    points,
+                    visibleStart,
+                    visibleEnd,
+                    start,
+                    start + pulse,
+                    amplitude);
             }
-
-            AddPointInWindow(points, visibleStart, visibleEnd, pulseEnd, 0);
-            AddPointInWindow(points, visibleStart, visibleEnd, start + cycle, 0);
         }
 
-        AddPoint(
-            points,
-            visibleEnd,
-            PulseCurrentWaveformMath.GetSimulatedCurrent(parameters, visibleEnd));
         return points;
+    }
+
+    private static void AddFirstPulseSegment(
+        List<WaveformPoint> points,
+        double visibleStart,
+        double visibleEnd,
+        double riseSeconds,
+        double pulseEnd,
+        double amplitude)
+    {
+        var segmentStart = Math.Max(visibleStart, 0);
+        var segmentEnd = Math.Min(visibleEnd, pulseEnd);
+        if (segmentEnd < segmentStart)
+        {
+            return;
+        }
+
+        AddBreak(points);
+        var startCurrent = riseSeconds > 0 && segmentStart < riseSeconds
+            ? amplitude * segmentStart / riseSeconds
+            : amplitude;
+        AddPoint(points, segmentStart, startCurrent);
+        if (riseSeconds > segmentStart && riseSeconds < segmentEnd)
+        {
+            AddPoint(points, riseSeconds, amplitude);
+        }
+
+        AddPoint(points, segmentEnd, amplitude);
+    }
+
+    private static void AddConstantSegment(
+        List<WaveformPoint> points,
+        double visibleStart,
+        double visibleEnd,
+        double segmentStart,
+        double segmentEnd,
+        double currentMilliamp)
+    {
+        var clippedStart = Math.Max(visibleStart, segmentStart);
+        var clippedEnd = Math.Min(visibleEnd, segmentEnd);
+        if (clippedEnd < clippedStart)
+        {
+            return;
+        }
+
+        AddBreak(points);
+        AddPoint(points, clippedStart, currentMilliamp);
+        AddPoint(points, clippedEnd, currentMilliamp);
+    }
+
+    private static void AddBreak(List<WaveformPoint> points)
+    {
+        if (points.Count > 0 && !double.IsNaN(points[^1].CurrentMilliamp))
+        {
+            points.Add(new WaveformPoint(points[^1].Seconds, double.NaN));
+        }
     }
 
     private static IReadOnlyList<WaveformPoint> CreateBoundedSample(
@@ -295,14 +347,32 @@ public sealed class PulseCurrentWaveformSurface : FrameworkElement
         double plotWidth)
     {
         var sampleCount = Math.Clamp((int)Math.Ceiling(plotWidth), 2, 1400);
-        var points = new List<WaveformPoint>(sampleCount);
+        var points = new List<WaveformPoint>(sampleCount * 2);
+        var wasActive = false;
         for (var index = 0; index < sampleCount; index++)
         {
             var seconds = visibleStart
                 + (visibleEnd - visibleStart) * index / (sampleCount - 1d);
-            points.Add(new WaveformPoint(
-                seconds,
-                PulseCurrentWaveformMath.GetSimulatedCurrent(parameters, seconds)));
+            var current = PulseCurrentWaveformMath.GetSimulatedCurrent(parameters, seconds);
+            var isActive = Math.Abs(current) > 0.000001;
+            if (!isActive)
+            {
+                if (wasActive)
+                {
+                    AddBreak(points);
+                }
+
+                wasActive = false;
+                continue;
+            }
+
+            if (!wasActive)
+            {
+                AddBreak(points);
+            }
+
+            points.Add(new WaveformPoint(seconds, current));
+            wasActive = true;
         }
 
         return points;
@@ -374,27 +444,17 @@ public sealed class PulseCurrentWaveformSurface : FrameworkElement
         return plot.Bottom - Math.Clamp(normalized, 0, 1) * plot.Height;
     }
 
-    private static string FormatSeconds(double seconds)
-    {
-        if (seconds >= 3600)
-        {
-            var span = TimeSpan.FromSeconds(seconds);
-            return $"{(int)span.TotalHours}:{span.Minutes:00}";
-        }
+    internal static string FormatSeconds(double seconds) =>
+        seconds.ToString("0.0", CultureInfo.InvariantCulture);
 
-        return seconds < 10
-            ? seconds.ToString("0.0", CultureInfo.InvariantCulture)
-            : Math.Round(seconds).ToString("0", CultureInfo.InvariantCulture);
-    }
-
-    private static string FormatAxisValue(double value)
+    internal static string FormatAxisValue(double value)
     {
         if (Math.Abs(value) < 0.0000001)
         {
             value = 0;
         }
 
-        return value.ToString("0.##", CultureInfo.InvariantCulture);
+        return value.ToString("0.0#", CultureInfo.InvariantCulture);
     }
 
     private static void DrawRightAlignedText(DrawingContext context, string text, double right, double y)

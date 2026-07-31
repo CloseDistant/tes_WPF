@@ -114,7 +114,8 @@ public sealed class EegSignalCaptureViewModel : ObservableObject
         set => SetProperty(ref recordName, value);
     }
 
-    public bool IsRecording => State == EegAcquisitionState.Acquiring;
+    public bool IsRecording =>
+        State == EegAcquisitionState.Acquiring || recordingService.IsRecording;
 
     public string RecordingTime => Elapsed.ToString(@"hh\:mm\:ss");
 
@@ -171,25 +172,32 @@ public sealed class EegSignalCaptureViewModel : ObservableObject
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
-        await acquisitionService.StopAsync(cancellationToken);
-        await unifiedSessionService.RecordEventAsync(
-            SessionModuleCodes.Eeg,
-            "acquisition_stopped",
-            RecordName,
-            JsonSerializer.Serialize(new
-            {
-                totalSamples = acquisitionService.GetCurrentRenderModel().TotalSamples,
-                acquisitionService.Config.SampleRateHz
-            }),
-            cancellationToken: cancellationToken);
-        Task pendingMarkers;
-        lock (markerWriteSync)
+        try
         {
-            pendingMarkers = markerWriteTask;
-        }
+            await acquisitionService.StopAsync(cancellationToken);
+            await unifiedSessionService.RecordEventAsync(
+                SessionModuleCodes.Eeg,
+                "acquisition_stopped",
+                RecordName,
+                JsonSerializer.Serialize(new
+                {
+                    totalSamples = acquisitionService.GetCurrentRenderModel().TotalSamples,
+                    acquisitionService.Config.SampleRateHz
+                }),
+                cancellationToken: cancellationToken);
+            Task pendingMarkers;
+            lock (markerWriteSync)
+            {
+                pendingMarkers = markerWriteTask;
+            }
 
-        await pendingMarkers.WaitAsync(cancellationToken);
-        await recordingService.StopAsync("completed", cancellationToken);
+            await pendingMarkers.WaitAsync(cancellationToken);
+            await recordingService.StopAsync("completed", cancellationToken);
+        }
+        finally
+        {
+            OnUiThread(NotifyRecordingStateChanged);
+        }
     }
 
     public void AddMarker(EegMarkerTag tag, string source)
@@ -231,7 +239,13 @@ public sealed class EegSignalCaptureViewModel : ObservableObject
     private static void OnUiThread(Action action)
     {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+        if (dispatcher is null)
+        {
+            action();
+            return;
+        }
+
+        if (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
         {
             return;
         }
@@ -243,6 +257,14 @@ public sealed class EegSignalCaptureViewModel : ObservableObject
         }
 
         dispatcher.BeginInvoke(action);
+    }
+
+    private void NotifyRecordingStateChanged()
+    {
+        OnPropertyChanged(nameof(IsRecording));
+        OnPropertyChanged(nameof(CaptureStatus));
+        startCommand.RaiseCanExecuteChanged();
+        stopCommand.RaiseCanExecuteChanged();
     }
 
     private void EnqueueSampleWrite(EegSampleBatch batch)

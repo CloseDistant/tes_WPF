@@ -8,11 +8,11 @@ namespace RuinaoSoftwareWpf;
 public sealed class PulseCurrentChannelConfig : ObservableObject
 {
     private string name = string.Empty;
-    private string currentMilliamp = string.Empty;
-    private string pulseWidthMilliseconds = "10";
-    private string riseWidthMilliseconds = "5";
-    private string intervalWidthMilliseconds = "20";
-    private string treatmentDurationSeconds = "1200";
+    private string currentMilliamp = PulseCurrentParameterRules.DefaultCurrentMilliamp;
+    private string pulseWidthMilliseconds = PulseCurrentParameterRules.DefaultPulseWidthMilliseconds;
+    private string riseWidthMilliseconds = PulseCurrentParameterRules.DefaultRiseWidthMilliseconds;
+    private string intervalWidthMilliseconds = PulseCurrentParameterRules.DefaultIntervalWidthMilliseconds;
+    private string treatmentDurationSeconds = PulseCurrentParameterRules.DefaultTreatmentDurationSeconds;
     private string polarity = PulseCurrentPolarities.NotReversed;
     private string plannedTotalCount = "—";
     private string remainingTime = "00:00:00";

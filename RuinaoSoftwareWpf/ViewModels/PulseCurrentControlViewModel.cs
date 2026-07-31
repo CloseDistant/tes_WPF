@@ -15,26 +15,31 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly IToastService toastService;
     private readonly ILoggingService logger;
+    private readonly IStimulationRecordService? stimulationRecordService;
     private readonly DispatcherTimer waveformTimer;
     private readonly Dictionary<PulseCurrentChannelConfig, ChannelRuntime> activeChannels = [];
-    private readonly RelayCommand synchronizedStartCommand;
-    private readonly RelayCommand startChannelCommand;
-    private readonly RelayCommand emergencyStopCommand;
+    private readonly AsyncRelayCommand synchronizedStartCommand;
+    private readonly AsyncRelayCommand startChannelCommand;
+    private readonly AsyncRelayCommand stopChannelCommand;
+    private readonly AsyncRelayCommand emergencyStopCommand;
     private readonly RelayCommand usePrescriptionCommand;
     private readonly RelayCommand useChannelPrescriptionCommand;
     private PulseCurrentChannelPair? selectedChannelPair;
     private PulseCurrentChannelConfig? selectedChannel;
+    private string appliedPrescriptionName = "手动设置";
     private bool disposed;
 
     public PulseCurrentControlViewModel(
         IDebugHardwareSimulationService debugHardwareSimulation,
         LocalizationViewModel localization,
         IToastService toastService,
-        ILoggingService logger)
+        ILoggingService logger,
+        IStimulationRecordService? stimulationRecordService = null)
     {
         this.debugHardwareSimulation = debugHardwareSimulation;
         this.toastService = toastService;
         this.logger = logger;
+        this.stimulationRecordService = stimulationRecordService;
         Localization = localization;
         Channels = new ObservableCollection<PulseCurrentChannelConfig>(
             Enumerable.Range(1, 16).Select(channelNumber =>
@@ -65,26 +70,41 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
                 SelectedChannel = channel;
             }
         });
-        synchronizedStartCommand = new RelayCommand(
-            _ => StartSynchronized(),
-            _ => CanStartSimulation && activeChannels.Count == 0);
+        synchronizedStartCommand = new AsyncRelayCommand(
+            (_, cancellationToken) => StartSynchronizedAsync(cancellationToken),
+            _ => CanStartSimulation && activeChannels.Count == 0,
+            HandleRecordFailure);
         SynchronizedStartCommand = synchronizedStartCommand;
-        startChannelCommand = new RelayCommand(
-            parameter =>
+        startChannelCommand = new AsyncRelayCommand(
+            async (parameter, cancellationToken) =>
             {
                 if (parameter is PulseCurrentChannelConfig channel)
                 {
-                    StartChannel(channel);
+                    await StartChannelAsync(channel, cancellationToken);
                 }
             },
             parameter => CanStartSimulation
                 && parameter is PulseCurrentChannelConfig channel
                 && Channels.Contains(channel)
-                && !activeChannels.ContainsKey(channel));
+                && !activeChannels.ContainsKey(channel),
+            HandleRecordFailure);
         StartChannelCommand = startChannelCommand;
-        emergencyStopCommand = new RelayCommand(
-            _ => EmergencyStop(),
-            _ => activeChannels.Count > 0);
+        stopChannelCommand = new AsyncRelayCommand(
+            async (parameter, cancellationToken) =>
+            {
+                if (parameter is PulseCurrentChannelConfig channel)
+                {
+                    await StopChannelAsync(channel, cancellationToken);
+                }
+            },
+            parameter => parameter is PulseCurrentChannelConfig channel
+                && activeChannels.ContainsKey(channel),
+            HandleRecordFailure);
+        StopChannelCommand = stopChannelCommand;
+        emergencyStopCommand = new AsyncRelayCommand(
+            (_, cancellationToken) => EmergencyStopAsync(cancellationToken),
+            _ => activeChannels.Count > 0,
+            HandleRecordFailure);
         EmergencyStopCommand = emergencyStopCommand;
         usePrescriptionCommand = new RelayCommand(
             _ => RequestPrescription(StimulationPrescriptionApplyScope.AllChannels),
@@ -96,6 +116,20 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
                 && Channels.Contains(channel)
                 && !activeChannels.ContainsKey(channel));
         UseChannelPrescriptionCommand = useChannelPrescriptionCommand;
+        ParameterValidationFailedCommand = new RelayCommand(parameter =>
+        {
+            if (parameter is string message && !string.IsNullOrWhiteSpace(message))
+            {
+                toastService.Show(ToastKind.Warning, "参数已调整", message);
+            }
+        });
+        RefreshPlannedTotalCountCommand = new RelayCommand(parameter =>
+        {
+            if (parameter is PulseCurrentChannelConfig channel && Channels.Contains(channel))
+            {
+                RefreshPlannedTotalCount(channel);
+            }
+        });
 
         debugHardwareSimulation.ConnectionChanged += OnDebugSimulationConnectionChanged;
         SelectedChannelPair = ChannelPairs[0];
@@ -152,11 +186,17 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
 
     public ICommand StartChannelCommand { get; }
 
+    public ICommand StopChannelCommand { get; }
+
     public ICommand EmergencyStopCommand { get; }
 
     public ICommand UsePrescriptionCommand { get; }
 
     public ICommand UseChannelPrescriptionCommand { get; }
+
+    public ICommand ParameterValidationFailedCommand { get; }
+
+    public ICommand RefreshPlannedTotalCountCommand { get; }
 
     public event EventHandler? BackRequested;
 
@@ -202,8 +242,9 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
             return false;
         }
 
-        var currentText = prescription.CurrentMilliamp.ToString("0.##", CultureInfo.InvariantCulture);
-        var treatmentDurationText = prescription.PulseTreatmentDurationSeconds!.Value.ToString(CultureInfo.InvariantCulture);
+        var currentText = PulseCurrentParameterRules.FormatCurrent(prescription.CurrentMilliamp);
+        var treatmentDurationText = PulseCurrentParameterRules.FormatTreatmentDuration(
+            prescription.PulseTreatmentDurationSecondsResolved);
         var pulseWidthText = prescription.PulseWidthMilliseconds!.Value.ToString(CultureInfo.InvariantCulture);
         var riseWidthText = prescription.PulseRiseWidthMilliseconds!.Value.ToString(CultureInfo.InvariantCulture);
         var intervalWidthText = prescription.PulseIntervalWidthMilliseconds!.Value.ToString(CultureInfo.InvariantCulture);
@@ -215,12 +256,13 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
             channel.PulseWidthMilliseconds = pulseWidthText;
             channel.RiseWidthMilliseconds = riseWidthText;
             channel.IntervalWidthMilliseconds = intervalWidthText;
-            channel.ClearPlannedTotalCount();
+            RefreshPlannedTotalCount(channel);
             channel.RemainingTime = "00:00:00";
             channel.Waveform.Clear();
             channel.RefreshBindings();
         }
 
+        appliedPrescriptionName = prescription.Name;
         OnPropertyChanged(nameof(SelectedChannels));
         error = string.Empty;
         return true;
@@ -251,7 +293,7 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         debugHardwareSimulation.ConnectionChanged -= OnDebugSimulationConnectionChanged;
     }
 
-    private void StartSynchronized()
+    private async Task StartSynchronizedAsync(CancellationToken cancellationToken)
     {
         var synchronizedChannels = Channels.ToArray();
         if (synchronizedChannels.Length != 16)
@@ -272,6 +314,16 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
             snapshots[channel] = snapshot!;
         }
 
+        if (stimulationRecordService is not null)
+        {
+            await stimulationRecordService.StartRunAsync(
+                StimulationRecordParameters.CreatePulseRunStartRequest(
+                    snapshots,
+                    appliedPrescriptionName,
+                    "tPCS 同步运行"),
+                cancellationToken);
+        }
+
         // 16 个通道全部校验成功后共享同一时间戳，避免出现部分启动。
         var sharedTimestamp = Stopwatch.GetTimestamp();
         foreach (var channel in synchronizedChannels)
@@ -282,7 +334,9 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         logger.Info($"tPCS DEBUG 模拟同步开始：{string.Join(" + ", synchronizedChannels.Select(channel => channel.Name))}");
     }
 
-    private void StartChannel(PulseCurrentChannelConfig channel)
+    private async Task StartChannelAsync(
+        PulseCurrentChannelConfig channel,
+        CancellationToken cancellationToken)
     {
         if (!Channels.Contains(channel) || activeChannels.ContainsKey(channel))
         {
@@ -293,6 +347,19 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         {
             toastService.ShowError("参数校验失败", $"{channel.Name}：{error}");
             return;
+        }
+
+        if (stimulationRecordService is not null)
+        {
+            await stimulationRecordService.StartRunAsync(
+                StimulationRecordParameters.CreatePulseRunStartRequest(
+                    new Dictionary<PulseCurrentChannelConfig, PulseCurrentParameters>
+                    {
+                        [channel] = snapshot!
+                    },
+                    appliedPrescriptionName,
+                    channel.Name),
+                cancellationToken);
         }
 
         BeginChannelRuntime(channel, snapshot!, Stopwatch.GetTimestamp());
@@ -318,7 +385,7 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         RefreshCommandStates();
     }
 
-    private void EmergencyStop()
+    private async Task EmergencyStopAsync(CancellationToken cancellationToken)
     {
         if (activeChannels.Count == 0)
         {
@@ -326,7 +393,8 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         }
 
         var stoppedAt = Stopwatch.GetTimestamp();
-        foreach (var pair in activeChannels.ToArray())
+        var stoppedChannels = activeChannels.ToArray();
+        foreach (var pair in stoppedChannels)
         {
             var channel = pair.Key;
             var runtime = pair.Value;
@@ -342,9 +410,69 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
 
         waveformTimer.Stop();
         RefreshCommandStates();
+        if (stimulationRecordService is not null)
+        {
+            await stimulationRecordService.EndChannelsAsync(
+                new StimulationChannelsEndRequest(
+                    PrescriptionDefinition.PulseCurrentStimulationType,
+                    stoppedChannels
+                        .Select(pair => new StimulationChannelEndItem(
+                            pair.Key.Name,
+                            pair.Key.Waveform.CompletedPulseCount))
+                        .ToArray(),
+                    StimulationEndType.ManualTermination,
+                    StimulationEndReasonCodes.EmergencyStop),
+                cancellationToken);
+        }
     }
 
-    private void OnWaveformTimerTick(object? sender, EventArgs e)
+    private static void RefreshPlannedTotalCount(PulseCurrentChannelConfig channel)
+    {
+        if (PulseCurrentParameters.TryCreate(channel, out var parameters, out _))
+        {
+            channel.ShowPlannedTotalCount(parameters!.PlannedTotalCount);
+        }
+        else
+        {
+            channel.ClearPlannedTotalCount();
+        }
+    }
+
+    private async Task StopChannelAsync(
+        PulseCurrentChannelConfig channel,
+        CancellationToken cancellationToken)
+    {
+        if (!activeChannels.Remove(channel, out var runtime))
+        {
+            return;
+        }
+
+        var elapsed = Stopwatch.GetElapsedTime(runtime.StartTimestamp, Stopwatch.GetTimestamp()).TotalSeconds;
+        channel.Waveform.EmergencyStop(elapsed);
+        channel.RemainingTime = "00:00:00";
+        channel.IsParameterEditingEnabled = true;
+        channel.IsStimulating = false;
+        if (activeChannels.Count == 0)
+        {
+            waveformTimer.Stop();
+        }
+
+        RefreshCommandStates();
+        logger.Info(
+            $"tPCS DEBUG 模拟手动停止成功：{channel.Name}，完成次数 {channel.Waveform.CompletedPulseCount}/{runtime.Parameters.PlannedTotalCount}");
+        if (stimulationRecordService is not null)
+        {
+            await stimulationRecordService.EndChannelsAsync(
+                new StimulationChannelsEndRequest(
+                    PrescriptionDefinition.PulseCurrentStimulationType,
+                    [new StimulationChannelEndItem(channel.Name, channel.Waveform.CompletedPulseCount)],
+                    StimulationEndType.ManualTermination,
+                    StimulationEndReasonCodes.ChannelStop),
+                cancellationToken);
+        }
+    }
+
+    private async void OnWaveformTimerTick(object? sender, EventArgs e)
     {
         if (activeChannels.Count == 0)
         {
@@ -390,6 +518,27 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
             logger.Info(
                 $"tPCS DEBUG 模拟完成：{channel.Name}，完成次数 {channel.Waveform.CompletedPulseCount}/{channel.Waveform.Parameters?.PlannedTotalCount}");
         }
+
+        if (stimulationRecordService is not null)
+        {
+            try
+            {
+                await stimulationRecordService.EndChannelsAsync(
+                    new StimulationChannelsEndRequest(
+                        PrescriptionDefinition.PulseCurrentStimulationType,
+                        completedChannels
+                            .Select(channel => new StimulationChannelEndItem(
+                                channel.Name,
+                                channel.Waveform.CompletedPulseCount))
+                            .ToArray(),
+                        StimulationEndType.NormalCompletion,
+                        StimulationEndReasonCodes.DurationCompleted));
+            }
+            catch (Exception exception)
+            {
+                HandleRecordFailure(exception);
+            }
+        }
     }
 
     private void RequestBack()
@@ -423,9 +572,16 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
     {
         synchronizedStartCommand.RaiseCanExecuteChanged();
         startChannelCommand.RaiseCanExecuteChanged();
+        stopChannelCommand.RaiseCanExecuteChanged();
         emergencyStopCommand.RaiseCanExecuteChanged();
         usePrescriptionCommand.RaiseCanExecuteChanged();
         useChannelPrescriptionCommand.RaiseCanExecuteChanged();
+    }
+
+    private void HandleRecordFailure(Exception exception)
+    {
+        logger.Error("tPCS 治疗记录写入失败", exception);
+        toastService.ShowError("治疗记录写入失败", exception.Message);
     }
 
     private static string FormatRemaining(double seconds)

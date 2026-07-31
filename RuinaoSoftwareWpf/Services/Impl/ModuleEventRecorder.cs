@@ -2,14 +2,14 @@ namespace RuinaoSoftwareWpf;
 
 using System.Text.Json;
 
-public sealed class ModuleEventRecorder : IModuleEventRecorder
+internal sealed class ModuleEventRecorder : IModuleEventRecorder
 {
-    private readonly ICaptureMediaRecorder mediaRecorder;
+    private readonly ICaptureMediaBackend mediaRecorder;
     private readonly ILoggingService logger;
     private readonly object syncRoot = new();
     private Task pendingWrite = Task.CompletedTask;
 
-    public ModuleEventRecorder(ICaptureMediaRecorder mediaRecorder, ILoggingService logger)
+    public ModuleEventRecorder(ICaptureMediaBackend mediaRecorder, ILoggingService logger)
     {
         this.mediaRecorder = mediaRecorder;
         this.logger = logger;

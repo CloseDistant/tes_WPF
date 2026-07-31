@@ -112,9 +112,10 @@ public sealed class UnifiedSessionService : IUnifiedSessionService
         }
     }
 
-    public async Task EndAsync(
+    public async Task<bool> EndAsync(
         string status,
         string? reason = null,
+        string? expectedSessionKey = null,
         CancellationToken cancellationToken = default)
     {
         var ended = false;
@@ -124,7 +125,13 @@ public sealed class UnifiedSessionService : IUnifiedSessionService
             var session = currentSession;
             if (session is null)
             {
-                return;
+                return false;
+            }
+
+            if (expectedSessionKey is not null
+                && !string.Equals(session.SessionKey, expectedSessionKey, StringComparison.Ordinal))
+            {
+                return false;
             }
 
             var timestamp = CreateTimestamp(session);
@@ -162,6 +169,8 @@ public sealed class UnifiedSessionService : IUnifiedSessionService
         {
             CurrentSessionChanged?.Invoke(this, EventArgs.Empty);
         }
+
+        return ended;
     }
 
     private async Task<(UnifiedSessionContext Session, bool Created)> EnsureStartedCoreAsync(CancellationToken cancellationToken)

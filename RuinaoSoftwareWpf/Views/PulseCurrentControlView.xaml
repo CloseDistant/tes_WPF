@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:RuinaoSoftwareWpf"
              xmlns:renderers="clr-namespace:RuinaoSoftwareWpf.Views.Renderers"
+             PreviewMouseLeftButtonDown="CommitFocusedInputOnBlankClick"
              Background="#11141D">
     <UserControl.Resources>
         <Style x:Key="PulsePairCardStyle" TargetType="Border">
@@ -254,12 +255,40 @@
                                         <Button Content="{Binding DataContext.Localization.StartButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 Command="{Binding DataContext.StartChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"
-                                                Style="{StaticResource TopButton}"
                                                 Background="#27B65A"
                                                 Height="32"
                                                 MinWidth="70"
                                                 Padding="14,5"
-                                                Margin="0,0,12,0" />
+                                                Margin="0,0,12,0">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource TopButton}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsStimulating}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                        <Button Content="停止"
+                                                Command="{Binding DataContext.StopChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Background="{StaticResource Danger}"
+                                                Height="32"
+                                                MinWidth="70"
+                                                Padding="14,5"
+                                                Margin="0,0,12,0">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource TopButton}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsStimulating}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
                                         <TextBlock Text="{Binding DataContext.Localization.RemainingTimeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                    Foreground="{StaticResource SubText}"
                                                    VerticalAlignment="Center"
@@ -316,29 +345,49 @@
                                             <RowDefinition Height="42" />
                                         </Grid.RowDefinitions>
                                         <TextBlock Text="幅值" Style="{StaticResource PulseLabelStyle}" />
-                                        <TextBox Grid.Column="1" Text="{Binding CurrentMilliamp, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBox Grid.Column="1" Tag="CurrentMilliamp"
+                                                 Text="{Binding CurrentMilliamp, UpdateSourceTrigger=PropertyChanged}"
                                                  IsEnabled="{Binding IsParameterEditingEnabled}"
+                                                 GotKeyboardFocus="RememberParameterValue"
+                                                 PreviewTextInput="Decimal_PreviewTextInput"
+                                                 DataObject.Pasting="Numeric_Pasting"
+                                                 LostKeyboardFocus="NormalizeParameterValue"
                                                  Style="{StaticResource PulseFieldStyle}" />
                                         <TextBlock Grid.Column="2" Text="mA" Style="{StaticResource PulseLabelStyle}" Margin="10,0,0,0" />
 
                                         <TextBlock Grid.Row="1" Text="脉冲宽度" Style="{StaticResource PulseLabelStyle}" />
                                         <TextBox Grid.Row="1" Grid.Column="1"
+                                                 Tag="PulseWidthMilliseconds"
                                                  Text="{Binding PulseWidthMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                                  IsEnabled="{Binding IsParameterEditingEnabled}"
+                                                 GotKeyboardFocus="RememberParameterValue"
+                                                 PreviewTextInput="Integer_PreviewTextInput"
+                                                 DataObject.Pasting="Numeric_Pasting"
+                                                 LostKeyboardFocus="NormalizeParameterValue"
                                                  Style="{StaticResource PulseFieldStyle}" />
                                         <TextBlock Grid.Row="1" Grid.Column="2" Text="ms" Style="{StaticResource PulseLabelStyle}" Margin="10,0,0,0" />
 
                                         <TextBlock Grid.Row="2" Text="上升宽度" Style="{StaticResource PulseLabelStyle}" />
                                         <TextBox Grid.Row="2" Grid.Column="1"
+                                                 Tag="RiseWidthMilliseconds"
                                                  Text="{Binding RiseWidthMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                                  IsEnabled="{Binding IsParameterEditingEnabled}"
+                                                 GotKeyboardFocus="RememberParameterValue"
+                                                 PreviewTextInput="Integer_PreviewTextInput"
+                                                 DataObject.Pasting="Numeric_Pasting"
+                                                 LostKeyboardFocus="NormalizeParameterValue"
                                                  Style="{StaticResource PulseFieldStyle}" />
                                         <TextBlock Grid.Row="2" Grid.Column="2" Text="ms" Style="{StaticResource PulseLabelStyle}" Margin="10,0,0,0" />
 
                                         <TextBlock Grid.Row="3" Text="间隔宽度" Style="{StaticResource PulseLabelStyle}" />
                                         <TextBox Grid.Row="3" Grid.Column="1"
+                                                 Tag="IntervalWidthMilliseconds"
                                                  Text="{Binding IntervalWidthMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                                  IsEnabled="{Binding IsParameterEditingEnabled}"
+                                                 GotKeyboardFocus="RememberParameterValue"
+                                                 PreviewTextInput="Integer_PreviewTextInput"
+                                                 DataObject.Pasting="Numeric_Pasting"
+                                                 LostKeyboardFocus="NormalizeParameterValue"
                                                  Style="{StaticResource PulseFieldStyle}" />
                                         <TextBlock Grid.Row="3" Grid.Column="2" Text="ms" Style="{StaticResource PulseLabelStyle}" Margin="10,0,0,0" />
 
@@ -367,8 +416,13 @@
                                         </Grid.RowDefinitions>
                                         <TextBlock Text="治疗时间" Style="{StaticResource PulseLabelStyle}" />
                                         <TextBox Grid.Column="1"
+                                                 Tag="TreatmentDurationSeconds"
                                                  Text="{Binding TreatmentDurationSeconds, UpdateSourceTrigger=PropertyChanged}"
                                                  IsEnabled="{Binding IsParameterEditingEnabled}"
+                                                 GotKeyboardFocus="RememberParameterValue"
+                                                 PreviewTextInput="Decimal_PreviewTextInput"
+                                                 DataObject.Pasting="Numeric_Pasting"
+                                                 LostKeyboardFocus="NormalizeParameterValue"
                                                  Style="{StaticResource PulseFieldStyle}" />
                                         <TextBlock Grid.Column="2" Text="s" Style="{StaticResource PulseLabelStyle}" Margin="10,0,0,0" />
 
@@ -410,7 +464,7 @@
                                                     CornerRadius="5"
                                                     Padding="2">
                                                 <StackPanel Orientation="Horizontal">
-                                                    <RadioButton Content="60 秒"
+                                                    <RadioButton Content="脉冲细节"
                                                                  GroupName="{Binding Name}"
                                                                  Style="{StaticResource PulseWaveformModeOption}"
                                                                  IsChecked="{Binding Waveform.IsWindowView, Mode=TwoWay}" />

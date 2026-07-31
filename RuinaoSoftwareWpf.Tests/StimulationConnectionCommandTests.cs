@@ -270,9 +270,10 @@ public sealed class StimulationConnectionCommandTests
             string prescriptionName,
             CancellationToken cancellationToken = default) => NotUsed();
 
-        public Task<HardwareOperationResult> PauseTiGroupAsync(
+        public Task<HardwareOperationResult> StopGroupAsync(
             TiGroup group,
             string selectedChannelNames,
+            string stimulationType,
             CancellationToken cancellationToken = default) => NotUsed();
 
         public Task<HardwareOperationResult> EmergencyStopTiGroupAsync(

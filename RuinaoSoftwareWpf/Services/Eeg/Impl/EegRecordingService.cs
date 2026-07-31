@@ -78,6 +78,7 @@ public sealed class EegRecordingService : IEegRecordingService
             var placeholderPath = Path.Combine(eegOutputDirectory, "recording.eegref");
             var captureSession = await captureRepository.CreateModuleSessionAsync(
                 outputRoot,
+                null,
                 sessionKey,
                 "EEG",
                 "脑电信号采集",
@@ -167,6 +168,7 @@ public sealed class EegRecordingService : IEegRecordingService
                 marker.Name,
                 JsonSerializer.Serialize(new
                 {
+                    marker.Code,
                     marker.Name,
                     marker.Shortcut,
                     marker.SampleIndex,
@@ -300,6 +302,7 @@ public sealed class EegRecordingService : IEegRecordingService
         var markerPath = Path.Combine(recording.OutputDirectory, "markers.json");
         var snapshot = markers.Select(marker => new
         {
+            marker.Code,
             marker.Name,
             marker.Shortcut,
             Color = marker.Color.ToString(),

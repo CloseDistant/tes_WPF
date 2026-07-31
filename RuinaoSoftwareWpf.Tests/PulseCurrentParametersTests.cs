@@ -49,7 +49,7 @@ public sealed class PulseCurrentParametersTests
 
         Assert.True(success, error);
         Assert.NotNull(parameters);
-        Assert.Equal(3, parameters.PlannedTotalCount);
+        Assert.Equal(5, parameters.PlannedTotalCount);
     }
 
     [Theory]
@@ -76,7 +76,7 @@ public sealed class PulseCurrentParametersTests
         var success = PulseCurrentParameters.TryCreate(channel, out _, out var error);
 
         Assert.False(success);
-        Assert.Contains("脉冲宽度必须大于 0", error);
+        Assert.Contains("脉冲宽度请输入 1～2000", error);
     }
 
     [Fact]
@@ -92,11 +92,24 @@ public sealed class PulseCurrentParametersTests
         Assert.Equal(0, parameters.RiseWidthMilliseconds);
     }
 
+    [Fact]
+    public void TryCreate_AllowsOneDecimalTreatmentSeconds()
+    {
+        var channel = CreateValidChannel();
+        channel.TreatmentDurationSeconds = "1.5";
+
+        var success = PulseCurrentParameters.TryCreate(channel, out var parameters, out var error);
+
+        Assert.True(success, error);
+        Assert.NotNull(parameters);
+        Assert.Equal(1.5, parameters.TreatmentDurationSeconds);
+    }
+
     [Theory]
-    [InlineData("1.5")]
     [InlineData("0")]
     [InlineData("-1")]
-    public void TryCreate_RequiresPositiveIntegerTreatmentSeconds(string duration)
+    [InlineData("3600.1")]
+    public void TryCreate_RequiresTreatmentSecondsInConfirmedRange(string duration)
     {
         var channel = CreateValidChannel();
         channel.TreatmentDurationSeconds = duration;
@@ -104,7 +117,30 @@ public sealed class PulseCurrentParametersTests
         var success = PulseCurrentParameters.TryCreate(channel, out _, out var error);
 
         Assert.False(success);
-        Assert.Contains("整数秒", error);
+        Assert.Contains("治疗时间", error);
+    }
+
+    [Fact]
+    public void TryCreate_RejectsZeroIntervalWidth()
+    {
+        var channel = CreateValidChannel();
+        channel.IntervalWidthMilliseconds = "0";
+
+        var success = PulseCurrentParameters.TryCreate(channel, out _, out var error);
+
+        Assert.False(success);
+        Assert.Contains("间隔宽度", error);
+    }
+
+    [Fact]
+    public void TryCreate_AllowsTwoSecondPulseWidth()
+    {
+        var channel = CreateValidChannel();
+        channel.PulseWidthMilliseconds = "2000";
+
+        var success = PulseCurrentParameters.TryCreate(channel, out _, out var error);
+
+        Assert.True(success, error);
     }
 
     [Fact]

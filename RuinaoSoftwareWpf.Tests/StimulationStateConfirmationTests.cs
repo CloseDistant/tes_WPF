@@ -44,23 +44,24 @@ public sealed class StimulationStateConfirmationTests
     }
 
     [Fact]
-    public async Task Pause_RemainsStoppingUntilHardwareConfirms()
+    public async Task Stop_RemainsStoppingUntilHardwareConfirmsThenBecomesStopped()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var fixture = new Fixture();
-        var operation = fixture.Engine.PauseTiGroupAsync(
+        var operation = fixture.Engine.StopGroupAsync(
             new TiGroup { Title = "TI" },
             "CH 1",
+            "TI",
             cancellationToken);
 
-        await fixture.Hardware.PauseInvoked.Task.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        await fixture.Hardware.StopInvoked.Task.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
         Assert.Equal(StimulationExecutionState.Stopping, fixture.StateMachine.CurrentState);
 
-        fixture.Hardware.PauseCompletion.TrySetResult(
+        fixture.Hardware.StopCompletion.TrySetResult(
             new HardwareOperationResult(true, "confirmed"));
         await operation;
 
-        Assert.Equal(StimulationExecutionState.Paused, fixture.StateMachine.CurrentState);
+        Assert.Equal(StimulationExecutionState.Stopped, fixture.StateMachine.CurrentState);
     }
 
     [Fact]
@@ -82,6 +83,62 @@ public sealed class StimulationStateConfirmationTests
         await operation;
 
         Assert.Equal(StimulationExecutionState.Completed, fixture.StateMachine.CurrentState);
+    }
+
+    [Fact]
+    public async Task CompleteOneOfMultipleActiveChannels_RemainsRunning()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = new Fixture();
+        var group = new TiGroup { Title = "TI" };
+        var first = new ChannelConfig { Name = "CH 1" };
+        var second = new ChannelConfig { Name = "CH 2" };
+        group.Channels.Add(first);
+        group.Channels.Add(second);
+
+        var startOperation = fixture.Engine.StartTiGroupAsync(
+            group,
+            "CH 1 + CH 2",
+            "测试处方",
+            cancellationToken);
+        await fixture.Hardware.StartInvoked.Task.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        fixture.Hardware.StartCompletion.TrySetResult(new HardwareOperationResult(true, "confirmed"));
+        await startOperation;
+
+        var completedGroup = new TiGroup { Title = "TI" };
+        completedGroup.Channels.Add(first);
+        var completeOperation = fixture.Engine.CompleteGroupAsync(
+            completedGroup,
+            first.Name,
+            "TI",
+            cancellationToken);
+        await fixture.Hardware.CompleteInvoked.Task.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        fixture.Hardware.CompleteCompletion.TrySetResult(new HardwareOperationResult(true, "confirmed"));
+        await completeOperation;
+
+        Assert.Equal(StimulationExecutionState.Running, fixture.StateMachine.CurrentState);
+    }
+
+    [Fact]
+    public async Task EmergencyStop_RemainsStoppingUntilHardwareConfirmsThenBecomesTerminal()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = new Fixture();
+        var operation = fixture.Engine.EmergencyStopTiGroupAsync(
+            new TiGroup { Title = "TI" },
+            "测试急停",
+            cancellationToken);
+
+        await fixture.Hardware.EmergencyStopInvoked.Task.WaitAsync(
+            TimeSpan.FromSeconds(1),
+            cancellationToken);
+        Assert.Equal(StimulationExecutionState.Stopping, fixture.StateMachine.CurrentState);
+
+        fixture.Hardware.EmergencyStopCompletion.TrySetResult(
+            new HardwareOperationResult(true, "confirmed"));
+        await operation;
+
+        Assert.Equal(StimulationExecutionState.EmergencyStopped, fixture.StateMachine.CurrentState);
     }
 
     private sealed class Fixture
@@ -112,8 +169,11 @@ public sealed class StimulationStateConfirmationTests
         public TaskCompletionSource StartInvoked { get; } = NewSignal();
         public TaskCompletionSource<HardwareOperationResult> StartCompletion { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public TaskCompletionSource PauseInvoked { get; } = NewSignal();
-        public TaskCompletionSource<HardwareOperationResult> PauseCompletion { get; } =
+        public TaskCompletionSource StopInvoked { get; } = NewSignal();
+        public TaskCompletionSource<HardwareOperationResult> StopCompletion { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource EmergencyStopInvoked { get; } = NewSignal();
+        public TaskCompletionSource<HardwareOperationResult> EmergencyStopCompletion { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource CompleteInvoked { get; } = NewSignal();
         public TaskCompletionSource<HardwareOperationResult> CompleteCompletion { get; } =
@@ -142,12 +202,24 @@ public sealed class StimulationStateConfirmationTests
         public Task<HardwareOperationResult> ReadProductModelAsync(CancellationToken cancellationToken = default) => NotUsed();
         public Task<HardwareOperationResult> ReadBoardModelAsync(CancellationToken cancellationToken = default) => NotUsed();
         public Task<HardwareOperationResult> CheckImpedanceAsync(CancellationToken cancellationToken = default) => NotUsed();
-        public Task<HardwareOperationResult> PauseGroupAsync(TiGroup group, string selectedChannelNames, CancellationToken cancellationToken = default)
+        public Task<HardwareOperationResult> StopGroupAsync(
+            TiGroup group,
+            string selectedChannelNames,
+            string stimulationType,
+            CancellationToken cancellationToken = default)
         {
-            PauseInvoked.TrySetResult();
-            return PauseCompletion.Task.WaitAsync(cancellationToken);
+            StopInvoked.TrySetResult();
+            return StopCompletion.Task.WaitAsync(cancellationToken);
         }
-        public Task<HardwareOperationResult> EmergencyStopGroupAsync(TiGroup group, string selectedChannelNames, string stimulationType = "TI", CancellationToken cancellationToken = default) => NotUsed();
+        public Task<HardwareOperationResult> EmergencyStopGroupAsync(
+            TiGroup group,
+            string selectedChannelNames,
+            string stimulationType = "TI",
+            CancellationToken cancellationToken = default)
+        {
+            EmergencyStopInvoked.TrySetResult();
+            return EmergencyStopCompletion.Task.WaitAsync(cancellationToken);
+        }
         public Task<HardwareOperationResult> CompleteGroupAsync(TiGroup group, string selectedChannelNames, string stimulationType, CancellationToken cancellationToken = default)
         {
             CompleteInvoked.TrySetResult();
@@ -203,7 +275,12 @@ public sealed class StimulationStateConfirmationTests
         public UnifiedSessionTimestamp GetCurrentTimestamp() => throw new NotSupportedException();
         public Task<PageResult<UnifiedSessionTimelineEvent>> GetTimelinePageAsync(string sessionKey, PageRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task RecordEventAsync(string moduleCode, string eventType, string? message = null, string? payloadJson = null, DateTimeOffset? sourceTime = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task EndAsync(string status, string? reason = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<bool> EndAsync(
+            string status,
+            string? reason = null,
+            string? expectedSessionKey = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
     }
 
     private sealed class SnapshotService : IRunConfigurationSnapshotService

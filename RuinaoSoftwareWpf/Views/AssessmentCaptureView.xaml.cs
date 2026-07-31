@@ -1,18 +1,18 @@
 ﻿using System.Windows.Controls;
-using System.Globalization;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.IO;
 using OpenCvSharp;
+using RuinaoSoftwareWpf.ApplicationContracts;
 
 namespace RuinaoSoftwareWpf.Views;
 
 /// <summary>
 /// 采集工作台页面。
 /// View 层负责按钮事件、演示视频播放、摄像头预览和人脸框绘制；
-/// 模块流程状态在 ViewModel 中维护，音视频录制由 ICaptureMediaRecorder 服务处理。
+/// 模块流程状态在 ViewModel 中维护，音视频录制由 ICaptureMediaService 服务处理。
 /// </summary>
 public partial class AssessmentCaptureView : UserControl
 {
@@ -30,123 +30,36 @@ public partial class AssessmentCaptureView : UserControl
     private bool cameraPreviewHasFrame;
     private bool faceInGuideFrame;
     private DateTime lastFaceOkAt = DateTime.MinValue;
-    private DateOnly displayedBasicInfoCalendarMonth = FirstDayOfMonth(DateOnly.FromDateTime(DateTime.Today));
 
     public AssessmentCaptureView()
     {
         InitializeComponent();
         playbackTimer.Tick += (_, _) => UpdatePlaybackTime();
         cameraTimer.Tick += (_, _) => UpdateCameraPreview();
-        Loaded += (_, _) => StartPageActivities();
+        Loaded += AssessmentCaptureView_Loaded;
         Unloaded += (_, _) => StopPageActivitiesForUnload();
     }
 
     private AssessmentCaptureViewModel? ViewModel => DataContext as AssessmentCaptureViewModel;
 
-    private void StartPageActivities()
+    private async void AssessmentCaptureView_Loaded(object sender, RoutedEventArgs e)
     {
         // 如果用户离开演示播放页后又返回，MediaElement 不会自动恢复画面。
         // 这里兜底清理“播放中但没有播放器上下文”的状态，让用户重新完整观看演示。
         ViewModel?.CancelDemoPlaybackForNavigation();
+        if (ViewModel is { } viewModel)
+        {
+            try
+            {
+                await viewModel.EnterWorkbenchAsync();
+            }
+            catch (Exception exception)
+            {
+                viewModel.ShowStageNotice($"加载患者评估进度失败：{exception.Message}");
+            }
+        }
+
         StartCameraPreview();
-    }
-
-    private void BasicInfoBirthDateButton_Click(object sender, RoutedEventArgs e)
-    {
-        var currentText = ViewModel?.BasicInfoBirthDateText.Trim() ?? string.Empty;
-        displayedBasicInfoCalendarMonth = DateOnly.TryParseExact(
-            currentText,
-            "yyyy-MM-dd",
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out var selectedDate)
-            ? FirstDayOfMonth(selectedDate)
-            : FirstDayOfMonth(DateOnly.FromDateTime(DateTime.Today));
-
-        RenderBasicInfoCalendarDays();
-        BasicInfoDatePickerPopup.IsOpen = true;
-    }
-
-    private void BasicInfoPreviousMonthButton_Click(object sender, RoutedEventArgs e)
-    {
-        displayedBasicInfoCalendarMonth = displayedBasicInfoCalendarMonth.AddMonths(-1);
-        RenderBasicInfoCalendarDays();
-    }
-
-    private void BasicInfoNextMonthButton_Click(object sender, RoutedEventArgs e)
-    {
-        displayedBasicInfoCalendarMonth = displayedBasicInfoCalendarMonth.AddMonths(1);
-        RenderBasicInfoCalendarDays();
-    }
-
-    private void BasicInfoCalendarDayButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: DateOnly selectedDate } || ViewModel is null)
-        {
-            return;
-        }
-
-        ViewModel.BasicInfoBirthDateText = selectedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        BasicInfoDatePickerPopup.IsOpen = false;
-    }
-
-    private void RenderBasicInfoCalendarDays()
-    {
-        BasicInfoCalendarTitleText.Text = displayedBasicInfoCalendarMonth.ToString("yyyy 年 MM 月", CultureInfo.InvariantCulture);
-        BasicInfoCalendarDaysGrid.Children.Clear();
-
-        var firstDayOffset = ((int)displayedBasicInfoCalendarMonth.DayOfWeek + 6) % 7;
-        var gridStartDate = displayedBasicInfoCalendarMonth.AddDays(-firstDayOffset);
-        var selectedDate = TryReadBasicInfoSelectedDate();
-        var today = DateOnly.FromDateTime(DateTime.Today);
-
-        for (var index = 0; index < 42; index++)
-        {
-            var date = gridStartDate.AddDays(index);
-            var dayButton = new Button
-            {
-                Content = date.Day.ToString(CultureInfo.InvariantCulture),
-                Tag = date,
-                Style = (Style)FindResource("CalendarDayButton"),
-            };
-            dayButton.Click += BasicInfoCalendarDayButton_Click;
-
-            if (date.Month != displayedBasicInfoCalendarMonth.Month)
-            {
-                dayButton.Foreground = (Brush)FindResource("SubText");
-                dayButton.Opacity = 0.38;
-            }
-
-            if (date == today)
-            {
-                dayButton.BorderBrush = (Brush)FindResource("Line");
-                dayButton.Background = new SolidColorBrush(Color.FromRgb(45, 51, 66));
-            }
-
-            if (selectedDate == date)
-            {
-                dayButton.Foreground = (Brush)FindResource("Text");
-                dayButton.BorderBrush = (Brush)FindResource("Gold");
-                dayButton.Background = new SolidColorBrush(Color.FromRgb(58, 46, 29));
-                dayButton.FontWeight = FontWeights.SemiBold;
-                dayButton.Opacity = 1;
-            }
-
-            BasicInfoCalendarDaysGrid.Children.Add(dayButton);
-        }
-    }
-
-    private DateOnly? TryReadBasicInfoSelectedDate()
-    {
-        var currentText = ViewModel?.BasicInfoBirthDateText.Trim() ?? string.Empty;
-        return DateOnly.TryParseExact(currentText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var selectedDate)
-            ? selectedDate
-            : null;
-    }
-
-    private static DateOnly FirstDayOfMonth(DateOnly date)
-    {
-        return new DateOnly(date.Year, date.Month, 1);
     }
 
     private void StopPageActivitiesForUnload()
@@ -218,7 +131,8 @@ public partial class AssessmentCaptureView : UserControl
         }
         catch (Exception exception)
         {
-            StopModuleRecording(viewModel, "failed", viewModel.Localize("CaptureWorkspaceMediaStartFailed", exception.Message));
+            StopModuleRecording(viewModel, CaptureMediaStopReason.Failed, viewModel.Localize("CaptureWorkspaceMediaStartFailed", exception.Message));
+            await viewModel.FailCurrentModuleAttemptAsync("MEDIA_START_FAILED", exception.Message);
             viewModel.ShowStageNotice(viewModel.Localize("CaptureWorkspaceMediaStartFailedNotice", exception.Message));
             return;
         }
@@ -257,7 +171,7 @@ public partial class AssessmentCaptureView : UserControl
         }
         catch (Exception exception)
         {
-            StopModuleRecording(viewModel, "failed", viewModel.Localize("CaptureWorkspaceSyncTestStartFailed", exception.Message));
+            StopModuleRecording(viewModel, CaptureMediaStopReason.Failed, viewModel.Localize("CaptureWorkspaceSyncTestStartFailed", exception.Message));
             viewModel.ShowStageNotice(viewModel.Localize("CaptureWorkspaceSyncTestStartFailedNotice", exception.Message));
             return;
         }
@@ -370,14 +284,14 @@ public partial class AssessmentCaptureView : UserControl
         if (viewModel.IsCompletionStage)
         {
             // 模块已经正常完成时，离开页面只触发正常收尾和合成。
-            StopModuleRecording(viewModel, "completed", viewModel.Localize("CaptureWorkspaceModuleMediaCompleted", viewModel.CurrentModule));
+            StopModuleRecording(viewModel, CaptureMediaStopReason.Completed, viewModel.Localize("CaptureWorkspaceModuleMediaCompleted", viewModel.CurrentModule));
             return;
         }
 
         // 第三步正式采集中切换页面或关闭程序，视为中断。
         // 中断数据不合成、不作为有效记录，录制服务会尝试删除临时音视频文件。
         var message = viewModel.Localize("CaptureWorkspaceRecordingInterruptedMessage");
-        StopModuleRecording(viewModel, "discarded", message);
+        StopModuleRecording(viewModel, CaptureMediaStopReason.Discarded, message);
         viewModel.AbortCurrentModuleExecution(message);
     }
 
@@ -523,10 +437,12 @@ public partial class AssessmentCaptureView : UserControl
         // View 只组织当前模块上下文，实际文件路径、音视频录制和数据库记录交给录制服务。
         var sessionName = await viewModel.GetOrStartUnifiedSessionKeyAsync();
         var moduleCode = viewModel.CurrentModuleCode;
-        var outputRoot = CaptureOutputPathProvider.GetOutputRoot();
+        long? assessmentAttemptId = viewModel.IsSyncTestModule || viewModel.IsDevelopmentModuleOverride
+            ? null
+            : (await viewModel.BeginCurrentModuleAttemptAsync(sessionName)).AttemptId;
 
-        var session = await viewModel.StartMediaRecordingAsync(new CaptureRecordingRequest(
-            outputRoot,
+        var session = await viewModel.StartMediaRecordingAsync(new CaptureMediaStartRequest(
+            assessmentAttemptId,
             sessionName,
             moduleCode,
             viewModel.CurrentModule,
@@ -535,10 +451,13 @@ public partial class AssessmentCaptureView : UserControl
         viewModel.BeginFrameSaving(session.OutputDirectory);
     }
 
-    private static void StopModuleRecording(AssessmentCaptureViewModel viewModel, string status, string message)
+    private static void StopModuleRecording(
+        AssessmentCaptureViewModel viewModel,
+        CaptureMediaStopReason reason,
+        string message)
     {
         // 先更新界面上的保存状态，再让录制服务异步完成合成或丢弃。
-        if (status == "discarded")
+        if (reason == CaptureMediaStopReason.Discarded)
         {
             viewModel.DiscardFrameSavingStatus();
         }
@@ -547,7 +466,7 @@ public partial class AssessmentCaptureView : UserControl
             viewModel.StopFrameSaving();
         }
 
-        viewModel.RequestMediaStop(status, message);
+        viewModel.RequestMediaStop(reason, message);
     }
 
     private void RecordFrameIfNeeded(Mat frame)
@@ -562,7 +481,7 @@ public partial class AssessmentCaptureView : UserControl
         {
             // 第三步结束后，下一帧到来时触发录制收尾。
             // 所有任务类模块共用该完成入口，具体流程状态由各模块 ViewModel 维护。
-            StopModuleRecording(viewModel, "completed", viewModel.Localize("CaptureWorkspaceModuleMediaCompleted", viewModel.CurrentModule));
+            StopModuleRecording(viewModel, CaptureMediaStopReason.Completed, viewModel.Localize("CaptureWorkspaceModuleMediaCompleted", viewModel.CurrentModule));
             return;
         }
 
