@@ -29,6 +29,14 @@ public sealed record BackplaneHandshakeResult(
     byte ResponseCommand = 0,
     ushort ResponseAckSequence = 0);
 
+public enum BackplaneWriteResponseKind
+{
+    NotApplicable,
+    EmptyAcknowledgement,
+    RegisterEcho,
+    StatusCode,
+}
+
 /// <summary>一次普通寄存器读写操作的真实收发结果。</summary>
 public sealed record BackplaneRegisterOperationResult(
     ushort RequestSequence,
@@ -39,7 +47,9 @@ public sealed record BackplaneRegisterOperationResult(
     byte[] RequestFrame,
     byte[] ResponseFrame,
     byte ResponseCommand,
-    ushort ResponseAckSequence);
+    ushort ResponseAckSequence,
+    BackplaneWriteResponseKind WriteResponseKind = BackplaneWriteResponseKind.NotApplicable,
+    uint? HardwareStatusCode = null);
 
 /// <summary>背板产品信息区一个字符串分组的完整读取结果。</summary>
 public sealed record BackplaneProductInfoTextResult(
@@ -145,6 +155,18 @@ public interface IBackplaneTransport : IAsyncDisposable
 
     /// <summary>释放USB句柄，断开软件与设备之间的通信链路。</summary>
     Task CloseAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// 支持为单次请求指定回复期限的传输实现。
+/// 用于拓扑探测等允许快速判定“无设备”的场景，不修改链路的正常命令超时。
+/// </summary>
+public interface IBackplaneRequestTimeoutTransport
+{
+    Task<byte[]> ExchangeAsync(
+        ReadOnlyMemory<byte> request,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class BackplaneConnectionException : Exception

@@ -10,7 +10,10 @@ namespace RuinaoTesHardware;
 /// 按厂商usbtest的实际链路实现：libusbK驱动、libusbK.dll导出的WinUsb兼容API、
 /// Bulk OUT 0x01发送、Bulk IN 0x81接收。
 /// </summary>
-public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, IBackplaneTransferDiagnostics
+public sealed class UsbTestCompatibleBackplaneTransport :
+    IBackplaneTransport,
+    IBackplaneRequestTimeoutTransport,
+    IBackplaneTransferDiagnostics
 {
     private readonly SemaphoreSlim exchangeGate = new(1, 1);
     private readonly object pendingLock = new();
@@ -119,6 +122,15 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
 
     public async Task<byte[]> ExchangeAsync(
         ReadOnlyMemory<byte> request,
+        CancellationToken cancellationToken = default) =>
+        await ExchangeAsync(
+            request,
+            TimeSpan.FromMilliseconds(timeoutMilliseconds),
+            cancellationToken);
+
+    public async Task<byte[]> ExchangeAsync(
+        ReadOnlyMemory<byte> request,
+        TimeSpan timeout,
         CancellationToken cancellationToken = default)
     {
         if (!IsOpen)
@@ -126,6 +138,8 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
             throw new BackplaneConnectionException("usbtest兼容USB链路尚未打开。");
         }
 
+        var requestTimeoutMilliseconds =
+            checked((uint)Math.Clamp(timeout.TotalMilliseconds, 100, 60_000));
         await exchangeGate.WaitAsync(cancellationToken);
         try
         {
@@ -138,14 +152,15 @@ public sealed class UsbTestCompatibleBackplaneTransport : IBackplaneTransport, I
                 try
                 {
                     return await pending.Completion.Task.WaitAsync(
-                        TimeSpan.FromMilliseconds(timeoutMilliseconds),
+                        TimeSpan.FromMilliseconds(requestTimeoutMilliseconds),
                         cancellationToken);
                 }
                 catch (TimeoutException)
                 {
                     Interlocked.Increment(ref exchangeTimeoutCount);
                     throw new TimeoutException(
-                        $"Endpoint 0x01已发送成功，但在{timeoutMilliseconds}ms内未收到ackSeq={pending.SendSequence}的匹配回复。");
+                        $"Endpoint 0x01已发送成功，但在{requestTimeoutMilliseconds}ms内未收到"
+                            + $"ackSeq={pending.SendSequence}的匹配回复。");
                 }
             }
             finally

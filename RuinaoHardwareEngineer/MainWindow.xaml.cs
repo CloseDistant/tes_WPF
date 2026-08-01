@@ -46,6 +46,7 @@ public partial class MainWindow : Window
         client.StateChanged += Client_StateChanged;
         client.RawFrameSent += Client_RawFrameSent;
         client.RawFrameReceived += Client_RawFrameReceived;
+        InitializeTopologyAndStimulation();
 
         diagnosticRefreshTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background,
             (_, _) => RefreshDiagnosticSnapshot(), Dispatcher);
@@ -68,6 +69,10 @@ public partial class MainWindow : Window
     private async void MainWindow_Closed(object? sender, EventArgs e)
     {
         diagnosticCancellation?.Cancel();
+        stimulationConfigurationCancellation?.Cancel();
+        StopStimulationImpedanceMonitoring(null);
+        StopStimulationCountdown();
+        StopProductDirectCurrentProgress(clearRemaining: true);
         diagnosticRefreshTimer.Stop();
         client.RawFrameSent -= Client_RawFrameSent;
         client.RawFrameReceived -= Client_RawFrameReceived;
@@ -549,6 +554,54 @@ public partial class MainWindow : Window
         LogItems.Clear();
     }
 
+    private void CopyAllLogButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (LogItems.Count == 0)
+        {
+            MessageBox.Show(
+                "当前没有可复制的通信日志。",
+                "复制通信日志",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var text = string.Join(
+            Environment.NewLine,
+            LogItems.Select(item =>
+                string.IsNullOrEmpty(item.Hex)
+                    ? $"{item.Time}\t{item.Category}\t{item.Message}"
+                    : $"{item.Time}\t{item.Category}\t{item.Message}{Environment.NewLine}{item.Hex}"));
+        try
+        {
+            Clipboard.SetText(text);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                $"复制通信日志失败：{exception.Message}",
+                "复制通信日志",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private void ToggleCommunicationLogButton_Click(object sender, RoutedEventArgs e)
+    {
+        var collapse = CommunicationLogBody.Visibility == Visibility.Visible;
+        CommunicationLogBody.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
+        CommunicationLogTitle.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
+        CommunicationLogCommands.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
+        CommunicationLogSplitterColumn.Width = collapse
+            ? new GridLength(0)
+            : new GridLength(6);
+        CommunicationLogColumn.Width = collapse
+            ? new GridLength(44)
+            : new GridLength(390);
+        ToggleCommunicationLogButton.Content = collapse ? "‹" : "›";
+        ToggleCommunicationLogButton.ToolTip = collapse ? "展开通信日志" : "收起通信日志";
+    }
+
     private async Task RefreshDeviceAsync()
     {
         var device = await client.RefreshDeviceAsync();
@@ -631,6 +684,9 @@ public partial class MainWindow : Window
             {
                 handshakeSucceeded = false;
                 diagnosticCancellation?.Cancel();
+                StopStimulationImpedanceMonitoring("硬件连接已断开，阻抗自动读取已停止。");
+                UpdateImpedanceBoardOptions(Array.Empty<Features.DeviceTopology.EngineerBoardSlot>());
+                InvalidateProductDirectCurrentConfiguration("硬件连接已断开，产品tDCS配置状态已失效。");
             }
 
             UpdateConnectionStateBadge();
@@ -744,6 +800,7 @@ public partial class MainWindow : Window
         SequenceCycleButton.IsEnabled = canReadOrWriteProductInfo;
         StartBatchReadButton.IsEnabled = canReadOrWriteProductInfo;
         StopDiagnosticButton.IsEnabled = isDiagnosticRunning;
+        UpdateTopologyAndStimulationButtons(canReadOrWriteProductInfo);
     }
 
     public sealed class BatchRegisterItem
