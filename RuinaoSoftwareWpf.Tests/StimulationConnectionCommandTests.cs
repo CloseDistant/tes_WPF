@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using Xunit;
 
 namespace RuinaoSoftwareWpf.Tests;
@@ -15,7 +15,8 @@ public sealed class StimulationConnectionCommandTests
             new DebugHardwareSimulationService(),
             new NoopLoggingService(),
             new LocalizationViewModel(new AppLocalizationService()),
-            new NoopToastService());
+            new NoopToastService(),
+            new TestUserDialogService());
 
         Assert.False(viewModel.SynchronizedStartCommand.CanExecute(null));
         Assert.False(viewModel.StartChannelCommand.CanExecute(viewModel.Channels[0]));
@@ -154,7 +155,8 @@ public sealed class StimulationConnectionCommandTests
             simulation,
             new NoopLoggingService(),
             new LocalizationViewModel(new AppLocalizationService()),
-            new NoopToastService());
+            new NoopToastService(),
+            new TestUserDialogService());
 
         Assert.True(simulationResult.Succeeded);
         Assert.True(simulation.IsConnected);
@@ -171,7 +173,8 @@ public sealed class StimulationConnectionCommandTests
             simulation,
             new LocalizationViewModel(new AppLocalizationService()),
             new NoopToastService(),
-            new NoopLoggingService());
+            new NoopLoggingService(),
+            new TestUserDialogService());
 
         Assert.False(viewModel.SynchronizedStartCommand.CanExecute(null));
         Assert.False(viewModel.StartChannelCommand.CanExecute(viewModel.Channels[0]));

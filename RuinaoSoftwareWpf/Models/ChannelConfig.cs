@@ -1,3 +1,4 @@
+﻿using System.Globalization;
 using System.Windows.Media;
 
 namespace RuinaoSoftwareWpf;
@@ -8,7 +9,7 @@ namespace RuinaoSoftwareWpf;
 /// 目前字段以字符串保存，方便联调阶段直接输入任意值；
 /// 接真实设备前，应再做数值校验与单位转换（例如把 "0.90" 转成 double 0.9 mA）。
 /// </summary>
-public sealed class ChannelConfig : ObservableObject
+public sealed class ChannelConfig : ObservableObject, IStimulationImpedanceChannel
 {
     private string name = string.Empty;
     private string anode = string.Empty;
@@ -27,6 +28,7 @@ public sealed class ChannelConfig : ObservableObject
     private bool isParameterEditingEnabled = true;
     private bool isStimulating;
     private bool isSelected;
+    private decimal? impedanceOhms;
 
     /// <summary>通道名称，例如 "CH 13"。</summary>
     public string Name { get => name; set => SetProperty(ref name, value); }
@@ -177,7 +179,13 @@ public sealed class ChannelConfig : ObservableObject
     public bool IsStimulating
     {
         get => isStimulating;
-        set => SetProperty(ref isStimulating, value);
+        set
+        {
+            if (SetProperty(ref isStimulating, value))
+            {
+                OnPropertyChanged(nameof(StatusIndicatorBrush));
+            }
+        }
     }
 
     public DirectCurrentWaveformState DirectCurrentWaveform { get; } = new();
@@ -198,8 +206,38 @@ public sealed class ChannelConfig : ObservableObject
         OnPropertyChanged(string.Empty);
     }
 
-    // 下面三个状态值先用 mock 固定值。接设备后应从 ReadStatus/ReadImpedance 返回值更新。
+    // 温度仍为界面占位值；阻抗已由业务板0x1001～0x1008的真实读取结果更新。
     public int AnodeTempC => 36;
     public int CathodeTempC => 36;
-    public int ImpedanceOhm => 500;
+
+    public decimal? ImpedanceOhms
+    {
+        get => impedanceOhms;
+        private set
+        {
+            if (SetProperty(ref impedanceOhms, value))
+            {
+                OnPropertyChanged(nameof(ImpedanceOhm));
+                OnPropertyChanged(nameof(ImpedanceStatus));
+                OnPropertyChanged(nameof(ImpedanceBrush));
+                OnPropertyChanged(nameof(StatusIndicatorBrush));
+            }
+        }
+    }
+
+    public string ImpedanceOhm => ImpedanceOhms?.ToString("0.##", CultureInfo.InvariantCulture) ?? "—";
+
+    public StimulationImpedanceStatus ImpedanceStatus =>
+        StimulationImpedancePresentation.GetStatus(ImpedanceOhms);
+
+    public Brush ImpedanceBrush =>
+        StimulationImpedancePresentation.GetImpedanceBrush(ImpedanceStatus);
+
+    public Brush StatusIndicatorBrush =>
+        StimulationImpedancePresentation.GetStatusIndicatorBrush(ImpedanceStatus, IsStimulating);
+
+    internal void UpdateImpedance(decimal? value)
+    {
+        ImpedanceOhms = value;
+    }
 }

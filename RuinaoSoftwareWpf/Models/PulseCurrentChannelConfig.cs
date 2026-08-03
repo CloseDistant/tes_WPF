@@ -1,11 +1,13 @@
 ﻿using System.Globalization;
 
+using System.Windows.Media;
+
 namespace RuinaoSoftwareWpf;
 
 /// <summary>
 /// 单个 tPCS 通道的界面参数。硬件协议接入前仅作为本次登录期间的编辑状态。
 /// </summary>
-public sealed class PulseCurrentChannelConfig : ObservableObject
+public sealed class PulseCurrentChannelConfig : ObservableObject, IStimulationImpedanceChannel
 {
     private string name = string.Empty;
     private string currentMilliamp = PulseCurrentParameterRules.DefaultCurrentMilliamp;
@@ -19,6 +21,7 @@ public sealed class PulseCurrentChannelConfig : ObservableObject
     private bool isParameterEditingEnabled = true;
     private bool isStimulating;
     private bool isSelected;
+    private decimal? impedanceOhms;
 
     public string Name { get => name; set => SetProperty(ref name, value); }
 
@@ -80,7 +83,31 @@ public sealed class PulseCurrentChannelConfig : ObservableObject
 
     public string CountThresholdDisplay => string.Empty;
 
-    public int ImpedanceOhm => 500;
+    public decimal? ImpedanceOhms
+    {
+        get => impedanceOhms;
+        private set
+        {
+            if (SetProperty(ref impedanceOhms, value))
+            {
+                OnPropertyChanged(nameof(ImpedanceOhm));
+                OnPropertyChanged(nameof(ImpedanceStatus));
+                OnPropertyChanged(nameof(ImpedanceBrush));
+                OnPropertyChanged(nameof(StatusIndicatorBrush));
+            }
+        }
+    }
+
+    public string ImpedanceOhm => ImpedanceOhms?.ToString("0.##", CultureInfo.InvariantCulture) ?? "—";
+
+    public StimulationImpedanceStatus ImpedanceStatus =>
+        StimulationImpedancePresentation.GetStatus(ImpedanceOhms);
+
+    public Brush ImpedanceBrush =>
+        StimulationImpedancePresentation.GetImpedanceBrush(ImpedanceStatus);
+
+    public Brush StatusIndicatorBrush =>
+        StimulationImpedancePresentation.GetStatusIndicatorBrush(ImpedanceStatus, IsStimulating);
 
     public string RemainingTime
     {
@@ -98,7 +125,13 @@ public sealed class PulseCurrentChannelConfig : ObservableObject
     public bool IsStimulating
     {
         get => isStimulating;
-        set => SetProperty(ref isStimulating, value);
+        set
+        {
+            if (SetProperty(ref isStimulating, value))
+            {
+                OnPropertyChanged(nameof(StatusIndicatorBrush));
+            }
+        }
     }
 
     public PulseCurrentWaveformState Waveform { get; } = new();
@@ -118,6 +151,11 @@ public sealed class PulseCurrentChannelConfig : ObservableObject
     internal void RefreshBindings()
     {
         OnPropertyChanged(string.Empty);
+    }
+
+    internal void UpdateImpedance(decimal? value)
+    {
+        ImpedanceOhms = value;
     }
 
     private void SetParameter(ref string field, string value)

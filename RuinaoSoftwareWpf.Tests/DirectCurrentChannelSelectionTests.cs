@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using Xunit;
 
 namespace RuinaoSoftwareWpf.Tests;
@@ -108,6 +108,65 @@ public sealed class DirectCurrentChannelSelectionTests
         Assert.False(target.IsStimulating);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(20001)]
+    public void StartChannel_WhenImpedanceIsUnavailableOrCritical_DoesNotStart(int? impedanceOhms)
+    {
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine);
+        var target = viewModel.Channels[0];
+        target.CurrentMA = "1";
+        target.UpdateImpedance(impedanceOhms);
+
+        viewModel.StartChannelCommand.Execute(target);
+
+        Assert.False(target.IsStimulating);
+        Assert.Null(engine.LastStartedDirectCurrentGroup);
+    }
+
+    [Fact]
+    public void StartChannel_WhenImpedanceIsWarningAndUserCancels_DoesNotStart()
+    {
+        var dialog = new TestUserDialogService { ConfirmationResult = false };
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine, userDialogService: dialog);
+        var target = viewModel.Channels[1];
+        target.CurrentMA = "1";
+        target.UpdateImpedance(12_400m);
+
+        viewModel.StartChannelCommand.Execute(target);
+
+        Assert.False(target.IsStimulating);
+        Assert.Null(engine.LastStartedDirectCurrentGroup);
+        Assert.Contains("CH2：12.40kΩ", dialog.LastConfirmationMessage);
+    }
+
+    [Fact]
+    public void SynchronizedStart_SkipsCriticalAndUnavailableChannelsAfterOneConfirmation()
+    {
+        var dialog = new TestUserDialogService();
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine, userDialogService: dialog);
+        foreach (var channel in viewModel.Channels)
+        {
+            channel.CurrentMA = "1";
+        }
+
+        viewModel.Channels[1].UpdateImpedance(12_400m);
+        viewModel.Channels[2].UpdateImpedance(20_001m);
+        viewModel.Channels[3].UpdateImpedance(null);
+
+        viewModel.SynchronizedStartCommand.Execute(null);
+
+        Assert.Equal(14, engine.LastStartedDirectCurrentGroup?.Channels.Count);
+        Assert.True(viewModel.Channels[1].IsStimulating);
+        Assert.False(viewModel.Channels[2].IsStimulating);
+        Assert.False(viewModel.Channels[3].IsStimulating);
+        Assert.Contains("CH3：阻抗过高", dialog.LastConfirmationMessage);
+        Assert.Contains("CH4：阻抗不可用", dialog.LastConfirmationMessage);
+    }
+
     [Fact]
     public void StopChannelCommand_InDebugSimulation_StopsOnlyTarget()
     {
@@ -200,15 +259,23 @@ public sealed class DirectCurrentChannelSelectionTests
     private static DirectCurrentControlViewModel CreateViewModel(
         NoopStimulationEngine? stimulationEngine = null,
         IDebugHardwareSimulationService? debugHardwareSimulation = null,
-        IToastService? toastService = null)
+        IToastService? toastService = null,
+        IUserDialogService? userDialogService = null)
     {
-        return new DirectCurrentControlViewModel(
+        var viewModel = new DirectCurrentControlViewModel(
             stimulationEngine ?? new NoopStimulationEngine(),
             new ConnectedHardwareState(),
             debugHardwareSimulation ?? new DebugHardwareSimulationService(),
             new NoopLoggingService(),
             new LocalizationViewModel(new AppLocalizationService()),
-            toastService ?? new NoopToastService());
+            toastService ?? new NoopToastService(),
+            userDialogService ?? new TestUserDialogService());
+        foreach (var channel in viewModel.Channels)
+        {
+            channel.UpdateImpedance(500m);
+        }
+
+        return viewModel;
     }
 
     private sealed class ConnectedDebugSimulation : IDebugHardwareSimulationService

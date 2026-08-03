@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 /// <summary>
 /// 硬件操作结果。
@@ -35,6 +35,18 @@ public sealed record HardwareConnectionChangedEventArgs(
 /// </summary>
 public interface IHardwareService : IHardwareConnectionState
 {
+    /// <summary>最近一次成功取得的设备拓扑；未联机或尚未扫描时为null。</summary>
+    DeviceTopologySnapshot? CurrentDeviceTopology { get; }
+
+    /// <summary>设备拓扑被刷新或清空时触发。</summary>
+    event EventHandler<DeviceTopologyChangedEventArgs>? DeviceTopologyChanged;
+
+    /// <summary>最近一次CH1～CH16阻抗快照；断联或尚未读取时为null。</summary>
+    StimulationImpedanceSnapshot? CurrentStimulationImpedance { get; }
+
+    /// <summary>阻抗快照刷新或清空时触发。</summary>
+    event EventHandler<StimulationImpedanceChangedEventArgs>? StimulationImpedanceChanged;
+
     /// <summary>自动或手动联机正在执行时为true，用于禁止重复点击联机。</summary>
     bool IsConnecting { get; }
 
@@ -67,6 +79,15 @@ public interface IHardwareService : IHardwareConnectionState
     /// 阻抗检测。
     /// </summary>
     Task<HardwareOperationResult> CheckImpedanceAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 设置电刺激页面是否需要持续阻抗监控。启用后在联机状态下立即读取，随后每2秒读取一次。
+    /// </summary>
+    void SetStimulationImpedanceMonitoringEnabled(bool enabled);
+
+    /// <summary>重新读取背板槽位和在线业务板身份信息。</summary>
+    Task<DeviceTopologySnapshot> RefreshDeviceTopologyAsync(
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 启动指定 TI 组的刺激。

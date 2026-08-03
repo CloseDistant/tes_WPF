@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using RuinaoTesHardware;
 
@@ -15,6 +15,7 @@ public sealed class HardwareService : IHardwareService
 {
     // 心跳周期：每 2 秒发送一次握手帧。
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan StimulationImpedanceInterval = TimeSpan.FromSeconds(2);
 
     // 这里故意直接依赖具体 Bridge，而不是再套一层接口。
     // 这样在 Visual Studio 中可以从 HardwareService 直接“转到定义/查找引用”到 DLL 调用集中点。
@@ -27,13 +28,25 @@ public sealed class HardwareService : IHardwareService
 
     // 操作锁：保证同一时刻只有一个硬件命令在执行，避免并发下发导致协议混乱。
     private readonly SemaphoreSlim operationLock = new(1, 1);
+    private readonly SemaphoreSlim impedanceRefreshLock = new(1, 1);
+    private readonly SemaphoreSlim impedanceMonitoringSignal = new(0, 1);
+    private readonly object stimulationImpedanceStateLock = new();
+    private readonly Dictionary<byte, StimulationBoardImpedanceReading> stimulationBoardReadings = [];
+    private readonly StimulationBoardReadFailureTracker stimulationBoardReadFailures = new();
 
     // 心跳相关的取消源和后台任务。
     private CancellationTokenSource? heartbeatCts;
     private Task? heartbeatTask;
+    private CancellationTokenSource? impedanceMonitoringCts;
+    private Task? impedanceMonitoringTask;
+    private int impedanceMonitoringRequested;
     private int connectionAttemptActive;
 
     public event EventHandler<HardwareConnectionChangedEventArgs>? ConnectionChanged;
+
+    public event EventHandler<DeviceTopologyChangedEventArgs>? DeviceTopologyChanged;
+
+    public event EventHandler<StimulationImpedanceChangedEventArgs>? StimulationImpedanceChanged;
 
     public HardwareService(
         RuinaoTesHardwareBridge hardwareBridge,
@@ -58,6 +71,10 @@ public sealed class HardwareService : IHardwareService
 
     public bool IsConnecting => Volatile.Read(ref connectionAttemptActive) != 0;
 
+    public DeviceTopologySnapshot? CurrentDeviceTopology { get; private set; }
+
+    public StimulationImpedanceSnapshot? CurrentStimulationImpedance { get; private set; }
+
     /// <summary>
     /// 联机：调用设备客户端连接，启动心跳，并返回界面状态。
     /// </summary>
@@ -76,12 +93,15 @@ public sealed class HardwareService : IHardwareService
         RaiseConnectionChanged(
             HardwareConnectionChangeReason.ConnectionAttemptStarted,
             "正在连接仪器。");
+        ClearDeviceTopology();
         try
         {
             deviceStateMachine.MoveTo(DeviceConnectionState.Connecting, "Connect");
             var handshake = await RunDeviceOperationAsync(ConnectOnProtocolBridgeAsync, cancellationToken);
             IsConnected = true;
             deviceStateMachine.MoveTo(DeviceConnectionState.Connected, "ConnectSuccess");
+            await TryRefreshDeviceTopologyAfterConnectAsync(cancellationToken);
+            StartImpedanceMonitoringWorker();
             StartHeartbeat();
             auditLog.RecordUserAction("Connect device");
             logger.Hardware($"真实联机成功：ackSeq={handshake.ResponseAckSequence}，耗时={handshake.Elapsed.TotalMilliseconds:F1}ms");
@@ -92,6 +112,7 @@ public sealed class HardwareService : IHardwareService
         catch
         {
             IsConnected = false;
+            await StopImpedanceMonitoringWorkerAsync();
             await CloseProtocolLinkQuietlyAsync();
             deviceStateMachine.MoveTo(DeviceConnectionState.Error, "ConnectFailed");
             throw;
@@ -151,8 +172,10 @@ public sealed class HardwareService : IHardwareService
     public async Task<HardwareOperationResult> DisconnectAsync(CancellationToken cancellationToken = default)
     {
         await StopHeartbeatAsync();
+        await StopImpedanceMonitoringWorkerAsync();
         await RunDeviceOperationAsync(DisconnectOnProtocolBridgeAsync, cancellationToken);
         IsConnected = false;
+        ClearDeviceTopology();
         deviceStateMachine.MoveTo(DeviceConnectionState.Disconnected, "Disconnect");
         RaiseConnectionChanged(HardwareConnectionChangeReason.Disconnected, "仪器未联机。");
         auditLog.RecordUserAction("Disconnect device");
@@ -170,6 +193,30 @@ public sealed class HardwareService : IHardwareService
         return Result("设备：读取产品型号 | 请求：已发送");
     }
 
+    public async Task<DeviceTopologySnapshot> RefreshDeviceTopologyAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsConnected)
+        {
+            throw new InvalidOperationException("仪器未联机，无法读取设备拓扑。");
+        }
+
+        var hardwareSnapshot = await RunDeviceOperationAsync(
+            hardwareBridge.ReadDeviceTopologyAsync,
+            cancellationToken);
+        var snapshot = MapDeviceTopology(hardwareSnapshot);
+        CurrentDeviceTopology = snapshot;
+        DeviceTopologyChanged?.Invoke(this, new DeviceTopologyChangedEventArgs(snapshot));
+        RetainReadingsForCurrentTopology(snapshot);
+        PublishStimulationImpedanceSnapshot();
+        SignalImpedanceMonitoringIfRequested();
+        logger.Hardware(
+            $"设备拓扑刷新成功：slotBitmap=0x{snapshot.SlotBitmap:X8}，"
+            + $"插板={snapshot.Slots.Count(slot => slot.IsInserted)}，"
+            + $"在线={snapshot.Slots.Count(slot => slot.IsOnline)}");
+        return snapshot;
+    }
+
     /// <summary>
     /// 读取板卡型号寄存器。
     /// </summary>
@@ -181,14 +228,26 @@ public sealed class HardwareService : IHardwareService
     }
 
     /// <summary>
-    /// 阻抗检测：下发读取阻抗寄存器命令。
+    /// 阻抗检测：手动读取当前拓扑中前两块在线电刺激板的8通道阻抗。
     /// </summary>
     public async Task<HardwareOperationResult> CheckImpedanceAsync(CancellationToken cancellationToken = default)
     {
-        await RunDeviceOperationAsync(ReadImpedanceOnProtocolBridgeAsync, cancellationToken);
-        auditLog.RecordUserAction("Impedance check");
-        logger.Hardware("阻抗检测：已调用协议 API 生成读取阻抗寄存器帧");
-        return Result("设备：已联机 | 阻抗：正常 | 刺激：待启动");
+        var availableChannelCount = await RefreshStimulationImpedanceAsync(
+            isManualRefresh: true,
+            cancellationToken);
+        return Result(
+            $"设备：已联机 | 阻抗：已刷新 {availableChannelCount}/16",
+            $"已更新{availableChannelCount}个在线通道的阻抗值。");
+    }
+
+    public void SetStimulationImpedanceMonitoringEnabled(bool enabled)
+    {
+        var requested = enabled ? 1 : 0;
+        var previous = Interlocked.Exchange(ref impedanceMonitoringRequested, requested);
+        if (enabled && previous == 0 && impedanceMonitoringSignal.CurrentCount == 0)
+        {
+            impedanceMonitoringSignal.Release();
+        }
     }
 
     /// <summary>
@@ -359,7 +418,9 @@ public sealed class HardwareService : IHardwareService
     /// </summary>
     public async Task ShutdownAsync()
     {
-        var stopTask = StopHeartbeatAsync();
+        var stopTask = Task.WhenAll(
+            StopHeartbeatAsync(),
+            StopImpedanceMonitoringWorkerAsync());
         var completedTask = await Task.WhenAny(stopTask, Task.Delay(TimeSpan.FromMilliseconds(800)));
 
         if (!ReferenceEquals(completedTask, stopTask))
@@ -373,6 +434,7 @@ public sealed class HardwareService : IHardwareService
 
         await CloseProtocolLinkQuietlyAsync();
         IsConnected = false;
+        ClearDeviceTopology();
         RaiseConnectionChanged(HardwareConnectionChangeReason.Shutdown, "软件退出，仪器链路已释放。");
     }
 
@@ -407,12 +469,6 @@ public sealed class HardwareService : IHardwareService
     private Task ReadBoardModelOnProtocolBridgeAsync(CancellationToken cancellationToken)
     {
         return hardwareBridge.ReadBoardModelAsync(cancellationToken);
-    }
-
-    /// <summary>调用 Bridge 读取阻抗寄存器。</summary>
-    private Task ReadImpedanceOnProtocolBridgeAsync(CancellationToken cancellationToken)
-    {
-        return hardwareBridge.ReadImpedanceAsync(cancellationToken);
     }
 
     /// <summary>
@@ -492,6 +548,231 @@ public sealed class HardwareService : IHardwareService
         finally
         {
             operationLock.Release();
+        }
+    }
+
+    private void StartImpedanceMonitoringWorker()
+    {
+        if (impedanceMonitoringTask is { IsCompleted: false })
+        {
+            SignalImpedanceMonitoringIfRequested();
+            return;
+        }
+
+        impedanceMonitoringCts?.Dispose();
+        impedanceMonitoringCts = new CancellationTokenSource();
+        impedanceMonitoringTask = RunImpedanceMonitoringLoopAsync(impedanceMonitoringCts.Token);
+        SignalImpedanceMonitoringIfRequested();
+    }
+
+    private async Task StopImpedanceMonitoringWorkerAsync()
+    {
+        var cts = impedanceMonitoringCts;
+        if (cts is null)
+        {
+            return;
+        }
+
+        impedanceMonitoringCts = null;
+        cts.Cancel();
+        try
+        {
+            if (impedanceMonitoringTask is not null)
+            {
+                await impedanceMonitoringTask;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面离开、断联或退出时的正常取消。
+        }
+        finally
+        {
+            cts.Dispose();
+            impedanceMonitoringTask = null;
+        }
+    }
+
+    private async Task RunImpedanceMonitoringLoopAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Volatile.Read(ref impedanceMonitoringRequested) == 0)
+            {
+                await impedanceMonitoringSignal.WaitAsync(cancellationToken);
+                continue;
+            }
+
+            try
+            {
+                _ = await RefreshStimulationImpedanceAsync(
+                    isManualRefresh: false,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // 自动读取失败由每块板的连续失败计数反映到快照；不产生循环日志和Toast。
+            }
+
+            await Task.Delay(StimulationImpedanceInterval, cancellationToken);
+        }
+    }
+
+    private async Task<int> RefreshStimulationImpedanceAsync(
+        bool isManualRefresh,
+        CancellationToken cancellationToken)
+    {
+        var lockTaken = isManualRefresh
+            ? await WaitForManualImpedanceRefreshAsync(cancellationToken)
+            : await impedanceRefreshLock.WaitAsync(0, cancellationToken);
+        if (!lockTaken)
+        {
+            return CurrentStimulationImpedance?.Channels.Count(channel => channel.IsAvailable) ?? 0;
+        }
+
+        try
+        {
+            if (!IsConnected)
+            {
+                throw new InvalidOperationException("仪器未联机，无法读取通道阻抗。");
+            }
+
+            if (CurrentDeviceTopology is null && isManualRefresh)
+            {
+                _ = await RefreshDeviceTopologyAsync(cancellationToken);
+            }
+
+            var boards = CurrentDeviceTopology?.Slots
+                .Where(slot => slot.IsInserted
+                    && slot.IsOnline
+                    && slot.BoardKind == DeviceBoardKind.Stimulation)
+                .OrderBy(slot => slot.SlotIndex)
+                .ThenBy(slot => slot.Address)
+                .Take(2)
+                .ToArray()
+                ?? [];
+            if (boards.Length == 0)
+            {
+                PublishStimulationImpedanceSnapshot();
+                throw new InvalidOperationException("当前设备拓扑中没有在线电刺激业务板。");
+            }
+
+            var successfulBoardCount = 0;
+            Exception? lastFailure = null;
+            foreach (var board in boards)
+            {
+                try
+                {
+                    var hardwareSnapshot = await RunDeviceOperationAsync(
+                        token => hardwareBridge.ReadStimulationBoardImpedanceAsync(board.Address, token),
+                        cancellationToken);
+                    lock (stimulationImpedanceStateLock)
+                    {
+                        stimulationBoardReadings[board.Address] = MapBoardImpedance(hardwareSnapshot);
+                        stimulationBoardReadFailures.RecordSuccess(board.Address);
+                    }
+                    successfulBoardCount++;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    lastFailure = exception;
+                    lock (stimulationImpedanceStateLock)
+                    {
+                        if (stimulationBoardReadFailures.RecordFailure(board.Address))
+                        {
+                            stimulationBoardReadings.Remove(board.Address);
+                        }
+                    }
+                }
+            }
+
+            PublishStimulationImpedanceSnapshot();
+            if (isManualRefresh && successfulBoardCount == 0)
+            {
+                throw new InvalidOperationException(
+                    "在线电刺激业务板阻抗读取失败，请检查设备通信后重试。",
+                    lastFailure);
+            }
+
+            return CurrentStimulationImpedance?.Channels.Count(channel => channel.IsAvailable) ?? 0;
+        }
+        finally
+        {
+            impedanceRefreshLock.Release();
+        }
+    }
+
+    private async Task<bool> WaitForManualImpedanceRefreshAsync(CancellationToken cancellationToken)
+    {
+        await impedanceRefreshLock.WaitAsync(cancellationToken);
+        return true;
+    }
+
+    private static StimulationBoardImpedanceReading MapBoardImpedance(
+        TesStimulationImpedanceSnapshot source) =>
+        new(
+            source.BoardAddress,
+            source.CapturedAt,
+            source.Channels
+                .Select(channel => new StimulationBoardChannelReading(
+                    channel.PhysicalChannelNumber,
+                    channel.RegisterAddress,
+                    channel.RawValue,
+                    channel.ImpedanceOhms))
+                .ToArray());
+
+    private void PublishStimulationImpedanceSnapshot()
+    {
+        StimulationImpedanceSnapshot snapshot;
+        lock (stimulationImpedanceStateLock)
+        {
+            snapshot = StimulationImpedanceMapper.Map(
+                CurrentDeviceTopology,
+                stimulationBoardReadings,
+                DateTimeOffset.Now);
+            CurrentStimulationImpedance = snapshot;
+        }
+
+        StimulationImpedanceChanged?.Invoke(
+            this,
+            new StimulationImpedanceChangedEventArgs(snapshot));
+    }
+
+    private void RetainReadingsForCurrentTopology(DeviceTopologySnapshot topology)
+    {
+        var onlineAddresses = topology.Slots
+            .Where(slot => slot.IsInserted
+                && slot.IsOnline
+                && slot.BoardKind == DeviceBoardKind.Stimulation)
+            .Select(slot => slot.Address)
+            .ToHashSet();
+        lock (stimulationImpedanceStateLock)
+        {
+            stimulationBoardReadFailures.Retain(onlineAddresses);
+            foreach (var address in stimulationBoardReadings.Keys
+                         .Where(address => !onlineAddresses.Contains(address))
+                         .ToArray())
+            {
+                stimulationBoardReadings.Remove(address);
+            }
+        }
+    }
+
+    private void SignalImpedanceMonitoringIfRequested()
+    {
+        if (Volatile.Read(ref impedanceMonitoringRequested) != 0
+            && impedanceMonitoringSignal.CurrentCount == 0)
+        {
+            impedanceMonitoringSignal.Release();
         }
     }
 
@@ -597,6 +878,8 @@ public sealed class HardwareService : IHardwareService
 
                 logger.Error("心跳握手失败且未发现可用的04B4:00F1，仪器判定断联，心跳结束", ex);
                 IsConnected = false;
+                await StopImpedanceMonitoringWorkerAsync();
+                ClearDeviceTopology();
                 deviceStateMachine.MoveTo(DeviceConnectionState.Error, "HeartbeatFailure");
                 await CloseProtocolLinkQuietlyAsync();
                 RaiseConnectionChanged(
@@ -624,6 +907,66 @@ public sealed class HardwareService : IHardwareService
         ConnectionChanged?.Invoke(
             this,
             new HardwareConnectionChangedEventArgs(IsConnected, IsConnecting, reason, message));
+    }
+
+    private async Task TryRefreshDeviceTopologyAfterConnectAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _ = await RefreshDeviceTopologyAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            // USB握手已经成功；拓扑属于附加发现能力，失败时保留联机并允许用户手动重试。
+            logger.Warning($"联机成功，但首次设备拓扑扫描失败：{exception.Message}");
+        }
+    }
+
+    private static DeviceTopologySnapshot MapDeviceTopology(TesDeviceTopologySnapshot source)
+    {
+        var slots = source.Slots
+            .Select(slot => new DeviceTopologySlot(
+                slot.SlotIndex,
+                slot.Address,
+                slot.IsInserted,
+                slot.IsOnline,
+                slot.BoardKind switch
+                {
+                    TesBusinessBoardKind.Stimulation => DeviceBoardKind.Stimulation,
+                    TesBusinessBoardKind.Eeg => DeviceBoardKind.Eeg,
+                    _ => DeviceBoardKind.Unknown,
+                },
+                slot.IdentityText,
+                slot.IdentityRegisters.ToArray(),
+                slot.Elapsed,
+                slot.StatusMessage))
+            .ToArray();
+        return new DeviceTopologySnapshot(source.SlotBitmap, source.CapturedAt, slots);
+    }
+
+    private void ClearDeviceTopology()
+    {
+        if (CurrentDeviceTopology is not null)
+        {
+            CurrentDeviceTopology = null;
+            DeviceTopologyChanged?.Invoke(this, new DeviceTopologyChangedEventArgs(null));
+        }
+
+        var hadImpedanceSnapshot = false;
+        lock (stimulationImpedanceStateLock)
+        {
+            stimulationBoardReadings.Clear();
+            stimulationBoardReadFailures.Clear();
+            hadImpedanceSnapshot = CurrentStimulationImpedance is not null;
+            CurrentStimulationImpedance = null;
+        }
+
+        if (hadImpedanceSnapshot)
+        {
+            StimulationImpedanceChanged?.Invoke(
+                this,
+                new StimulationImpedanceChangedEventArgs(null));
+        }
     }
 
     /// <summary>

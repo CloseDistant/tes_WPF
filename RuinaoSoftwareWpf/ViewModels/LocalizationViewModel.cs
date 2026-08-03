@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 /// <summary>
 /// 多语言 ViewModel。
@@ -43,9 +43,11 @@ public sealed class LocalizationViewModel : ObservableObject
     public string ConnectText => T("Connect");
     public string DisconnectText => T("Disconnect");
     public string HandshakeText => T("Handshake");
+    public string DeviceTopologyText => T("DeviceTopology");
     public string ReadProductModelText => T("ReadProductModel");
     public string ReadBoardModelText => T("ReadBoardModel");
     public string ImpedanceCheckText => T("ImpedanceCheck");
+    public string ImpedanceDiagnosticsText => T("ImpedanceDiagnostics");
     public string SwitchLanguageText => T("SwitchLanguage");
     public string NewPrescriptionText => T("NewPrescription");
     public string ImportPrescriptionText => T("ImportPrescription");

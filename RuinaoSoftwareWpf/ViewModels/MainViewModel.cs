@@ -1,4 +1,4 @@
-using System.Windows.Input;
+﻿using System.Windows.Input;
 using System.Windows;
 using System.Windows.Controls;
 using RuinaoSoftwareWpf.ApplicationContracts;
@@ -30,9 +30,14 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private readonly ISessionLifecycleCoordinator sessionLifecycleCoordinator;
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly IToastService toastService;
+    private readonly IDeviceTopologyDialogService deviceTopologyDialogService;
+    private readonly IStimulationImpedanceDiagnosticDialogService stimulationImpedanceDiagnosticDialogService;
     private readonly StimulationNavigationState stimulationNavigation = new();
     private readonly AsyncRelayCommand connectCommand;
+    private readonly AsyncRelayCommand checkImpedanceCommand;
     private readonly AsyncRelayCommand openAuditTrailCommand;
+    private readonly RelayCommand openDeviceTopologyCommand;
+    private readonly RelayCommand openImpedanceDiagnosticsCommand;
 
     private AppPage currentPage = AppPage.Control;
     private ObservableObject? currentPageViewModel;
@@ -58,6 +63,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         ISessionLifecycleCoordinator sessionLifecycleCoordinator,
         IDebugHardwareSimulationService debugHardwareSimulation,
         IToastService toastService,
+        IDeviceTopologyDialogService deviceTopologyDialogService,
+        IStimulationImpedanceDiagnosticDialogService stimulationImpedanceDiagnosticDialogService,
         AuditTrailViewModel auditTrail,
         NavigationViewModel navigation,
         LocalizationViewModel localization,
@@ -89,6 +96,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         this.sessionLifecycleCoordinator = sessionLifecycleCoordinator;
         this.debugHardwareSimulation = debugHardwareSimulation;
         this.toastService = toastService;
+        this.deviceTopologyDialogService = deviceTopologyDialogService;
+        this.stimulationImpedanceDiagnosticDialogService = stimulationImpedanceDiagnosticDialogService;
         AuditTrail = auditTrail;
 
         Navigation = navigation;
@@ -137,9 +146,19 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
                 exception));
         ReadProductModelCommand = CreateHardwareCommand(_ => ReadProductModelAsync());
         ReadBoardModelCommand = CreateHardwareCommand(_ => ReadBoardModelAsync());
-        CheckImpedanceCommand = new AsyncRelayCommand(
+        checkImpedanceCommand = new AsyncRelayCommand(
             CheckImpedanceAsync,
+            canExecute: () => hardwareService.IsConnected,
             onError: HandleImpedanceRefreshError);
+        CheckImpedanceCommand = checkImpedanceCommand;
+        openDeviceTopologyCommand = new RelayCommand(
+            _ => this.deviceTopologyDialogService.Show(),
+            _ => this.hardwareService.IsConnected);
+        OpenDeviceTopologyCommand = openDeviceTopologyCommand;
+        openImpedanceDiagnosticsCommand = new RelayCommand(
+            _ => this.stimulationImpedanceDiagnosticDialogService.Show(),
+            _ => this.hardwareService.IsConnected);
+        OpenImpedanceDiagnosticsCommand = openImpedanceDiagnosticsCommand;
         openAuditTrailCommand = new AsyncRelayCommand(
             OpenAuditTrailAsync,
             () => IsLoggedIn,
@@ -209,6 +228,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
             }
         };
         hardwareService.ConnectionChanged += HardwareService_ConnectionChanged;
+        hardwareService.StimulationImpedanceChanged += HardwareService_StimulationImpedanceChanged;
         debugHardwareSimulation.ConnectionChanged += (_, _) => ApplyDebugHardwareSimulationState();
         FemSimulation.Initialize(this);
 
@@ -281,6 +301,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     public ICommand ReadProductModelCommand { get; }
     public ICommand ReadBoardModelCommand { get; }
     public ICommand CheckImpedanceCommand { get; }
+    public ICommand OpenDeviceTopologyCommand { get; }
+    public ICommand OpenImpedanceDiagnosticsCommand { get; }
     public ICommand OpenAuditTrailCommand { get; }
     public ICommand ExitCommand { get; }
     public ICommand ToggleLanguageCommand { get; }
@@ -307,6 +329,18 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     public Visibility SimulationMenuVisibility => featureVisibilityService.IsVisible(FeatureKeys.NavigationFem)
         ? Visibility.Visible
         : Visibility.Collapsed;
+
+    public Visibility DebugDeviceTopologyMenuVisibility
+    {
+        get
+        {
+#if DEBUG
+            return Visibility.Visible;
+#else
+            return Visibility.Collapsed;
+#endif
+        }
+    }
 
     public IToastService Toast => toastService;
 
@@ -392,7 +426,13 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     public ObservableObject? CurrentPageViewModel
     {
         get => currentPageViewModel;
-        private set => SetProperty(ref currentPageViewModel, value);
+        private set
+        {
+            if (SetProperty(ref currentPageViewModel, value))
+            {
+                UpdateStimulationImpedanceMonitoring();
+            }
+        }
     }
 
     private ICommand CreateHardwareCommand(Func<object?, Task> execute)
@@ -590,6 +630,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         ShellState.IsDeviceConnected = result.IsConnected;
         ShellState.FooterStatus = result.FooterStatus;
         connectCommand.RaiseCanExecuteChanged();
+        openDeviceTopologyCommand.RaiseCanExecuteChanged();
+        openImpedanceDiagnosticsCommand.RaiseCanExecuteChanged();
+        checkImpedanceCommand.RaiseCanExecuteChanged();
     }
 
     private bool CanConnectDevice()
@@ -625,6 +668,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         {
             ShellState.IsDeviceConnected = entry.IsConnected;
             connectCommand.RaiseCanExecuteChanged();
+            openDeviceTopologyCommand.RaiseCanExecuteChanged();
+            openImpedanceDiagnosticsCommand.RaiseCanExecuteChanged();
+            checkImpedanceCommand.RaiseCanExecuteChanged();
 
             if (entry.Reason == HardwareConnectionChangeReason.HeartbeatLost)
             {
@@ -643,11 +689,41 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         }
     }
 
+    private void HardwareService_StimulationImpedanceChanged(
+        object? sender,
+        StimulationImpedanceChangedEventArgs entry)
+    {
+        void ApplySnapshot()
+        {
+            var values = entry.Snapshot?.Channels.ToDictionary(
+                channel => channel.LogicalChannelNumber,
+                channel => channel.ImpedanceOhms)
+                ?? new Dictionary<int, decimal?>();
+            for (var index = 0; index < 16; index++)
+            {
+                var value = values.GetValueOrDefault(index + 1);
+                DirectCurrentControl.Channels[index].UpdateImpedance(value);
+                PulseCurrentControl.Channels[index].UpdateImpedance(value);
+            }
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            ApplySnapshot();
+        }
+        else
+        {
+            _ = dispatcher.InvokeAsync(ApplySnapshot);
+        }
+    }
+
     private void HandleImpedanceRefreshError(Exception exception)
     {
-        logger.Error("阻抗刷新失败", exception);
         ShellState.FooterStatus = $"阻抗刷新失败：{exception.Message}";
-        toastService.ShowError("刷新失败", "未收到有效的阻抗反馈，请检查设备连接后重试。");
+        toastService.ShowError(
+            "刷新失败",
+            $"未收到有效的阻抗反馈，请检查设备连接后重试。\n\n实际原因：{exception.Message}");
     }
 
     private void HandleDeviceOperationError(string title, string message, Exception exception)
@@ -731,6 +807,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         OnPropertyChanged(nameof(CurrentPage));
         OnPropertyChanged(nameof(CurrentPageViewModel));
         OnPropertyChanged(nameof(PageTitle));
+        UpdateStimulationImpedanceMonitoring();
         AppendLog($"NAVIGATE {page} -> {nextPageViewModel.GetType().Name}");
     }
 
@@ -783,6 +860,14 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private void RestoreStimulationPage()
     {
         CurrentPageViewModel = PrepareStimulationPageViewModel();
+    }
+
+    private void UpdateStimulationImpedanceMonitoring()
+    {
+        var shouldMonitor = currentPage == AppPage.Control
+            && (currentPageViewModel == DirectCurrentControl
+                || currentPageViewModel == PulseCurrentControl);
+        hardwareService.SetStimulationImpedanceMonitoringEnabled(shouldMonitor);
     }
 
     private ObservableObject PrepareStimulationPageViewModel()
@@ -1135,6 +1220,6 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     {
         var result = await hardwareService.CheckImpedanceAsync(cancellationToken);
         ApplyHardwareResult(result);
-        toastService.ShowSuccess("刷新成功", "阻抗值已刷新。");
+        toastService.ShowSuccess("刷新成功", result.UserMessage ?? "阻抗值已刷新。");
     }
 }

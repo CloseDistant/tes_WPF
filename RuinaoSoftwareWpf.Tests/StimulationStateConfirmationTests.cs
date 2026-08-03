@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf.Tests;
+﻿namespace RuinaoSoftwareWpf.Tests;
 
 using Xunit;
 
@@ -183,8 +183,20 @@ public sealed class StimulationStateConfirmationTests
             add { }
             remove { }
         }
+        public event EventHandler<DeviceTopologyChangedEventArgs>? DeviceTopologyChanged
+        {
+            add { }
+            remove { }
+        }
+        public event EventHandler<StimulationImpedanceChangedEventArgs>? StimulationImpedanceChanged
+        {
+            add { }
+            remove { }
+        }
         public bool IsConnected => true;
         public bool IsConnecting => false;
+        public DeviceTopologySnapshot? CurrentDeviceTopology => null;
+        public StimulationImpedanceSnapshot? CurrentStimulationImpedance => null;
 
         public Task<HardwareOperationResult> StartGroupAsync(
             TiGroup group,
@@ -202,6 +214,11 @@ public sealed class StimulationStateConfirmationTests
         public Task<HardwareOperationResult> ReadProductModelAsync(CancellationToken cancellationToken = default) => NotUsed();
         public Task<HardwareOperationResult> ReadBoardModelAsync(CancellationToken cancellationToken = default) => NotUsed();
         public Task<HardwareOperationResult> CheckImpedanceAsync(CancellationToken cancellationToken = default) => NotUsed();
+        public void SetStimulationImpedanceMonitoringEnabled(bool enabled)
+        {
+        }
+        public Task<DeviceTopologySnapshot> RefreshDeviceTopologyAsync(CancellationToken cancellationToken = default) =>
+            Task.FromException<DeviceTopologySnapshot>(new NotSupportedException());
         public Task<HardwareOperationResult> StopGroupAsync(
             TiGroup group,
             string selectedChannelNames,

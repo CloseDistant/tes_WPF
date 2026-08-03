@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System.Windows;
 
 namespace RuinaoSoftwareWpf.Tests;
@@ -184,11 +184,18 @@ public sealed class PulseCurrentChannelSelectionTests
 
     private static PulseCurrentControlViewModel CreateViewModel()
     {
-        return new PulseCurrentControlViewModel(
+        var viewModel = new PulseCurrentControlViewModel(
             new ConnectedDebugSimulation(),
             new LocalizationViewModel(new AppLocalizationService()),
             new NoopToastService(),
-            new NoopLoggingService());
+            new NoopLoggingService(),
+            new TestUserDialogService());
+        foreach (var channel in viewModel.Channels)
+        {
+            channel.UpdateImpedance(500m);
+        }
+
+        return viewModel;
     }
 
     private static void ConfigureValidPulseParameters(

@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Windows.Input;
@@ -16,6 +16,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly ILoggingService logger;
     private readonly IToastService toastService;
+    private readonly IUserDialogService userDialogService;
     private readonly DispatcherTimer waveformTimer;
     private readonly Dictionary<ChannelConfig, ChannelRuntime> activeChannels = [];
     private readonly AsyncRelayCommand synchronizedStartCommand;
@@ -34,13 +35,15 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         IDebugHardwareSimulationService debugHardwareSimulation,
         ILoggingService logger,
         LocalizationViewModel localization,
-        IToastService toastService)
+        IToastService toastService,
+        IUserDialogService userDialogService)
     {
         this.stimulationEngine = stimulationEngine;
         this.hardwareConnectionState = hardwareConnectionState;
         this.debugHardwareSimulation = debugHardwareSimulation;
         this.logger = logger;
         this.toastService = toastService;
+        this.userDialogService = userDialogService;
         Localization = localization;
 
         var accent = new SolidColorBrush(Color.FromRgb(228, 232, 239));
@@ -296,12 +299,24 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             return;
         }
 
-        var synchronizedChannels = Channels.ToArray();
-        if (synchronizedChannels.Length != 16)
+        var impedanceAssessment = StimulationImpedanceStartPolicy.Evaluate(Channels);
+        if (impedanceAssessment.EligibleChannels.Count == 0)
         {
-            toastService.ShowError("同步开始失败", "同步开始要求 16 个通道全部可用。");
+            toastService.ShowError("同步开始失败", "没有阻抗状态允许启动的通道。");
             return;
         }
+
+        if (impedanceAssessment.RequiresConfirmation
+            && !userDialogService.ConfirmWarning(
+                "阻抗状态确认",
+                StimulationImpedanceStartPolicy.BuildConfirmationMessage(impedanceAssessment),
+                "确认并继续",
+                "取消"))
+        {
+            return;
+        }
+
+        var synchronizedChannels = impedanceAssessment.EligibleChannels.ToArray();
 
         var snapshots = new Dictionary<ChannelConfig, DirectCurrentWaveformParameters>();
         foreach (var channel in synchronizedChannels)
@@ -340,6 +355,25 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         if (activeChannels.ContainsKey(channel))
         {
             toastService.ShowInformation($"{channel.Name} 正在运行。", "开始刺激");
+            return;
+        }
+
+        var impedanceAssessment = StimulationImpedanceStartPolicy.Evaluate([channel]);
+        if (impedanceAssessment.EligibleChannels.Count == 0)
+        {
+            toastService.ShowError(
+                "无法开始刺激",
+                StimulationImpedanceStartPolicy.BuildSingleChannelBlockedMessage(channel));
+            return;
+        }
+
+        if (impedanceAssessment.WarningChannels.Count > 0
+            && !userDialogService.ConfirmWarning(
+                "阻抗状态确认",
+                StimulationImpedanceStartPolicy.BuildSingleWarningConfirmationMessage(channel),
+                "确认并继续",
+                "取消"))
+        {
             return;
         }
 

@@ -1,4 +1,4 @@
-using RuinaoTesHardware;
+﻿using RuinaoTesHardware;
 
 namespace RuinaoSoftwareWpf;
 
@@ -43,6 +43,15 @@ public sealed class RuinaoTesHardwareBridge
 
     public Task<uint> ReadImpedanceAsync(CancellationToken cancellationToken = default) =>
         hardwareClient.ReadImpedanceAsync(cancellationToken);
+
+    public Task<TesDeviceTopologySnapshot> ReadDeviceTopologyAsync(
+        CancellationToken cancellationToken = default) =>
+        hardwareClient.ReadDeviceTopologyAsync(cancellationToken);
+
+    public Task<TesStimulationImpedanceSnapshot> ReadStimulationBoardImpedanceAsync(
+        byte boardAddress,
+        CancellationToken cancellationToken = default) =>
+        hardwareClient.ReadStimulationBoardImpedanceAsync(boardAddress, cancellationToken);
 
     /// <summary>
     /// 暂存上位机业务参数日志。生产刺激 API 尚未从临时分支迁入共用硬件 DLL，

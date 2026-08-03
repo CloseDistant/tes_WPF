@@ -132,6 +132,8 @@ public static class AppComposition
         // 因此摄像头服务使用相同生命周期，并由根容器统一释放。
         services.AddSingleton<ICameraCaptureService, OpenCvCameraCaptureService>();
         services.AddSingleton<IUserDialogService, UserDialogService>(); // 统一确认弹窗服务
+        services.AddSingleton<IDeviceTopologyDialogService, DeviceTopologyDialogService>(); // DEBUG设备拓扑弹窗边界
+        services.AddSingleton<IStimulationImpedanceDiagnosticDialogService, StimulationImpedanceDiagnosticDialogService>(); // DEBUG阻抗诊断弹窗边界
         services.AddSingleton<IAccountService, LocalAccountService>(); // 本地离线账号服务
         services.AddSingleton<ISoftwareActivationService, SoftwareActivationService>(); // 首次运行离线激活与受保护凭据
         services.AddSingleton<IAuthorizationService, AuthorizationService>(); // 登录状态和少量受限业务权限统一校验
@@ -176,6 +178,8 @@ public static class AppComposition
         services.AddSingleton<AssessmentWorkbenchCoordinator>(); // 数字表型工作台流程协调器和模块 VM 容器
         services.AddSingleton<FemSimulationViewModel>();   // FEM 仿真面板
         services.AddSingleton<DeviceViewModel>();          // 设备管理面板
+        services.AddSingleton<DeviceTopologyDialogViewModel>(); // DEBUG设备拓扑快照与手动刷新
+        services.AddSingleton<StimulationImpedanceDiagnosticDialogViewModel>(); // DEBUG阻抗原始值与映射诊断
         services.AddSingleton<ConfigViewModel>();          // 设置面板
         services.AddSingleton<SessionLockViewModel>();     // 应用会话锁屏
         services.AddSingleton<AuditTrailViewModel>();      // Admin安全审计查询与导出

@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 /// <summary>
 /// 多语言服务的具体实现。
@@ -36,9 +36,11 @@ public sealed class AppLocalizationService : ILocalizationService
         ["Connect"] = ("联机", "Connect"),
         ["Disconnect"] = ("断开", "Disconnect"),
         ["Handshake"] = ("握手检测", "Handshake"),
+        ["DeviceTopology"] = ("拓扑列表", "Topology"),
         ["ReadProductModel"] = ("读取产品型号", "Read Product Model"),
         ["ReadBoardModel"] = ("读取板卡型号", "Read Board Model"),
         ["ImpedanceCheck"] = ("阻抗检测", "Impedance Check"),
+        ["ImpedanceDiagnostics"] = ("阻抗诊断", "Impedance Diagnostics"),
         ["SwitchLanguage"] = ("切换为英文", "Switch to Chinese"),
         ["NewPrescription"] = ("新建处方", "New Protocol"),
         ["ImportPrescription"] = ("导入处方", "Import Protocol"),

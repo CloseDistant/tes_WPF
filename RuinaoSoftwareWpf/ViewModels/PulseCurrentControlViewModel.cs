@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
@@ -15,6 +15,7 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly IToastService toastService;
     private readonly ILoggingService logger;
+    private readonly IUserDialogService userDialogService;
     private readonly IStimulationRecordService? stimulationRecordService;
     private readonly DispatcherTimer waveformTimer;
     private readonly Dictionary<PulseCurrentChannelConfig, ChannelRuntime> activeChannels = [];
@@ -34,11 +35,13 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         LocalizationViewModel localization,
         IToastService toastService,
         ILoggingService logger,
+        IUserDialogService userDialogService,
         IStimulationRecordService? stimulationRecordService = null)
     {
         this.debugHardwareSimulation = debugHardwareSimulation;
         this.toastService = toastService;
         this.logger = logger;
+        this.userDialogService = userDialogService;
         this.stimulationRecordService = stimulationRecordService;
         Localization = localization;
         Channels = new ObservableCollection<PulseCurrentChannelConfig>(
@@ -295,12 +298,24 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
 
     private async Task StartSynchronizedAsync(CancellationToken cancellationToken)
     {
-        var synchronizedChannels = Channels.ToArray();
-        if (synchronizedChannels.Length != 16)
+        var impedanceAssessment = StimulationImpedanceStartPolicy.Evaluate(Channels);
+        if (impedanceAssessment.EligibleChannels.Count == 0)
         {
-            toastService.ShowError("同步开始失败", "同步开始要求 16 个通道全部可用。");
+            toastService.ShowError("同步开始失败", "没有阻抗状态允许启动的通道。");
             return;
         }
+
+        if (impedanceAssessment.RequiresConfirmation
+            && !userDialogService.ConfirmWarning(
+                "阻抗状态确认",
+                StimulationImpedanceStartPolicy.BuildConfirmationMessage(impedanceAssessment),
+                "确认并继续",
+                "取消"))
+        {
+            return;
+        }
+
+        var synchronizedChannels = impedanceAssessment.EligibleChannels.ToArray();
 
         var snapshots = new Dictionary<PulseCurrentChannelConfig, PulseCurrentParameters>();
         foreach (var channel in synchronizedChannels)
@@ -339,6 +354,25 @@ public sealed class PulseCurrentControlViewModel : ObservableObject, IDisposable
         CancellationToken cancellationToken)
     {
         if (!Channels.Contains(channel) || activeChannels.ContainsKey(channel))
+        {
+            return;
+        }
+
+        var impedanceAssessment = StimulationImpedanceStartPolicy.Evaluate([channel]);
+        if (impedanceAssessment.EligibleChannels.Count == 0)
+        {
+            toastService.ShowError(
+                "无法开始刺激",
+                StimulationImpedanceStartPolicy.BuildSingleChannelBlockedMessage(channel));
+            return;
+        }
+
+        if (impedanceAssessment.WarningChannels.Count > 0
+            && !userDialogService.ConfirmWarning(
+                "阻抗状态确认",
+                StimulationImpedanceStartPolicy.BuildSingleWarningConfirmationMessage(channel),
+                "确认并继续",
+                "取消"))
         {
             return;
         }
