@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using Xunit;
 
 namespace RuinaoSoftwareWpf.Tests;
@@ -148,6 +148,9 @@ public sealed class TiSynchronizedStartTests
 
         public DebugHardwareSimulationResult Connect(bool realHardwareConnected) =>
             new(true, "已连接");
+
+        public DebugHardwareSimulationResult Disconnect() =>
+            new(true, "已断开");
     }
 
     private sealed class ConnectedHardwareState : IHardwareConnectionState
@@ -206,6 +209,11 @@ public sealed class TiSynchronizedStartTests
         }
 
         public Task<HardwareOperationResult> EmergencyStopDirectCurrentGroupAsync(
+            TiGroup group,
+            string reason,
+            CancellationToken cancellationToken = default) => NotUsed();
+
+        public Task<HardwareOperationResult> EmergencyStopPulseCurrentGroupAsync(
             TiGroup group,
             string reason,
             CancellationToken cancellationToken = default) => NotUsed();

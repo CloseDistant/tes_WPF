@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 public sealed class DebugHardwareSimulationService : IDebugHardwareSimulationService
 {
@@ -10,7 +10,7 @@ public sealed class DebugHardwareSimulationService : IDebugHardwareSimulationSer
     {
         get
         {
-#if DEBUG
+#if DEBUG || EXHIBITION
             return true;
 #else
             return false;
@@ -24,12 +24,15 @@ public sealed class DebugHardwareSimulationService : IDebugHardwareSimulationSer
     {
         if (!IsAvailable)
         {
-            return new DebugHardwareSimulationResult(false, "模拟联机仅在 DEBUG 构建中可用。");
+            return new DebugHardwareSimulationResult(
+                false,
+                "设备测试联机仅在内部测试版本中可用。"
+            );
         }
 
         if (realHardwareConnected)
         {
-            return new DebugHardwareSimulationResult(false, "仪器已真实联机，无需启用模拟联机。");
+            return new DebugHardwareSimulationResult(false, "设备已经联机，无需再次启用测试联机。");
         }
 
         if (Interlocked.Exchange(ref isConnected, 1) == 0)
@@ -37,6 +40,16 @@ public sealed class DebugHardwareSimulationService : IDebugHardwareSimulationSer
             ConnectionChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        return new DebugHardwareSimulationResult(true, "DEBUG 模拟联机已启用。");
+        return new DebugHardwareSimulationResult(true, "设备联机已启用。");
+    }
+
+    public DebugHardwareSimulationResult Disconnect()
+    {
+        if (Interlocked.Exchange(ref isConnected, 0) == 1)
+        {
+            ConnectionChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        return new DebugHardwareSimulationResult(true, "设备连接已断开。");
     }
 }

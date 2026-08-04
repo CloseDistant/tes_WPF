@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 public sealed class SessionSecurityService : ISessionSecurityService
 {
+    private const string AutoLockEnabledKey = "session_auto_lock_enabled";
     private const string IdleTimeoutKey = "session_idle_timeout_minutes";
 
     private readonly IAppDatabaseInitializer databaseInitializer;
@@ -18,6 +19,7 @@ public sealed class SessionSecurityService : ISessionSecurityService
     private readonly SemaphoreSlim settingsWriteGate = new(1, 1);
 
     private int initialized;
+    private int isAutoLockEnabled = 1;
     private int idleTimeoutMinutes = ISessionSecurityService.DefaultIdleTimeoutMinutes;
     private int isLocked;
     private int isAutoLockSuppressed;
@@ -47,6 +49,8 @@ public sealed class SessionSecurityService : ISessionSecurityService
     }
 
     public event EventHandler? StateChanged;
+
+    public bool IsAutoLockEnabled => Volatile.Read(ref isAutoLockEnabled) == 1;
 
     public int IdleTimeoutMinutes => Volatile.Read(ref idleTimeoutMinutes);
 
@@ -83,17 +87,21 @@ public sealed class SessionSecurityService : ISessionSecurityService
 
             await databaseInitializer.EnsureInitializedAsync(cancellationToken);
             await using var context = new CaptureDbContext(AppDatabasePathProvider.MainDatabasePath);
-            var storedValue = await context.AppStates
+            var storedSettings = await context.AppStates
                 .AsNoTracking()
-                .Where(item => item.Key == IdleTimeoutKey)
-                .Select(item => item.Value)
-                .FirstOrDefaultAsync(cancellationToken);
+                .Where(item => item.Key == AutoLockEnabledKey || item.Key == IdleTimeoutKey)
+                .ToDictionaryAsync(item => item.Key, item => item.Value, cancellationToken);
 
-            var loadedValue = SessionSecurityPolicy.ParseIdleTimeoutOrDefault(storedValue);
-            Volatile.Write(ref idleTimeoutMinutes, loadedValue);
+            storedSettings.TryGetValue(AutoLockEnabledKey, out var storedEnabledValue);
+            storedSettings.TryGetValue(IdleTimeoutKey, out var storedTimeoutValue);
+            var loadedIsEnabled = SessionSecurityPolicy.ParseAutoLockEnabledOrDefault(storedEnabledValue);
+            var loadedTimeout = SessionSecurityPolicy.ParseIdleTimeoutOrDefault(storedTimeoutValue);
+            Volatile.Write(ref isAutoLockEnabled, loadedIsEnabled ? 1 : 0);
+            Volatile.Write(ref idleTimeoutMinutes, loadedTimeout);
             ResetActivityTimestamp();
             Volatile.Write(ref initialized, 1);
-            logger.Info($"会话安全设置已加载：idleTimeoutMinutes={loadedValue}");
+            logger.Info(
+                $"会话安全设置已加载：autoLockEnabled={loadedIsEnabled}, idleTimeoutMinutes={loadedTimeout}");
         }
         finally
         {
@@ -119,10 +127,20 @@ public sealed class SessionSecurityService : ISessionSecurityService
             return;
         }
 
+        if (!IsAutoLockEnabled)
+        {
+            if (Interlocked.Exchange(ref isAutoLockSuppressed, 0) == 1)
+            {
+                StateChanged?.Invoke(this, EventArgs.Empty);
+            }
+
+            return;
+        }
+
         await evaluationGate.WaitAsync(cancellationToken);
         try
         {
-            if (accountService.CurrentUser is null || IsLocked)
+            if (!IsAutoLockEnabled || accountService.CurrentUser is null || IsLocked)
             {
                 return;
             }
@@ -197,7 +215,8 @@ public sealed class SessionSecurityService : ISessionSecurityService
         return new SessionUnlockResult(true, false, verification.Message);
     }
 
-    public async Task SaveIdleTimeoutAsync(
+    public async Task SaveAutoLockSettingsAsync(
+        bool isEnabled,
         int minutes,
         CancellationToken cancellationToken = default)
     {
@@ -209,9 +228,9 @@ public sealed class SessionSecurityService : ISessionSecurityService
                 user,
                 "update_session_security_settings",
                 "failed",
-                "非Admin账号尝试修改自动锁定时间",
+                "非Admin账号尝试修改自动锁定设置",
                 cancellationToken);
-            throw new InvalidOperationException("只有Admin可以修改自动锁定时间");
+            throw new InvalidOperationException("只有Admin可以修改自动锁定设置");
         }
 
         if (!SessionSecurityPolicy.IsValidIdleTimeout(minutes))
@@ -230,37 +249,51 @@ public sealed class SessionSecurityService : ISessionSecurityService
         await settingsWriteGate.WaitAsync(cancellationToken);
         try
         {
-            var previous = IdleTimeoutMinutes;
+            var previousIsEnabled = IsAutoLockEnabled;
+            var previousTimeout = IdleTimeoutMinutes;
             await databaseWriteCoordinator.ExecuteAsync(
                 AppDatabasePathProvider.MainDatabasePath,
                 async () =>
                 {
                     await using var context = new CaptureDbContext(AppDatabasePathProvider.MainDatabasePath);
-                    var state = await context.AppStates.FirstOrDefaultAsync(
-                        item => item.Key == IdleTimeoutKey,
-                        cancellationToken);
-                    if (state is null)
+                    var states = await context.AppStates
+                        .Where(item => item.Key == AutoLockEnabledKey || item.Key == IdleTimeoutKey)
+                        .ToDictionaryAsync(item => item.Key, cancellationToken);
+
+                    if (!states.TryGetValue(AutoLockEnabledKey, out var enabledState))
                     {
-                        state = new AppStateEntity { Key = IdleTimeoutKey };
-                        context.AppStates.Add(state);
+                        enabledState = new AppStateEntity { Key = AutoLockEnabledKey };
+                        context.AppStates.Add(enabledState);
                     }
 
-                    state.Value = minutes.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    state.UpdatedAtUnixMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
+                    if (!states.TryGetValue(IdleTimeoutKey, out var timeoutState))
+                    {
+                        timeoutState = new AppStateEntity { Key = IdleTimeoutKey };
+                        context.AppStates.Add(timeoutState);
+                    }
+
+                    var updatedAtUnixMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
+                    enabledState.Value = isEnabled.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    enabledState.UpdatedAtUnixMs = updatedAtUnixMs;
+                    timeoutState.Value = minutes.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    timeoutState.UpdatedAtUnixMs = updatedAtUnixMs;
                     await context.SaveChangesAsync(cancellationToken);
                 },
                 cancellationToken);
 
+            Volatile.Write(ref isAutoLockEnabled, isEnabled ? 1 : 0);
             Volatile.Write(ref idleTimeoutMinutes, minutes);
+            Interlocked.Exchange(ref isAutoLockSuppressed, 0);
             ResetActivityTimestamp();
             StateChanged?.Invoke(this, EventArgs.Empty);
             await TryRecordAuditAsync(
                 user,
                 "update_session_security_settings",
                 "success",
-                $"自动锁定时间：{previous} -> {minutes} 分钟",
+                $"自动锁定：{previousIsEnabled} -> {isEnabled}；时间：{previousTimeout} -> {minutes} 分钟",
                 cancellationToken);
-            logger.Info($"会话安全设置已更新：operator={user.UserId}, idleTimeoutMinutes={minutes}");
+            logger.Info(
+                $"会话安全设置已更新：operator={user.UserId}, autoLockEnabled={isEnabled}, idleTimeoutMinutes={minutes}");
         }
         catch (Exception exception)
         {
@@ -268,7 +301,7 @@ public sealed class SessionSecurityService : ISessionSecurityService
                 user,
                 "update_session_security_settings",
                 "failed",
-                $"保存自动锁定时间失败：{exception.Message}",
+                $"保存自动锁定设置失败：{exception.Message}",
                 cancellationToken);
             throw;
         }

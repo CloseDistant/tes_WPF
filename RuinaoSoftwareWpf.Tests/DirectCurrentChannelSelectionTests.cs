@@ -1,10 +1,21 @@
 ﻿using System.Windows;
+using RuinaoSoftwareWpf.Features.Exhibition.Services;
 using Xunit;
 
 namespace RuinaoSoftwareWpf.Tests;
 
 public sealed class DirectCurrentChannelSelectionTests
 {
+    [Fact]
+    public void ImpedanceDisplay_UsesTwoDecimalPlaces()
+    {
+        var channel = new ChannelConfig();
+
+        channel.UpdateImpedance(500m);
+
+        Assert.Equal("500.00", channel.ImpedanceOhm);
+    }
+
     [Fact]
     public void Constructor_CreatesEightPairsAndSelectsOnlyFirstChannel()
     {
@@ -329,7 +340,7 @@ public sealed class DirectCurrentChannelSelectionTests
         var simulation = new ConnectedDebugSimulation();
         var provider = new DebugStimulationImpedanceProvider(simulation);
 
-#if DEBUG
+#if DEBUG && !EXHIBITION
         var engine = new NoopStimulationEngine();
         var viewModel = CreateViewModel(
             engine,
@@ -350,6 +361,36 @@ public sealed class DirectCurrentChannelSelectionTests
 #else
         Assert.Null(provider.GetSnapshot());
 #endif
+    }
+
+    [Fact]
+    public void ExhibitionMode_WhenRealUsbDisconnects_StopsUiAndRecordsEmergencyEnd()
+    {
+        var engine = new NoopStimulationEngine();
+        var connection = new MutableHardwareConnectionState();
+        connection.SetConnected(true);
+        var viewModel = new DirectCurrentControlViewModel(
+            engine,
+            connection,
+            new DebugHardwareSimulationService(),
+            new NoopLoggingService(),
+            new LocalizationViewModel(new AppLocalizationService()),
+            new NoopToastService(),
+            new TestUserDialogService(),
+            exhibitionMode: new ExhibitionModeState());
+        var channel = viewModel.Channels[0];
+        channel.UpdateImpedance(500m);
+
+        viewModel.StartChannelCommand.Execute(channel);
+        Assert.True(channel.IsStimulating);
+
+        connection.SetConnected(false);
+
+        Assert.False(channel.IsStimulating);
+        Assert.Equal("00:00:00", channel.RemainingTime);
+        Assert.Null(channel.ImpedanceOhms);
+        Assert.Equal(1, engine.DirectCurrentEmergencyStopCount);
+        Assert.False(viewModel.StartChannelCommand.CanExecute(channel));
     }
 
     [Fact]
@@ -440,6 +481,9 @@ public sealed class DirectCurrentChannelSelectionTests
 
         public DebugHardwareSimulationResult Connect(bool realHardwareConnected) =>
             new(true, "已连接");
+
+        public DebugHardwareSimulationResult Disconnect() =>
+            new(true, "已断开");
     }
 
     private sealed class ConnectedHardwareState : IHardwareConnectionState
@@ -451,6 +495,27 @@ public sealed class DirectCurrentChannelSelectionTests
         }
 
         public bool IsConnected => true;
+    }
+
+    private sealed class MutableHardwareConnectionState : IHardwareConnectionState
+    {
+        public event EventHandler<HardwareConnectionChangedEventArgs>? ConnectionChanged;
+
+        public bool IsConnected { get; private set; }
+
+        public void SetConnected(bool isConnected)
+        {
+            IsConnected = isConnected;
+            ConnectionChanged?.Invoke(
+                this,
+                new HardwareConnectionChangedEventArgs(
+                    isConnected,
+                    false,
+                    isConnected
+                        ? HardwareConnectionChangeReason.Connected
+                        : HardwareConnectionChangeReason.Disconnected,
+                    isConnected ? "仪器已联机。" : "仪器未联机。"));
+        }
     }
 
     private sealed class NoopStimulationEngine : IStimulationEngine
@@ -509,6 +574,11 @@ public sealed class DirectCurrentChannelSelectionTests
             DirectCurrentEmergencyStopCount++;
             return Success();
         }
+
+        public Task<HardwareOperationResult> EmergencyStopPulseCurrentGroupAsync(
+            TiGroup group,
+            string reason,
+            CancellationToken cancellationToken = default) => NotUsed();
 
         public Task<HardwareOperationResult> CompleteGroupAsync(
             TiGroup group,

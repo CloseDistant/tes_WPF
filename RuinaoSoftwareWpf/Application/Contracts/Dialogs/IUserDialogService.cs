@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 /// <summary>
 /// 界面确认弹窗服务。
@@ -9,6 +9,8 @@ public interface IUserDialogService
     bool ConfirmWarning(string title, string message, string confirmText, string cancelText);
 
     bool ConfirmDirectCurrentStart(DirectCurrentStartConfirmationRequest request);
+
+    bool ConfirmPulseCurrentStart(PulseCurrentStartConfirmationRequest request);
 
     void ShowInformation(string title, string message);
 

@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 public sealed record DebugHardwareSimulationResult(bool Succeeded, string Message);
 
@@ -11,4 +11,6 @@ public interface IDebugHardwareSimulationService
     bool IsConnected { get; }
 
     DebugHardwareSimulationResult Connect(bool realHardwareConnected);
+
+    DebugHardwareSimulationResult Disconnect();
 }

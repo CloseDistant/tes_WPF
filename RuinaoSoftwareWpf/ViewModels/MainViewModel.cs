@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using RuinaoSoftwareWpf.ApplicationContracts;
+using RuinaoSoftwareWpf.Features.Exhibition.Services;
 using RuinaoSoftwareWpf.Views.Dialogs;
 
 namespace RuinaoSoftwareWpf;
@@ -19,6 +20,7 @@ namespace RuinaoSoftwareWpf;
 public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 {
     private readonly IHardwareService hardwareService;
+    private readonly IExhibitionModeState exhibitionMode;
     private readonly ILoggingService logger;
     private readonly IUserDialogService userDialogService;
     private readonly IAccountService accountService;
@@ -53,6 +55,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     /// </summary>
     public MainViewModel(
         IHardwareService hardwareService,
+        IExhibitionModeState exhibitionMode,
         ILoggingService logger,
         IUserDialogService userDialogService,
         IAccountService accountService,
@@ -87,6 +90,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         IDebugStimulationImpedanceProvider? debugImpedanceProvider = null)
     {
         this.hardwareService = hardwareService;
+        this.exhibitionMode = exhibitionMode;
         this.logger = logger;
         this.userDialogService = userDialogService;
         this.accountService = accountService;
@@ -125,6 +129,10 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
         AppendLog("UI READY  hardware debug prototype");
         AppendLog("HARDWARE SDK READY  RuinaoTesHardware loaded");
+        if (exhibitionMode.IsEnabled)
+        {
+            logger.Warning("展览模式已启用：刺激输出在应用硬件边界截断，真实联机、握手、心跳和拓扑保持启用。");
+        }
 
         // 设备菜单操作复用统一 Toast；异步命令在收到结果前会自动禁用对应按钮。
         connectCommand = new AsyncRelayCommand(
@@ -657,8 +665,11 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         ShellState.IsDeviceConnected = debugHardwareSimulation.IsConnected || hardwareService.IsConnected;
         if (debugHardwareSimulation.IsConnected)
         {
-            ShellState.FooterStatus = "设备：DEBUG 模拟联机 | 不向真实仪器发送命令";
-            ApplyStimulationImpedanceSnapshot(debugImpedanceProvider?.GetSnapshot());
+            ShellState.FooterStatus = "设备：已联机 | 通道：16/16在线";
+            if (!exhibitionMode.IsEnabled)
+            {
+                ApplyStimulationImpedanceSnapshot(debugImpedanceProvider?.GetSnapshot());
+            }
         }
 
         connectCommand.RaiseCanExecuteChanged();
@@ -698,7 +709,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         StimulationImpedanceChangedEventArgs entry)
     {
         void ApplySnapshot() => ApplyStimulationImpedanceSnapshot(
-            debugHardwareSimulation.IsConnected
+            debugHardwareSimulation.IsConnected && !exhibitionMode.IsEnabled
                 ? debugImpedanceProvider?.GetSnapshot()
                 : entry.Snapshot);
 

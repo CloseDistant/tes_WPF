@@ -6,6 +6,16 @@ namespace RuinaoSoftwareWpf.Tests;
 public sealed class PulseCurrentChannelSelectionTests
 {
     [Fact]
+    public void ImpedanceDisplay_UsesTwoDecimalPlaces()
+    {
+        var channel = new PulseCurrentChannelConfig();
+
+        channel.UpdateImpedance(520m);
+
+        Assert.Equal("520.00", channel.ImpedanceOhm);
+    }
+
+    [Fact]
     public void Constructor_CreatesEightPairsAndSelectsOnlyFirstChannel()
     {
         var viewModel = CreateViewModel();
@@ -69,6 +79,21 @@ public sealed class PulseCurrentChannelSelectionTests
     }
 
     [Fact]
+    public void SynchronizedStart_ShowsConciseConfirmationBeforeStarting()
+    {
+        var dialogs = new TestUserDialogService();
+        using var viewModel = CreateViewModel(dialogs);
+        ConfigureValidPulseParameters(viewModel.Channels);
+
+        viewModel.SynchronizedStartCommand.Execute(null);
+
+        Assert.Equal("同步开始确认", dialogs.LastConfirmationTitle);
+        Assert.Contains("16个通道", dialogs.LastConfirmationMessage, StringComparison.Ordinal);
+        Assert.Contains("经颅脉冲电流刺激", dialogs.LastConfirmationMessage, StringComparison.Ordinal);
+        Assert.Null(dialogs.LastPulseCurrentStartConfirmation);
+    }
+
+    [Fact]
     public void SynchronizedStart_WhenAnyChannelIsInvalid_StartsNoChannels()
     {
         using var viewModel = CreateViewModel();
@@ -95,6 +120,40 @@ public sealed class PulseCurrentChannelSelectionTests
 
         viewModel.EmergencyStopCommand.Execute(null);
         Assert.False(target.IsStimulating);
+    }
+
+    [Fact]
+    public void StartChannel_WhenConfirmationIsCancelled_DoesNotStart()
+    {
+        var dialogs = new TestUserDialogService { ConfirmationResult = false };
+        using var viewModel = CreateViewModel(dialogs);
+        var target = viewModel.Channels[0];
+        ConfigureValidPulseParameters([target]);
+
+        viewModel.StartChannelCommand.Execute(target);
+
+        var request = Assert.IsType<PulseCurrentStartConfirmationRequest>(
+            dialogs.LastPulseCurrentStartConfirmation);
+        Assert.False(request.IsSynchronized);
+        Assert.Single(request.Channels);
+        Assert.False(target.IsStimulating);
+    }
+
+    [Fact]
+    public void EmergencyStop_WhenConnectedWithoutRunningChannels_RemainsAvailable()
+    {
+        var engine = new CapturingPulseStimulationEngine();
+        using var viewModel = CreateViewModel(stimulationEngine: engine);
+
+        Assert.True(viewModel.EmergencyStopCommand.CanExecute(null));
+
+        viewModel.EmergencyStopCommand.Execute(null);
+
+        Assert.Equal(1, engine.PulseEmergencyStopCount);
+        Assert.Empty(engine.LastEmergencyStoppedChannels);
+        Assert.False(viewModel.EmergencyStopCommand.CanExecute(null));
+        Assert.False(viewModel.SynchronizedStartCommand.CanExecute(null));
+        Assert.All(viewModel.Channels, channel => Assert.False(channel.IsParameterEditingEnabled));
     }
 
     [Fact]
@@ -182,14 +241,47 @@ public sealed class PulseCurrentChannelSelectionTests
         Assert.True(viewModel.UseChannelPrescriptionCommand.CanExecute(viewModel.Channels[1]));
     }
 
-    private static PulseCurrentControlViewModel CreateViewModel()
+    [Fact]
+    public void RealUsbDisconnect_StopsPulseSimulationAndWritesDeviceDisconnectedRecord()
     {
-        var viewModel = new PulseCurrentControlViewModel(
-            new ConnectedDebugSimulation(),
+        var connection = new MutableHardwareConnectionState();
+        connection.SetConnected(true);
+        var records = new CapturingStimulationRecordService();
+        using var viewModel = new PulseCurrentControlViewModel(
+            connection,
             new LocalizationViewModel(new AppLocalizationService()),
             new NoopToastService(),
             new NoopLoggingService(),
-            new TestUserDialogService());
+            new TestUserDialogService(),
+            records);
+        var channel = viewModel.Channels[0];
+        channel.UpdateImpedance(500m);
+        ConfigureValidPulseParameters([channel]);
+
+        viewModel.StartChannelCommand.Execute(channel);
+        Assert.True(channel.IsStimulating);
+
+        connection.SetConnected(false);
+
+        Assert.False(channel.IsStimulating);
+        Assert.Equal("00:00:00", channel.RemainingTime);
+        var end = Assert.Single(records.Ends);
+        Assert.Equal(StimulationEndReasonCodes.DeviceDisconnected, end.EndReasonCode);
+        Assert.Equal(StimulationEndType.AbnormalTermination, end.EndType);
+        Assert.False(viewModel.StartChannelCommand.CanExecute(channel));
+    }
+
+    private static PulseCurrentControlViewModel CreateViewModel(
+        TestUserDialogService? dialogs = null,
+        IStimulationEngine? stimulationEngine = null)
+    {
+        var viewModel = new PulseCurrentControlViewModel(
+            new ConnectedHardwareState(),
+            new LocalizationViewModel(new AppLocalizationService()),
+            new NoopToastService(),
+            new NoopLoggingService(),
+            dialogs ?? new TestUserDialogService(),
+            stimulationEngine: stimulationEngine);
         foreach (var channel in viewModel.Channels)
         {
             channel.UpdateImpedance(500m);
@@ -211,20 +303,115 @@ public sealed class PulseCurrentChannelSelectionTests
         }
     }
 
-    private sealed class ConnectedDebugSimulation : IDebugHardwareSimulationService
+    private sealed class ConnectedHardwareState : IHardwareConnectionState
     {
-        public event EventHandler? ConnectionChanged
+        public event EventHandler<HardwareConnectionChangedEventArgs>? ConnectionChanged
         {
             add { }
             remove { }
         }
 
-        public bool IsAvailable => true;
-
         public bool IsConnected => true;
+    }
 
-        public DebugHardwareSimulationResult Connect(bool realHardwareConnected) =>
-            new(true, "已连接");
+    private sealed class MutableHardwareConnectionState : IHardwareConnectionState
+    {
+        public event EventHandler<HardwareConnectionChangedEventArgs>? ConnectionChanged;
+
+        public bool IsConnected { get; private set; }
+
+        public void SetConnected(bool isConnected)
+        {
+            IsConnected = isConnected;
+            ConnectionChanged?.Invoke(
+                this,
+                new HardwareConnectionChangedEventArgs(
+                    isConnected,
+                    false,
+                    isConnected
+                        ? HardwareConnectionChangeReason.Connected
+                        : HardwareConnectionChangeReason.Disconnected,
+                    isConnected ? "仪器已联机。" : "仪器未联机。"));
+        }
+    }
+
+    private sealed class CapturingStimulationRecordService : IStimulationRecordService
+    {
+        public List<StimulationChannelsEndRequest> Ends { get; } = [];
+
+        public Task<string> StartRunAsync(
+            StimulationRunStartRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult("run");
+
+        public Task EndChannelsAsync(
+            StimulationChannelsEndRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Ends.Add(request);
+            return Task.CompletedTask;
+        }
+
+        public Task<PageResult<StimulationTreatmentRecord>> GetTreatmentRecordsPageAsync(
+            PageRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PageResult<StimulationTreatmentRecord>([], false));
+    }
+
+    private sealed class CapturingPulseStimulationEngine : IStimulationEngine
+    {
+        public int PulseEmergencyStopCount { get; private set; }
+
+        public IReadOnlyList<string> LastEmergencyStoppedChannels { get; private set; } = [];
+
+        public StimulationExecutionState CurrentState => StimulationExecutionState.Idle;
+
+        public Task<HardwareOperationResult> StartTiGroupAsync(
+            TiGroup group,
+            string selectedChannelNames,
+            string prescriptionName,
+            CancellationToken cancellationToken = default) => NotUsed();
+
+        public Task<HardwareOperationResult> StartDirectCurrentGroupAsync(
+            TiGroup group,
+            string selectedChannelNames,
+            string prescriptionName,
+            CancellationToken cancellationToken = default) => NotUsed();
+
+        public Task<HardwareOperationResult> StopGroupAsync(
+            TiGroup group,
+            string selectedChannelNames,
+            string stimulationType,
+            CancellationToken cancellationToken = default) => NotUsed();
+
+        public Task<HardwareOperationResult> EmergencyStopTiGroupAsync(
+            TiGroup group,
+            string reason,
+            CancellationToken cancellationToken = default) => NotUsed();
+
+        public Task<HardwareOperationResult> EmergencyStopDirectCurrentGroupAsync(
+            TiGroup group,
+            string reason,
+            CancellationToken cancellationToken = default) => NotUsed();
+
+        public Task<HardwareOperationResult> EmergencyStopPulseCurrentGroupAsync(
+            TiGroup group,
+            string reason,
+            CancellationToken cancellationToken = default)
+        {
+            PulseEmergencyStopCount++;
+            LastEmergencyStoppedChannels = group.Channels.Select(channel => channel.Name).ToArray();
+            return Task.FromResult(new HardwareOperationResult(true, "test"));
+        }
+
+        public Task<HardwareOperationResult> CompleteGroupAsync(
+            TiGroup group,
+            string selectedChannelNames,
+            string stimulationType,
+            CancellationToken cancellationToken = default) => NotUsed();
+
+        private static Task<HardwareOperationResult> NotUsed() =>
+            throw new InvalidOperationException("Pulse-current tests must not execute this operation.");
     }
 
     private sealed class NoopLoggingService : ILoggingService

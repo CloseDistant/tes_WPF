@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
+using RuinaoSoftwareWpf.Features.Exhibition.Services;
 
 namespace RuinaoSoftwareWpf;
 
@@ -18,6 +19,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     private readonly IHardwareService? hardwareService;
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
     private readonly IDebugStimulationImpedanceProvider? debugImpedanceProvider;
+    private readonly IExhibitionModeState? exhibitionMode;
     private readonly ILoggingService logger;
     private readonly IToastService toastService;
     private readonly IUserDialogService userDialogService;
@@ -36,6 +38,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     private string appliedPrescriptionName = "手动设置";
     private DirectCurrentChannelPair? selectedChannelPair;
     private ChannelConfig? selectedChannel;
+    private Task connectionLossRecordTask = Task.CompletedTask;
     private bool startOperationInProgress;
     private bool emergencyStopCooldownInProgress;
 
@@ -47,13 +50,15 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         LocalizationViewModel localization,
         IToastService toastService,
         IUserDialogService userDialogService,
-        IDebugStimulationImpedanceProvider? debugImpedanceProvider = null)
+        IDebugStimulationImpedanceProvider? debugImpedanceProvider = null,
+        IExhibitionModeState? exhibitionMode = null)
     {
         this.stimulationEngine = stimulationEngine;
         this.hardwareConnectionState = hardwareConnectionState;
         hardwareService = hardwareConnectionState as IHardwareService;
         this.debugHardwareSimulation = debugHardwareSimulation;
         this.debugImpedanceProvider = debugImpedanceProvider;
+        this.exhibitionMode = exhibitionMode;
         this.logger = logger;
         this.toastService = toastService;
         this.userDialogService = userDialogService;
@@ -323,10 +328,12 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
 
     private void HandleEmergencyStopFailure(Exception exception)
     {
-        logger.Error("tDCS 背板急停命令执行失败", exception);
+        logger.Error(IsExhibitionMode ? "tDCS 展览模拟急停失败" : "tDCS 背板急停命令执行失败", exception);
         toastService.ShowError(
             "紧急停止失败",
-            "背板紧急停止命令未确认，请立即人工检查设备并再次尝试急停。");
+            IsExhibitionMode
+                ? "紧急停止未完成，请再次尝试。"
+                : "背板紧急停止命令未确认，请立即人工检查设备并再次尝试急停。");
     }
 
     private async Task StartSynchronizedAsync(CancellationToken cancellationToken)
@@ -479,7 +486,11 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
 
             StopTimerWhenIdle();
             SetEmergencyStopCooldownState(true);
-            toastService.ShowSuccess("紧急停止", "背板急停命令已发送，设备稳定期间请等待2秒。");
+            toastService.ShowSuccess(
+                "紧急停止",
+                IsExhibitionMode
+                    ? "已停止运行，设备状态稳定期间请等待2秒。"
+                    : "背板急停命令已发送，设备稳定期间请等待2秒。");
             HardwareOperationCompleted?.Invoke(this, result);
             await Task.Delay(EmergencyStopCooldown);
         }
@@ -610,7 +621,26 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         object? sender,
         HardwareConnectionChangedEventArgs eventArgs)
     {
-        RefreshCommandStatesOnUiThread();
+        void ApplyChange()
+        {
+            if (!eventArgs.IsConnected && IsExhibitionMode)
+            {
+                CancelPendingStartOperations();
+                ApplyImpedanceSnapshot(null);
+                StopRunningChannelsForConnectionLoss();
+            }
+
+            RefreshCommandStates();
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            _ = dispatcher.BeginInvoke(ApplyChange);
+            return;
+        }
+
+        ApplyChange();
     }
 
     private void OnDebugSimulationConnectionChanged(object? sender, EventArgs eventArgs)
@@ -625,7 +655,49 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         && !emergencyStopCooldownInProgress;
 
     private bool CanControlHardware =>
-        hardwareConnectionState.IsConnected || debugHardwareSimulation.IsConnected;
+        hardwareConnectionState.IsConnected
+        || (!IsExhibitionMode && debugHardwareSimulation.IsConnected);
+
+    private bool IsExhibitionMode => exhibitionMode?.IsEnabled == true;
+
+    private void StopRunningChannelsForConnectionLoss()
+    {
+        if (activeChannels.Count == 0)
+        {
+            return;
+        }
+
+        var stoppedAt = Stopwatch.GetTimestamp();
+        var stoppedChannels = activeChannels.ToArray();
+        var group = CreateExecutionGroup(stoppedChannels.Select(pair => pair.Key));
+        foreach (var pair in stoppedChannels)
+        {
+            FinalizeStoppedChannel(
+                pair.Key,
+                Stopwatch.GetElapsedTime(pair.Value.StartTimestamp, stoppedAt).TotalSeconds,
+                completed: false);
+        }
+
+        StopTimerWhenIdle();
+        RefreshCommandStates();
+        logger.Warning("tDCS 展览模拟因真实USB断联而结束；未发送停止或急停硬件指令。");
+        connectionLossRecordTask = RecordConnectionLossAsync(group);
+    }
+
+    private async Task RecordConnectionLossAsync(TiGroup group)
+    {
+        try
+        {
+            _ = await stimulationEngine.EmergencyStopDirectCurrentGroupAsync(
+                group,
+                "真实USB断联，刺激运行结束",
+                CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            logger.Error("tDCS 断联结束治疗记录失败", exception);
+        }
+    }
 
     private async Task EnsureFreshImpedanceAsync(CancellationToken cancellationToken)
     {

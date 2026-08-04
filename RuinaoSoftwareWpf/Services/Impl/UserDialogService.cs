@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using System.Windows;
 using RuinaoSoftwareWpf.Views.Dialogs;
@@ -30,6 +30,17 @@ public sealed class UserDialogService : IUserDialogService
     {
         ArgumentNullException.ThrowIfNull(request);
         var dialog = new DirectCurrentStartConfirmationDialog(request)
+        {
+            Owner = Application.Current?.MainWindow
+        };
+
+        return dialog.ShowDialog() == true;
+    }
+
+    public bool ConfirmPulseCurrentStart(PulseCurrentStartConfirmationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var dialog = new PulseCurrentStartConfirmationDialog(request)
         {
             Owner = Application.Current?.MainWindow
         };

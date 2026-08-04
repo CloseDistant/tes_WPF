@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf.Tests;
+﻿namespace RuinaoSoftwareWpf.Tests;
 
 using Xunit;
 
@@ -11,7 +11,7 @@ public sealed class DebugHardwareSimulationServiceTests
         var changeCount = 0;
         service.ConnectionChanged += (_, _) => changeCount++;
 
-#if DEBUG
+#if DEBUG || EXHIBITION
         Assert.True(service.IsAvailable);
         Assert.False(service.Connect(realHardwareConnected: true).Succeeded);
         Assert.False(service.IsConnected);
@@ -22,6 +22,10 @@ public sealed class DebugHardwareSimulationServiceTests
 
         Assert.True(service.Connect(realHardwareConnected: false).Succeeded);
         Assert.Equal(1, changeCount);
+
+        Assert.True(service.Disconnect().Succeeded);
+        Assert.False(service.IsConnected);
+        Assert.Equal(2, changeCount);
 #else
         Assert.False(service.IsAvailable);
         Assert.False(service.Connect(realHardwareConnected: false).Succeeded);

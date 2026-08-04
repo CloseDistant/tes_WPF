@@ -17,7 +17,7 @@ public sealed class DebugStimulationImpedanceProvider : IDebugStimulationImpedan
 
     public StimulationImpedanceSnapshot? GetSnapshot()
     {
-#if DEBUG
+#if DEBUG && !EXHIBITION
         if (!debugHardwareSimulation.IsConnected)
         {
             return null;

@@ -10,6 +10,8 @@ internal sealed class TestUserDialogService : IUserDialogService
 
     public DirectCurrentStartConfirmationRequest? LastDirectCurrentStartConfirmation { get; private set; }
 
+    public PulseCurrentStartConfirmationRequest? LastPulseCurrentStartConfirmation { get; private set; }
+
     public bool ConfirmWarning(string title, string message, string confirmText, string cancelText)
     {
         LastConfirmationTitle = title;
@@ -20,6 +22,12 @@ internal sealed class TestUserDialogService : IUserDialogService
     public bool ConfirmDirectCurrentStart(DirectCurrentStartConfirmationRequest request)
     {
         LastDirectCurrentStartConfirmation = request;
+        return ConfirmationResult;
+    }
+
+    public bool ConfirmPulseCurrentStart(PulseCurrentStartConfirmationRequest request)
+    {
+        LastPulseCurrentStartConfirmation = request;
         return ConfirmationResult;
     }
 

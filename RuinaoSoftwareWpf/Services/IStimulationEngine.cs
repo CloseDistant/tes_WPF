@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 /// <summary>
 /// 刺激控制引擎接口。
@@ -35,6 +35,9 @@ public interface IStimulationEngine
 
     /// <summary>急停 tDCS 通道组。</summary>
     Task<HardwareOperationResult> EmergencyStopDirectCurrentGroupAsync(TiGroup group, string reason, CancellationToken cancellationToken = default);
+
+    /// <summary>急停tPCS通道组。</summary>
+    Task<HardwareOperationResult> EmergencyStopPulseCurrentGroupAsync(TiGroup group, string reason, CancellationToken cancellationToken = default);
 
     /// <summary>通道倒计时自然结束并生成完成记录。</summary>
     Task<HardwareOperationResult> CompleteGroupAsync(

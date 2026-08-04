@@ -241,7 +241,7 @@ public sealed class ChannelConfig : ObservableObject, IStimulationImpedanceChann
         }
     }
 
-    public string ImpedanceOhm => ImpedanceOhms?.ToString("0.##", CultureInfo.InvariantCulture) ?? "—";
+    public string ImpedanceOhm => ImpedanceOhms?.ToString("0.00", CultureInfo.InvariantCulture) ?? "—";
 
     public StimulationImpedanceStatus ImpedanceStatus =>
         StimulationImpedancePresentation.GetStatus(ImpedanceOhms);

@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf.Tests;
+﻿namespace RuinaoSoftwareWpf.Tests;
 
 using System.ComponentModel;
 using Xunit;
@@ -192,6 +192,9 @@ public sealed class EegPatientUnlockTests
             false;
 
         public bool ConfirmDirectCurrentStart(DirectCurrentStartConfirmationRequest request) =>
+            false;
+
+        public bool ConfirmPulseCurrentStart(PulseCurrentStartConfirmationRequest request) =>
             false;
 
         public void ShowInformation(string title, string message)

@@ -37,6 +37,7 @@ public sealed class ConfigViewModel : ObservableObject
     private string stimulationStatus = string.Empty;
     private string startupSettingsStatus = string.Empty;
     private bool autoConnectOnStartup;
+    private bool isAutoLockEnabled = true;
     private int idleTimeoutMinutes = ISessionSecurityService.DefaultIdleTimeoutMinutes;
     private string sessionSecurityStatus = string.Empty;
     private string releaseIntegrityStatusText = "尚未校验";
@@ -97,10 +98,12 @@ public sealed class ConfigViewModel : ObservableObject
             HandleSessionSecuritySaveError);
         decreaseIdleTimeoutCommand = new RelayCommand(
             _ => IdleTimeoutMinutes--,
-            _ => IsAdmin && IdleTimeoutMinutes > ISessionSecurityService.MinimumIdleTimeoutMinutes);
+            _ => CanEditIdleTimeout
+                && IdleTimeoutMinutes > ISessionSecurityService.MinimumIdleTimeoutMinutes);
         increaseIdleTimeoutCommand = new RelayCommand(
             _ => IdleTimeoutMinutes++,
-            _ => IsAdmin && IdleTimeoutMinutes < ISessionSecurityService.MaximumIdleTimeoutMinutes);
+            _ => CanEditIdleTimeout
+                && IdleTimeoutMinutes < ISessionSecurityService.MaximumIdleTimeoutMinutes);
         connectDebugSimulationCommand = new RelayCommand(
             _ => ConnectDebugSimulation(),
             _ => CanConnectDebugSimulation());
@@ -225,6 +228,25 @@ public sealed class ConfigViewModel : ObservableObject
         private set => SetProperty(ref startupSettingsStatus, value);
     }
 
+    public bool IsAutoLockEnabled
+    {
+        get => isAutoLockEnabled;
+        set
+        {
+            if (SetProperty(ref isAutoLockEnabled, value))
+            {
+                OnPropertyChanged(nameof(AutoLockStateText));
+                OnPropertyChanged(nameof(CanEditIdleTimeout));
+                decreaseIdleTimeoutCommand.RaiseCanExecuteChanged();
+                increaseIdleTimeoutCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public string AutoLockStateText => IsAutoLockEnabled ? "已启用" : "未开启";
+
+    public bool CanEditIdleTimeout => IsAdmin && IsAutoLockEnabled;
+
     public int IdleTimeoutMinutes
     {
         get => idleTimeoutMinutes;
@@ -267,6 +289,7 @@ public sealed class ConfigViewModel : ObservableObject
         await sessionSecurityService.InitializeAsync(cancellationToken);
         ApplyPersistedVisibility();
         AutoConnectOnStartup = startupSettingsService.AutoConnectOnStartup;
+        IsAutoLockEnabled = sessionSecurityService.IsAutoLockEnabled;
         IdleTimeoutMinutes = sessionSecurityService.IdleTimeoutMinutes;
         await TryRefreshReleaseIntegrityStatusAsync(cancellationToken);
     }
@@ -421,11 +444,11 @@ public sealed class ConfigViewModel : ObservableObject
         if (result.Succeeded)
         {
             logger.Debug("DEBUG 模拟联机由管理员手动启用");
-            toastService.ShowSuccess("模拟联机已启用", "电刺激将使用 DEBUG 模拟，不会向真实仪器发送命令。");
+            toastService.ShowSuccess("设备联机成功", "16个刺激通道已就绪。");
             return;
         }
 
-        toastService.Show(ToastKind.Warning, "无法启用模拟联机", result.Message);
+        toastService.Show(ToastKind.Warning, "设备联机失败", result.Message);
     }
 
     private void OnDebugSimulationChanged()
@@ -545,8 +568,13 @@ public sealed class ConfigViewModel : ObservableObject
 
     private async Task SaveSessionSecurityAsync(CancellationToken cancellationToken)
     {
-        await sessionSecurityService.SaveIdleTimeoutAsync(IdleTimeoutMinutes, cancellationToken);
-        SessionSecurityStatus = $"自动锁定时间已保存：{IdleTimeoutMinutes}分钟";
+        await sessionSecurityService.SaveAutoLockSettingsAsync(
+            IsAutoLockEnabled,
+            IdleTimeoutMinutes,
+            cancellationToken);
+        SessionSecurityStatus = IsAutoLockEnabled
+            ? $"自动锁定已开启：{IdleTimeoutMinutes}分钟"
+            : "自动锁定已关闭";
     }
 
     private void RestoreNavigationDefaults()
@@ -577,6 +605,7 @@ public sealed class ConfigViewModel : ObservableObject
 
     private void RestoreSessionSecurityDefaults()
     {
+        IsAutoLockEnabled = true;
         IdleTimeoutMinutes = ISessionSecurityService.DefaultIdleTimeoutMinutes;
         SessionSecurityStatus = "已恢复默认，点击保存后生效";
     }
@@ -620,6 +649,7 @@ public sealed class ConfigViewModel : ObservableObject
     {
         HideStimulationSettings();
         OnPropertyChanged(nameof(IsAdmin));
+        OnPropertyChanged(nameof(CanEditIdleTimeout));
         OnPropertyChanged(nameof(NavigationSettingsVisibility));
         OnPropertyChanged(nameof(StimulationSettingsVisibility));
         OnPropertyChanged(nameof(DebugSimulationVisibility));

@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using System.Text.Json;
 
@@ -155,6 +155,26 @@ public sealed class StimulationEngine : IStimulationEngine
             () => ClearActiveChannels(StimulationExecutionState.EmergencyStopped),
             $"EmergencyStopDirectCurrentConfirmed:{reason}",
             token => hardwareService.EmergencyStopGroupAsync(executionGroup, reason, "tDCS", token),
+            cancellationToken);
+        activeConfiguration = null;
+        configurationSnapshots.Clear(SessionModuleCodes.Stimulation);
+        return result;
+    }
+
+    public async Task<HardwareOperationResult> EmergencyStopPulseCurrentGroupAsync(
+        TiGroup group,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var executionGroup = StimulationConfigurationSnapshot.Create(group).ToMutableGroup();
+        await RecordRequestIfSessionActiveAsync("emergency_stop_requested", executionGroup, reason, cancellationToken);
+        auditLog.RecordUserAction($"Emergency stop tPCS group {group.Title}: {reason}");
+        var result = await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Stopping,
+            $"EmergencyStopPulseCurrentRequested:{reason}",
+            () => ClearActiveChannels(StimulationExecutionState.EmergencyStopped),
+            $"EmergencyStopPulseCurrentConfirmed:{reason}",
+            token => hardwareService.EmergencyStopGroupAsync(executionGroup, reason, "tPCS", token),
             cancellationToken);
         activeConfiguration = null;
         configurationSnapshots.Clear(SessionModuleCodes.Stimulation);

@@ -2,6 +2,11 @@ namespace RuinaoSoftwareWpf;
 
 internal static class SessionSecurityPolicy
 {
+    public static bool ParseAutoLockEnabledOrDefault(string? value)
+    {
+        return bool.TryParse(value, out var isEnabled) ? isEnabled : true;
+    }
+
     public static bool IsValidIdleTimeout(int minutes)
     {
         return minutes is >= ISessionSecurityService.MinimumIdleTimeoutMinutes

@@ -19,7 +19,10 @@ public sealed class DebugStimulationImpedanceProviderTests
         var simulation = new DebugHardwareSimulationService();
         var provider = new DebugStimulationImpedanceProvider(simulation);
 
-#if DEBUG
+#if EXHIBITION
+        Assert.True(simulation.Connect(realHardwareConnected: false).Succeeded);
+        Assert.Null(provider.GetSnapshot());
+#elif DEBUG
         Assert.True(simulation.Connect(realHardwareConnected: false).Succeeded);
 
         var first = Assert.IsType<StimulationImpedanceSnapshot>(provider.GetSnapshot());

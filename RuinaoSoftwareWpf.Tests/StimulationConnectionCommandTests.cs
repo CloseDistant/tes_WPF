@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using RuinaoSoftwareWpf.Features.Exhibition.Services;
 using Xunit;
 
 namespace RuinaoSoftwareWpf.Tests;
@@ -182,11 +183,35 @@ public sealed class StimulationConnectionCommandTests
     }
 
     [Fact]
-    public void PulseCurrentStartCommands_RequireExplicitDebugSimulationConnection()
+    public void ExhibitionMode_DebugSimulationCannotReplaceRealHardwareConnection()
     {
         var simulation = new MutableDebugHardwareSimulation();
-        var viewModel = new PulseCurrentControlViewModel(
+        Assert.True(simulation.Connect(realHardwareConnected: false).Succeeded);
+        var realConnection = new MutableHardwareConnectionState();
+        var viewModel = new DirectCurrentControlViewModel(
+            new NoopStimulationEngine(),
+            realConnection,
             simulation,
+            new NoopLoggingService(),
+            new LocalizationViewModel(new AppLocalizationService()),
+            new NoopToastService(),
+            new TestUserDialogService(),
+            exhibitionMode: new ExhibitionModeState());
+        foreach (var channel in viewModel.Channels)
+        {
+            channel.UpdateImpedance(500m);
+        }
+
+        Assert.False(viewModel.SynchronizedStartCommand.CanExecute(null));
+        Assert.False(viewModel.StartChannelCommand.CanExecute(viewModel.Channels[0]));
+    }
+
+    [Fact]
+    public void PulseCurrentStartCommands_RequireRealHardwareConnection()
+    {
+        var connection = new MutableHardwareConnectionState();
+        var viewModel = new PulseCurrentControlViewModel(
+            connection,
             new LocalizationViewModel(new AppLocalizationService()),
             new NoopToastService(),
             new NoopLoggingService(),
@@ -195,9 +220,8 @@ public sealed class StimulationConnectionCommandTests
         Assert.False(viewModel.SynchronizedStartCommand.CanExecute(null));
         Assert.False(viewModel.StartChannelCommand.CanExecute(viewModel.Channels[0]));
 
-        var simulationResult = simulation.Connect(realHardwareConnected: false);
+        connection.SetConnected(true);
 
-        Assert.True(simulationResult.Succeeded);
         Assert.True(viewModel.SynchronizedStartCommand.CanExecute(null));
         Assert.True(viewModel.StartChannelCommand.CanExecute(viewModel.Channels[0]));
     }
@@ -271,6 +295,13 @@ public sealed class StimulationConnectionCommandTests
 
             return new DebugHardwareSimulationResult(true, "Debug simulation is connected.");
         }
+
+        public DebugHardwareSimulationResult Disconnect()
+        {
+            IsConnected = false;
+            ConnectionChanged?.Invoke(this, EventArgs.Empty);
+            return new DebugHardwareSimulationResult(true, "Disconnected.");
+        }
     }
 
     private sealed class NoopStimulationEngine : IStimulationEngine
@@ -301,6 +332,11 @@ public sealed class StimulationConnectionCommandTests
             CancellationToken cancellationToken = default) => NotUsed();
 
         public Task<HardwareOperationResult> EmergencyStopDirectCurrentGroupAsync(
+            TiGroup group,
+            string reason,
+            CancellationToken cancellationToken = default) => NotUsed();
+
+        public Task<HardwareOperationResult> EmergencyStopPulseCurrentGroupAsync(
             TiGroup group,
             string reason,
             CancellationToken cancellationToken = default) => NotUsed();

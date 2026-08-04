@@ -98,7 +98,7 @@ public sealed class PulseCurrentChannelConfig : ObservableObject, IStimulationIm
         }
     }
 
-    public string ImpedanceOhm => ImpedanceOhms?.ToString("0.##", CultureInfo.InvariantCulture) ?? "—";
+    public string ImpedanceOhm => ImpedanceOhms?.ToString("0.00", CultureInfo.InvariantCulture) ?? "—";
 
     public StimulationImpedanceStatus ImpedanceStatus =>
         StimulationImpedancePresentation.GetStatus(ImpedanceOhms);

@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf.Views.Dialogs;
+﻿namespace RuinaoSoftwareWpf.Views.Dialogs;
 
 using System.Globalization;
 using System.Windows;
@@ -54,7 +54,7 @@ public partial class DirectCurrentStartConfirmationDialog : Window
     private static string FormatImpedance(decimal impedanceOhms) =>
         impedanceOhms >= 1000m
             ? $"{(impedanceOhms / 1000m).ToString("0.00", CultureInfo.InvariantCulture)} kΩ"
-            : $"{impedanceOhms.ToString("0.##", CultureInfo.InvariantCulture)} Ω";
+            : $"{impedanceOhms.ToString("0.00", CultureInfo.InvariantCulture)} Ω";
 
     private static Brush BrushFromHex(string color) =>
         (Brush)new BrushConverter().ConvertFromString(color)!;

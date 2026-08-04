@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
@@ -40,7 +40,7 @@ public sealed class StimulationImpedanceDiagnosticChannelViewModel
         ConversionText = snapshot.RawValue switch
         {
             0 => "原始值 0 → 不可用",
-            { } raw => $"{raw} ÷ 100 = {snapshot.ImpedanceOhms:0.##} Ω",
+            { } raw => $"{raw} ÷ 100 = {snapshot.ImpedanceOhms:0.00} Ω",
             _ => "—",
         };
     }
@@ -69,7 +69,7 @@ public sealed class StimulationImpedanceDiagnosticChannelViewModel
 
         return impedanceOhms.Value >= 1_000m
             ? $"{impedanceOhms.Value / 1_000m:0.00} kΩ"
-            : $"{impedanceOhms.Value:0.##} Ω";
+            : $"{impedanceOhms.Value:0.00} Ω";
     }
 }
 

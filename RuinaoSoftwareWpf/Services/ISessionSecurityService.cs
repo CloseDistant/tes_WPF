@@ -13,6 +13,8 @@ public interface ISessionSecurityService
 
     event EventHandler? StateChanged;
 
+    bool IsAutoLockEnabled { get; }
+
     int IdleTimeoutMinutes { get; }
 
     DateTimeOffset LastActivityUtc { get; }
@@ -33,7 +35,8 @@ public interface ISessionSecurityService
         string password,
         CancellationToken cancellationToken = default);
 
-    Task SaveIdleTimeoutAsync(
+    Task SaveAutoLockSettingsAsync(
+        bool isEnabled,
         int minutes,
         CancellationToken cancellationToken = default);
 }

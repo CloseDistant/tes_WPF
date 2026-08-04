@@ -110,6 +110,7 @@
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5" />
+                                <Setter Property="Cursor" Value="Arrow" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -318,73 +319,84 @@
                                        Foreground="#E1E6EE"
                                        FontSize="14"
                                        FontWeight="SemiBold" />
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Ellipse Width="7" Height="7" Fill="#56D981" Margin="0,0,7,0" />
-                                <TextBlock Text="已启用" Foreground="#78D995" FontSize="12" />
-                            </StackPanel>
+                            <CheckBox Content="{Binding AutoLockStateText}"
+                                      IsChecked="{Binding IsAutoLockEnabled, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsAdmin}"
+                                      Style="{StaticResource FeatureCheckBox}"
+                                      Width="86"
+                                      HorizontalAlignment="Right" />
                         </Grid>
-                        <TextBlock Text="达到设定的无操作时间后，软件将锁定当前会话。"
+                        <TextBlock Text="开启后，达到设定的无操作时间将锁定当前会话；选择未开启并保存后可关闭自动锁定。"
                                    Foreground="#929DAF"
                                    FontSize="11"
                                    TextWrapping="Wrap"
                                    Margin="0,0,0,20" />
 
-                        <TextBlock Text="无操作锁定时间"
-                                   Foreground="#C8CEDA"
-                                   FontSize="13"
-                                   Margin="0,0,0,10" />
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                            <Button Content="−"
-                                    Command="{Binding DecreaseIdleTimeoutCommand}"
-                                    Style="{StaticResource SecurityStepButton}"
-                                    IsEnabled="{Binding IsAdmin}" />
-                            <Border Width="100"
-                                    Height="36"
-                                    Background="#202632"
-                                    BorderBrush="#667187"
-                                    BorderThickness="1"
-                                    Margin="10,0">
-                                <TextBlock Text="{Binding IdleTimeoutMinutes}"
-                                           Foreground="White"
-                                           FontSize="16"
-                                           FontWeight="SemiBold"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center" />
-                            </Border>
-                            <Button Content="+"
-                                    Command="{Binding IncreaseIdleTimeoutCommand}"
-                                    Style="{StaticResource SecurityStepButton}"
-                                    IsEnabled="{Binding IsAdmin}" />
-                            <TextBlock Text="分钟"
-                                       Foreground="#AEB8C9"
-                                       FontSize="12"
-                                       VerticalAlignment="Center"
-                                       Margin="10,0,0,0" />
+                        <StackPanel IsEnabled="{Binding CanEditIdleTimeout}">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Opacity" Value="1" />
+                                    <Style.Triggers>
+                                        <Trigger Property="IsEnabled" Value="False">
+                                            <Setter Property="Opacity" Value="0.48" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock Text="无操作锁定时间"
+                                       Foreground="#C8CEDA"
+                                       FontSize="13"
+                                       Margin="0,0,0,10" />
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Content="−"
+                                        Command="{Binding DecreaseIdleTimeoutCommand}"
+                                        Style="{StaticResource SecurityStepButton}" />
+                                <Border Width="100"
+                                        Height="36"
+                                        Background="#202632"
+                                        BorderBrush="#667187"
+                                        BorderThickness="1"
+                                        Margin="10,0">
+                                    <TextBlock Text="{Binding IdleTimeoutMinutes}"
+                                               Foreground="White"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Border>
+                                <Button Content="+"
+                                        Command="{Binding IncreaseIdleTimeoutCommand}"
+                                        Style="{StaticResource SecurityStepButton}" />
+                                <TextBlock Text="分钟"
+                                           Foreground="#AEB8C9"
+                                           FontSize="12"
+                                           VerticalAlignment="Center"
+                                           Margin="10,0,0,0" />
+                            </StackPanel>
+                            <Slider Minimum="5"
+                                    Maximum="30"
+                                    TickFrequency="1"
+                                    IsSnapToTickEnabled="True"
+                                    Value="{Binding IdleTimeoutMinutes, Mode=TwoWay}"
+                                    Foreground="#D0903E"
+                                    Margin="0,0,0,2" />
+                            <Grid Margin="0,0,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="5" Foreground="#7F8CA4" FontSize="10" />
+                                <TextBlock Grid.Column="1" Text="10" Foreground="#7F8CA4" FontSize="10" HorizontalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="15" Foreground="#7F8CA4" FontSize="10" HorizontalAlignment="Center" />
+                                <TextBlock Grid.Column="3" Text="20" Foreground="#7F8CA4" FontSize="10" HorizontalAlignment="Center" />
+                                <TextBlock Grid.Column="4" Text="25" Foreground="#7F8CA4" FontSize="10" HorizontalAlignment="Center" />
+                                <TextBlock Grid.Column="5" Text="30" Foreground="#7F8CA4" FontSize="10" HorizontalAlignment="Right" />
+                            </Grid>
                         </StackPanel>
-                        <Slider Minimum="5"
-                                Maximum="30"
-                                TickFrequency="1"
-                                IsSnapToTickEnabled="True"
-                                Value="{Binding IdleTimeoutMinutes, Mode=TwoWay}"
-                                IsEnabled="{Binding IsAdmin}"
-                                Foreground="#D0903E"
-                                Margin="0,0,0,2" />
-                        <Grid Margin="0,0,0,2">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="5" Foreground="#7F8CA4" FontSize="10" />
-                            <TextBlock Grid.Column="1" Text="10" Foreground="#7F8CA4" FontSize="10" HorizontalAlignment="Center" />
-                            <TextBlock Grid.Column="2" Text="15" Foreground="#7F8CA4" FontSize="10" HorizontalAlignment="Center" />
-                            <TextBlock Grid.Column="3" Text="20" Foreground="#7F8CA4" FontSize="10" HorizontalAlignment="Center" />
-                            <TextBlock Grid.Column="4" Text="25" Foreground="#7F8CA4" FontSize="10" HorizontalAlignment="Center" />
-                            <TextBlock Grid.Column="5" Text="30" Foreground="#7F8CA4" FontSize="10" HorizontalAlignment="Right" />
-                        </Grid>
                     </StackPanel>
                 </Border>
 

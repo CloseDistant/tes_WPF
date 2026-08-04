@@ -5,6 +5,27 @@ using Xunit;
 public sealed class SessionSecurityPolicyTests
 {
     [Theory]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    [InlineData("TRUE", true)]
+    public void ParseAutoLockEnabledOrDefault_ParsesStoredBoolean(
+        string storedValue,
+        bool expected)
+    {
+        Assert.Equal(expected, SessionSecurityPolicy.ParseAutoLockEnabledOrDefault(storedValue));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("invalid")]
+    public void ParseAutoLockEnabledOrDefault_DefaultsToEnabledForMissingOrInvalidValue(
+        string? storedValue)
+    {
+        Assert.True(SessionSecurityPolicy.ParseAutoLockEnabledOrDefault(storedValue));
+    }
+
+    [Theory]
     [InlineData(5)]
     [InlineData(15)]
     [InlineData(30)]

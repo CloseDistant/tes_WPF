@@ -1,7 +1,8 @@
-namespace RuinaoSoftwareWpf.Tests;
+﻿namespace RuinaoSoftwareWpf.Tests;
 
 using System.Reflection;
 using RuinaoSoftwareWpf.ApplicationContracts;
+using RuinaoSoftwareWpf.Features.Exhibition.Services;
 using Xunit;
 
 public sealed class ApplicationLayerArchitectureTests
@@ -79,7 +80,7 @@ public sealed class ApplicationLayerArchitectureTests
         Assert.NotNull(services.GetService(typeof(ICaptureMediaService)));
         Assert.NotNull(services.GetService(typeof(IEegAcquisitionService)));
 
-        Assert.NotNull(services.GetService(typeof(IHardwareService)));
+        Assert.IsType<ExhibitionHardwareService>(services.GetService(typeof(IHardwareService)));
         Assert.NotNull(services.GetService(typeof(ILegacyEegAcquisitionService)));
     }
 

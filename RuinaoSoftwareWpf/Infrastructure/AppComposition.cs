@@ -2,6 +2,7 @@
 
 using Microsoft.Extensions.DependencyInjection;
 using RuinaoSoftwareWpf.ApplicationContracts;
+using RuinaoSoftwareWpf.Features.Exhibition.Services;
 using RuinaoTesHardware;
 
 /// <summary>
@@ -103,7 +104,13 @@ public static class AppComposition
         services.AddSingleton<IStimulationStateMachine, StimulationStateMachine>(); // 刺激状态机
         services.AddSingleton<IHeadModelStateMachine, HeadModelStateMachine>(); // 头模型状态机
         services.AddSingleton<ISafetyService, SafetyService>();           // 安全监控服务
-        services.AddSingleton<IHardwareService, HardwareService>();       // 硬件业务服务
+        services.AddSingleton<IExhibitionModeState, ExhibitionModeState>(); // 编译期展览状态，Release同样生效
+#if EXHIBITION
+        services.AddSingleton<HardwareService>();                         // 展览版仍用真实链路完成联机、握手、心跳和拓扑
+        services.AddSingleton<IHardwareService, ExhibitionHardwareService>(); // 刺激输出在应用硬件边界统一截断
+#else
+        services.AddSingleton<IHardwareService, HardwareService>();       // 正式硬件业务服务
+#endif
         services.AddSingleton<IHardwareConnectionState>(
             provider => provider.GetRequiredService<IHardwareService>());
         services.AddSingleton<IStimulationDeviceGateway, LegacyStimulationDeviceGatewayAdapter>();
