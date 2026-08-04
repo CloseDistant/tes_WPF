@@ -11,6 +11,8 @@ namespace RuinaoSoftwareWpf;
 /// <summary>经颅直流电刺激页面状态和通道级控制命令。</summary>
 public sealed class DirectCurrentControlViewModel : ObservableObject
 {
+    private static readonly TimeSpan EmergencyStopCooldown = TimeSpan.FromSeconds(2);
+
     private readonly IStimulationEngine stimulationEngine;
     private readonly IHardwareConnectionState hardwareConnectionState;
     private readonly IHardwareService? hardwareService;
@@ -35,6 +37,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     private DirectCurrentChannelPair? selectedChannelPair;
     private ChannelConfig? selectedChannel;
     private bool startOperationInProgress;
+    private bool emergencyStopCooldownInProgress;
 
     public DirectCurrentControlViewModel(
         IStimulationEngine stimulationEngine,
@@ -89,7 +92,9 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         });
         synchronizedStartCommand = new AsyncRelayCommand(
             (_, cancellationToken) => StartSynchronizedAsync(cancellationToken),
-            _ => CanStartStimulation && activeChannels.Count == 0,
+            _ => CanStartStimulation
+                && activeChannels.Count == 0
+                && Channels.Any(IsChannelEligibleToStart),
             HandleStartFailure);
         SynchronizedStartCommand = synchronizedStartCommand;
         startChannelCommand = new AsyncRelayCommand(
@@ -101,6 +106,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
                 }
             }, parameter => CanStartStimulation
                 && parameter is ChannelConfig channel
+                && IsChannelEligibleToStart(channel)
                 && !activeChannels.ContainsKey(channel),
             onError: HandleStartFailure);
         StartChannelCommand = startChannelCommand;
@@ -113,25 +119,29 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
                 }
             },
             parameter => CanControlHardware
+                && !emergencyStopCooldownInProgress
                 && parameter is ChannelConfig channel
                 && activeChannels.ContainsKey(channel),
             onError: HandleStopFailure);
         StopChannelCommand = stopChannelCommand;
         emergencyStopCommand = new AsyncRelayCommand(
             (_, cancellationToken) => EmergencyStopAsync(cancellationToken),
-            _ => CanControlHardware,
+            _ => CanControlHardware && !emergencyStopCooldownInProgress,
             HandleEmergencyStopFailure);
         EmergencyStopCommand = emergencyStopCommand;
         usePrescriptionCommand = new RelayCommand(
             _ => RequestPrescription(StimulationPrescriptionApplyScope.AllChannels),
-            _ => activeChannels.Count == 0 && !startOperationInProgress);
+            _ => activeChannels.Count == 0
+                && !startOperationInProgress
+                && !emergencyStopCooldownInProgress);
         UsePrescriptionCommand = usePrescriptionCommand;
         useChannelPrescriptionCommand = new RelayCommand(
             parameter => RequestPrescription(StimulationPrescriptionApplyScope.SingleChannel, parameter),
             parameter => parameter is ChannelConfig channel
                 && Channels.Contains(channel)
                 && !activeChannels.ContainsKey(channel)
-                && !startOperationInProgress);
+                && !startOperationInProgress
+                && !emergencyStopCooldownInProgress);
         UseChannelPrescriptionCommand = useChannelPrescriptionCommand;
         ParameterValidationFailedCommand = new RelayCommand(parameter =>
         {
@@ -349,12 +359,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             snapshots[channel] = snapshot!;
         }
 
-        if (impedanceAssessment.RequiresConfirmation
-            && !userDialogService.ConfirmWarning(
-                "阻抗状态确认",
-                StimulationImpedanceStartPolicy.BuildConfirmationMessage(impedanceAssessment),
-                "确认并继续",
-                "取消"))
+        if (!ConfirmSynchronizedStart(impedanceAssessment))
         {
             return;
         }
@@ -408,19 +413,14 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             return;
         }
 
-        if (impedanceAssessment.WarningChannels.Count > 0
-            && !userDialogService.ConfirmWarning(
-                "阻抗状态确认",
-                StimulationImpedanceStartPolicy.BuildSingleWarningConfirmationMessage(channel),
-                "确认并继续",
-                "取消"))
-        {
-            return;
-        }
-
         if (!DirectCurrentWaveformParameters.TryCreate(channel, out var snapshot, out var error))
         {
             toastService.ShowError("参数校验失败", error);
+            return;
+        }
+
+        if (!ConfirmSingleChannelStart(channel, snapshot!, impedanceAssessment))
+        {
             return;
         }
 
@@ -457,27 +457,36 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         var running = activeChannels.Keys.ToArray();
         var stoppedAt = Stopwatch.GetTimestamp();
         var group = CreateExecutionGroup(running);
-        var result = await stimulationEngine.EmergencyStopDirectCurrentGroupAsync(
-            group,
-            "用户点击急停",
-            cancellationToken);
-        foreach (var channel in running)
+        SetEmergencyStopCooldownState(true);
+        try
         {
-            if (!activeChannels.TryGetValue(channel, out var runtime))
+            var result = await stimulationEngine.EmergencyStopDirectCurrentGroupAsync(
+                group,
+                "用户点击急停",
+                cancellationToken);
+            foreach (var channel in running)
             {
-                continue;
+                if (!activeChannels.TryGetValue(channel, out var runtime))
+                {
+                    continue;
+                }
+
+                FinalizeStoppedChannel(
+                    channel,
+                    Stopwatch.GetElapsedTime(runtime.StartTimestamp, stoppedAt).TotalSeconds,
+                    completed: false);
             }
 
-            FinalizeStoppedChannel(
-                channel,
-                Stopwatch.GetElapsedTime(runtime.StartTimestamp, stoppedAt).TotalSeconds,
-                completed: false);
+            StopTimerWhenIdle();
+            SetEmergencyStopCooldownState(true);
+            toastService.ShowSuccess("紧急停止", "背板急停命令已发送，设备稳定期间请等待2秒。");
+            HardwareOperationCompleted?.Invoke(this, result);
+            await Task.Delay(EmergencyStopCooldown);
         }
-
-        StopTimerWhenIdle();
-        RefreshCommandStates();
-        toastService.ShowSuccess("紧急停止", "已向背板发送紧急停止命令。");
-        HardwareOperationCompleted?.Invoke(this, result);
+        finally
+        {
+            SetEmergencyStopCooldownState(false);
+        }
     }
 
     private async Task StopChannelAsync(
@@ -611,7 +620,9 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     }
 
     private bool CanStartStimulation =>
-        CanControlHardware && !startOperationInProgress;
+        CanControlHardware
+        && !startOperationInProgress
+        && !emergencyStopCooldownInProgress;
 
     private bool CanControlHardware =>
         hardwareConnectionState.IsConnected || debugHardwareSimulation.IsConnected;
@@ -678,6 +689,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
                 previousImpedanceStatuses[channel] = channel.ImpedanceStatus;
             }
 
+            RefreshCommandStates();
             return;
         }
 
@@ -739,6 +751,8 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
                 .ToArray();
             _ = StopUnsafeChannelGroupsAsync(boardGroups);
         }
+
+        RefreshCommandStates();
     }
 
     private async Task StopUnsafeChannelGroupsAsync(
@@ -897,6 +911,60 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
 
         RefreshCommandStates();
     }
+
+    private void SetEmergencyStopCooldownState(bool isActive)
+    {
+        emergencyStopCooldownInProgress = isActive;
+        foreach (var channel in Channels)
+        {
+            channel.IsParameterEditingEnabled = !isActive
+                && !activeChannels.ContainsKey(channel)
+                && !channel.IsStarting;
+        }
+
+        RefreshCommandStates();
+    }
+
+    private bool ConfirmSynchronizedStart(
+        StimulationImpedanceStartAssessment<ChannelConfig> impedanceAssessment)
+    {
+        var message = impedanceAssessment.RequiresConfirmation
+            ? StimulationImpedanceStartPolicy.BuildConfirmationMessage(impedanceAssessment)
+            : $"即将同步开始{impedanceAssessment.EligibleChannels.Count}个通道的经颅直流电刺激。"
+                + "\n\n请确认各通道刺激参数、阻抗和连接状态无误。";
+        return userDialogService.ConfirmWarning(
+            "同步开始确认",
+            message,
+            "确认开始",
+            "取消");
+    }
+
+    private bool ConfirmSingleChannelStart(
+        ChannelConfig channel,
+        DirectCurrentWaveformParameters parameters,
+        StimulationImpedanceStartAssessment<ChannelConfig> impedanceAssessment)
+    {
+        double? singleDurationSeconds = parameters.IsContinuous
+            ? null
+            : parameters.RampUpSeconds + parameters.PlateauSeconds + parameters.RampDownSeconds;
+        return userDialogService.ConfirmDirectCurrentStart(
+            new DirectCurrentStartConfirmationRequest(
+                channel.Name,
+                parameters.CurrentMilliamp,
+                parameters.IsContinuous,
+                parameters.ReversePolarity,
+                parameters.RampUpSeconds,
+                parameters.RampDownSeconds,
+                parameters.TotalDurationSeconds,
+                singleDurationSeconds,
+                parameters.IsContinuous ? null : parameters.IntervalSeconds,
+                channel.ImpedanceOhms!.Value,
+                impedanceAssessment.WarningChannels.Count > 0));
+    }
+
+    private static bool IsChannelEligibleToStart(ChannelConfig channel) =>
+        channel.ImpedanceStatus is StimulationImpedanceStatus.Normal
+            or StimulationImpedanceStatus.Warning;
 
     private void CancelPendingStartOperations()
     {

@@ -360,7 +360,7 @@ public sealed class HardwareService : IHardwareService
 
     /// <summary>
     /// 紧急停止某个 TI 刺激组。
-    /// 流程：下发参数，再下发急停命令。
+    /// tDCS只向背板发送急停命令；当前固件无回复，以USB完整写入作为临时成功边界。
     /// </summary>
     public async Task<HardwareOperationResult> EmergencyStopGroupAsync(
         TiGroup group,
@@ -397,8 +397,9 @@ public sealed class HardwareService : IHardwareService
             return DebugMockResult(stimulationType, "已急停");
         }
 
-        logger.Hardware($"紧急停止：硬件 ACK 已确认，group={group.Title}, channels={selectedChannelNames}");
-        return Result($"设备：已确认 | 模式：{stimulationType} | 刺激：已急停");
+        logger.Hardware(
+            $"紧急停止：USB完整写入已确认，固件无回复，group={group.Title}, channels={selectedChannelNames}");
+        return Result($"设备：USB写入完成 | 模式：{stimulationType} | 刺激：已急停");
     }
 
     public async Task<HardwareOperationResult> CompleteGroupAsync(

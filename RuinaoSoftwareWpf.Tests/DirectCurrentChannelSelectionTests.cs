@@ -108,6 +108,58 @@ public sealed class DirectCurrentChannelSelectionTests
         Assert.False(target.IsStimulating);
     }
 
+    [Fact]
+    public void StartChannel_WhenUserCancelsGeneralConfirmation_DoesNotStart()
+    {
+        var dialog = new TestUserDialogService { ConfirmationResult = false };
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine, userDialogService: dialog);
+        var target = viewModel.Channels[0];
+        target.CurrentMA = "1";
+        target.RampUpS = "2";
+        target.RampDownS = "3";
+        target.DurationS = "30";
+        target.SingleDurationS = "10";
+        target.IntervalS = "4";
+        target.Polarity = "调转";
+
+        viewModel.StartChannelCommand.Execute(target);
+
+        Assert.Null(engine.LastStartedDirectCurrentGroup);
+        Assert.False(target.IsStimulating);
+        var confirmation = Assert.IsType<DirectCurrentStartConfirmationRequest>(
+            dialog.LastDirectCurrentStartConfirmation);
+        Assert.Equal("CH 1", confirmation.ChannelName);
+        Assert.Equal(1, confirmation.CurrentMilliampere);
+        Assert.False(confirmation.IsContinuousMode);
+        Assert.True(confirmation.IsReversePolarity);
+        Assert.Equal(2, confirmation.RampUpSeconds);
+        Assert.Equal(3, confirmation.RampDownSeconds);
+        Assert.Equal(30, confirmation.TotalDurationSeconds);
+        Assert.Equal(10, confirmation.SingleDurationSeconds);
+        Assert.Equal(4, confirmation.IntervalSeconds);
+        Assert.Equal(500m, confirmation.ImpedanceOhms);
+    }
+
+    [Fact]
+    public void SynchronizedStart_WhenUserCancelsGeneralConfirmation_DoesNotStart()
+    {
+        var dialog = new TestUserDialogService { ConfirmationResult = false };
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine, userDialogService: dialog);
+        foreach (var channel in viewModel.Channels)
+        {
+            channel.CurrentMA = "1";
+        }
+
+        viewModel.SynchronizedStartCommand.Execute(null);
+
+        Assert.Null(engine.LastStartedDirectCurrentGroup);
+        Assert.All(viewModel.Channels, channel => Assert.False(channel.IsStimulating));
+        Assert.Equal("同步开始确认", dialog.LastConfirmationTitle);
+        Assert.Contains("16个通道", dialog.LastConfirmationMessage);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData(20001)]
@@ -118,6 +170,8 @@ public sealed class DirectCurrentChannelSelectionTests
         var target = viewModel.Channels[0];
         target.CurrentMA = "1";
         target.UpdateImpedance(impedanceOhms);
+
+        Assert.False(viewModel.StartChannelCommand.CanExecute(target));
 
         viewModel.StartChannelCommand.Execute(target);
 
@@ -135,11 +189,17 @@ public sealed class DirectCurrentChannelSelectionTests
         target.CurrentMA = "1";
         target.UpdateImpedance(12_400m);
 
+        Assert.True(viewModel.StartChannelCommand.CanExecute(target));
+
         viewModel.StartChannelCommand.Execute(target);
 
         Assert.False(target.IsStimulating);
         Assert.Null(engine.LastStartedDirectCurrentGroup);
-        Assert.Contains("CH2：12.40kΩ", dialog.LastConfirmationMessage);
+        var confirmation = Assert.IsType<DirectCurrentStartConfirmationRequest>(
+            dialog.LastDirectCurrentStartConfirmation);
+        Assert.Equal("CH 2", confirmation.ChannelName);
+        Assert.Equal(12_400m, confirmation.ImpedanceOhms);
+        Assert.True(confirmation.IsImpedanceWarning);
     }
 
     [Fact]
@@ -242,6 +302,25 @@ public sealed class DirectCurrentChannelSelectionTests
 
         Assert.Equal(1, engine.DirectCurrentEmergencyStopCount);
         Assert.Equal("紧急停止", toast.Title);
+    }
+
+    [Fact]
+    public void EmergencyStopCommand_AfterUsbWrite_DisablesTdcsOperationsDuringCooldown()
+    {
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine);
+        var running = viewModel.Channels[0];
+        var idle = viewModel.Channels[1];
+        running.CurrentMA = "1";
+
+        viewModel.StartChannelCommand.Execute(running);
+        viewModel.EmergencyStopCommand.Execute(null);
+
+        Assert.False(viewModel.StartChannelCommand.CanExecute(idle));
+        Assert.False(viewModel.SynchronizedStartCommand.CanExecute(null));
+        Assert.False(viewModel.StopChannelCommand.CanExecute(running));
+        Assert.False(viewModel.EmergencyStopCommand.CanExecute(null));
+        Assert.All(viewModel.Channels, channel => Assert.False(channel.IsParameterEditingEnabled));
     }
 
     [Fact]

@@ -143,22 +143,20 @@ public sealed class DirectCurrentStimulationClient
 
     /// <summary>
     /// 向背板发送全机紧急停止命令。该命令只写背板0x0003=0，
-    /// 不遍历业务板，也不附加任何通道拉低操作。
+    /// 不遍历业务板，也不附加任何通道拉低操作。当前固件不回复此命令，
+    /// 因此只确认USB完整写入，不等待ACK或Response。
     /// </summary>
-    public async Task<DirectCurrentCommandResult> EmergencyStopBackplaneAsync(
+    public async Task EmergencyStopBackplaneAsync(
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)
     {
-        var result = await ExecuteHardwareOperationAsync(
+        await ExecuteHardwareOperationAsync(
             "背板紧急停止",
-            () => client.WriteRegistersAsync(
+            () => client.SendWriteRegistersAsync(
                 TesV14ProtocolConstants.BackplaneAddress,
                 [new TesV14RegisterValue(StopRegister, 0)],
                 options,
                 cancellationToken));
-        return ToProductResult(
-            result,
-            "背板紧急停止命令已被硬件接受；硬件停止状态尚未回读验证。");
     }
 
     public static DirectCurrentStimulationPlan CreatePlan(
@@ -285,6 +283,36 @@ public sealed class DirectCurrentStimulationClient
                 DirectCurrentDiagnosticCode.ResponseTimeout,
                 operation,
                 $"{operation}未在规定时间内收到匹配回复。",
+                exception);
+        }
+        catch (BackplaneConnectionException exception)
+        {
+            throw new DirectCurrentStimulationException(
+                DirectCurrentDiagnosticCode.CommunicationFailure,
+                operation,
+                $"{operation}失败：{exception.Message}",
+                exception);
+        }
+    }
+
+    private static async Task ExecuteHardwareOperationAsync(
+        string operation,
+        Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (TimeoutException exception)
+        {
+            throw new DirectCurrentStimulationException(
+                DirectCurrentDiagnosticCode.ResponseTimeout,
+                operation,
+                $"{operation}未在规定时间内完成USB写入。",
                 exception);
         }
         catch (BackplaneConnectionException exception)

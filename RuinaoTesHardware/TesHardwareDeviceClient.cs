@@ -132,7 +132,7 @@ public sealed class TesHardwareDeviceClient
             cancellationToken);
 
     /// <summary>只向背板发送0x0003=0的全机紧急停止命令。</summary>
-    public Task<DirectCurrentCommandResult> EmergencyStopBackplaneAsync(
+    public Task EmergencyStopBackplaneAsync(
         CancellationToken cancellationToken = default) =>
         directCurrentClient.EmergencyStopBackplaneAsync(DefaultOptions, cancellationToken);
 

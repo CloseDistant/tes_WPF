@@ -1,0 +1,222 @@
+<Window x:Class="RuinaoSoftwareWpf.Views.Dialogs.DirectCurrentStartConfirmationDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="开始刺激前确认"
+        Width="640"
+        SizeToContent="Height"
+        MinHeight="430"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False">
+    <Window.Resources>
+        <Style x:Key="DirectCurrentConfirmButtonStyle" TargetType="Button">
+            <Setter Property="MinWidth" Value="118" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Padding" Value="18,0" />
+            <Setter Property="Background" Value="#252D3B" />
+            <Setter Property="Foreground" Value="#EAF1FB" />
+            <Setter Property="BorderBrush" Value="#46536A" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Surface"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="#303A4B" />
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="#D0903E" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="#364154" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Cursor" Value="Arrow" />
+                                <Setter Property="Foreground" Value="#677286" />
+                                <Setter TargetName="Surface" Property="Background" Value="#1B222E" />
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="#30394A" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DirectCurrentConfirmPrimaryButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource DirectCurrentConfirmButtonStyle}">
+            <Setter Property="Background" Value="#27B65A" />
+            <Setter Property="BorderBrush" Value="#27B65A" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+
+        <Style x:Key="DirectCurrentParameterCellStyle" TargetType="Border">
+            <Setter Property="Background" Value="#151D2A" />
+            <Setter Property="BorderBrush" Value="#303B4E" />
+            <Setter Property="BorderThickness" Value="0,0,1,0" />
+            <Setter Property="Padding" Value="12,10" />
+        </Style>
+    </Window.Resources>
+
+    <Border Background="#1A2331"
+            BorderBrush="#3E4B60"
+            BorderThickness="1"
+            CornerRadius="8"
+            MouseLeftButtonDown="DialogRoot_MouseLeftButtonDown">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000"
+                              BlurRadius="22"
+                              ShadowDepth="0"
+                              Opacity="0.55" />
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Background="#202938"
+                    BorderBrush="#303B4E"
+                    BorderThickness="0,0,0,1"
+                    CornerRadius="8,8,0,0"
+                    Padding="22,18,18,16">
+                <Grid>
+                    <StackPanel>
+                        <TextBlock Text="开始刺激前确认"
+                                   Foreground="#F0F5FC"
+                                   FontSize="19"
+                                   FontWeight="SemiBold" />
+                        <TextBlock x:Name="SubtitleText"
+                                   Margin="0,4,0,0"
+                                   Foreground="#9FB0C6"
+                                   FontSize="12" />
+                    </StackPanel>
+                    <Button HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            Content="×"
+                            FontSize="18"
+                            Foreground="#B6C3D6"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            Click="CancelButton_Click" />
+                </Grid>
+            </Border>
+
+            <Border x:Name="ImpedanceStatusBorder"
+                    Grid.Row="1"
+                    Margin="22,18,22,0"
+                    Padding="14,11"
+                    CornerRadius="4"
+                    BorderThickness="1">
+                <Grid>
+                    <TextBlock Text="通道状态检查通过"
+                               Foreground="#DCE6F4"
+                               VerticalAlignment="Center" />
+                    <TextBlock x:Name="ImpedanceStatusText"
+                               HorizontalAlignment="Right"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="2" Margin="22,18,22,0">
+                <TextBlock Text="输出参数"
+                           Margin="0,0,0,8"
+                           Foreground="#CAD6E7"
+                           FontWeight="SemiBold" />
+                <Border BorderBrush="#303B4E" BorderThickness="1" CornerRadius="4">
+                    <UniformGrid Columns="4">
+                        <Border Style="{StaticResource DirectCurrentParameterCellStyle}">
+                            <StackPanel><TextBlock Text="幅值" Foreground="#8FA1BA" /><TextBlock x:Name="CurrentText" Margin="0,5,0,0" Foreground="#F0F5FC" FontWeight="SemiBold" /></StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource DirectCurrentParameterCellStyle}">
+                            <StackPanel><TextBlock Text="极性" Foreground="#8FA1BA" /><TextBlock x:Name="PolarityText" Margin="0,5,0,0" Foreground="#F0F5FC" FontWeight="SemiBold" /></StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource DirectCurrentParameterCellStyle}">
+                            <StackPanel><TextBlock Text="模式" Foreground="#8FA1BA" /><TextBlock x:Name="ModeText" Margin="0,5,0,0" Foreground="#F0F5FC" FontWeight="SemiBold" /></StackPanel>
+                        </Border>
+                        <Border Background="#151D2A" Padding="12,10">
+                            <StackPanel><TextBlock Text="目标通道" Foreground="#8FA1BA" /><TextBlock x:Name="ChannelText" Margin="0,5,0,0" Foreground="#F0F5FC" FontWeight="SemiBold" /></StackPanel>
+                        </Border>
+                    </UniformGrid>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Grid.Row="3" Margin="22,18,22,0">
+                <TextBlock Text="时间参数"
+                           Margin="0,0,0,8"
+                           Foreground="#CAD6E7"
+                           FontWeight="SemiBold" />
+                <Border BorderBrush="#303B4E" BorderThickness="1" CornerRadius="4">
+                    <UniformGrid Columns="4">
+                        <Border Style="{StaticResource DirectCurrentParameterCellStyle}">
+                            <StackPanel><TextBlock Text="渐升" Foreground="#8FA1BA" /><TextBlock x:Name="RampUpText" Margin="0,5,0,0" Foreground="#F0F5FC" FontWeight="SemiBold" /></StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource DirectCurrentParameterCellStyle}">
+                            <StackPanel><TextBlock Text="渐降" Foreground="#8FA1BA" /><TextBlock x:Name="RampDownText" Margin="0,5,0,0" Foreground="#F0F5FC" FontWeight="SemiBold" /></StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource DirectCurrentParameterCellStyle}">
+                            <StackPanel><TextBlock Text="刺激时间" Foreground="#8FA1BA" /><TextBlock x:Name="TotalDurationText" Margin="0,5,0,0" Foreground="#F0F5FC" FontWeight="SemiBold" /></StackPanel>
+                        </Border>
+                        <Border Background="#151D2A" Padding="12,10">
+                            <StackPanel><TextBlock Text="单次 / 间隔" Foreground="#8FA1BA" /><TextBlock x:Name="CycleText" Margin="0,5,0,0" Foreground="#F0F5FC" FontWeight="SemiBold" /></StackPanel>
+                        </Border>
+                    </UniformGrid>
+                </Border>
+            </StackPanel>
+
+            <Border x:Name="NoticeBorder"
+                    Grid.Row="4"
+                    Margin="22,18,22,0"
+                    Padding="14,11"
+                    Background="#172435"
+                    BorderBrush="#4A9FE5"
+                    BorderThickness="3,0,0,0">
+                <TextBlock x:Name="NoticeText"
+                           Foreground="#D9E8FA"
+                           TextWrapping="Wrap" />
+            </Border>
+
+            <Border Grid.Row="5"
+                    Margin="0,20,0,0"
+                    Padding="22,16"
+                    Background="#1C2533"
+                    BorderBrush="#303B4E"
+                    BorderThickness="0,1,0,0"
+                    CornerRadius="0,0,8,8">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="返回修改"
+                            Margin="0,0,10,0"
+                            Style="{StaticResource DirectCurrentConfirmButtonStyle}"
+                            Click="CancelButton_Click" />
+                    <Button Content="确认并开始"
+                            Style="{StaticResource DirectCurrentConfirmPrimaryButtonStyle}"
+                            Click="ConfirmButton_Click" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

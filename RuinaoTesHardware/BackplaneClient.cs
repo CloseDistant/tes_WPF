@@ -287,6 +287,49 @@ public sealed class BackplaneClient : IAsyncDisposable
             request, requestSequence, targetAddress, true, options.Timeout, cancellationToken, registers);
     }
 
+    /// <summary>
+    /// 写入寄存器并只等待USB完整发送，不等待硬件ACK或Response。
+    /// 此入口只供已确认固件无回复的命令使用，不能用于普通配置、启动或停止命令。
+    /// </summary>
+    public async Task SendWriteRegistersAsync(
+        byte targetAddress,
+        IReadOnlyList<TesV14RegisterValue> registers,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(registers);
+        if (!transport.IsOpen)
+        {
+            throw new BackplaneConnectionException("请先联机并完成背板握手，再执行寄存器操作。");
+        }
+
+        if (transport is not IBackplaneOneWayTransport oneWayTransport)
+        {
+            throw new BackplaneConnectionException("当前USB传输实现不支持无回复写入。");
+        }
+
+        byte[] request;
+        ushort requestSequence;
+        lock (protocolLock)
+        {
+            protocolApi.ProtocolVersion = options.ProtocolVersion;
+            protocolApi.DestinationAddress = targetAddress;
+            request = protocolApi.BuildWriteRegisters(registers, out requestSequence);
+        }
+
+        WriteLog(
+            "REG_WRITE_ONE_WAY",
+            $"无回复写寄存器帧已生成：target=0x{targetAddress:X2} seq={requestSequence} bytes={request.Length}",
+            request);
+        var stopwatch = Stopwatch.StartNew();
+        await oneWayTransport.SendAsync(request, cancellationToken);
+        stopwatch.Stop();
+        WriteLog(
+            "DECISION",
+            $"无回复写寄存器USB发送完成：target=0x{targetAddress:X2} seq={requestSequence} "
+                + $"耗时={stopwatch.Elapsed.TotalMilliseconds:F1}ms；未等待硬件回复。");
+    }
+
     private async Task<uint> ReadSingleBackplaneRegisterAsync(
         ushort registerAddress,
         BackplaneConnectionOptions options,

@@ -8,6 +8,8 @@ public interface IUserDialogService
 {
     bool ConfirmWarning(string title, string message, string confirmText, string cancelText);
 
+    bool ConfirmDirectCurrentStart(DirectCurrentStartConfirmationRequest request);
+
     void ShowInformation(string title, string message);
 
     void ShowError(string title, string message);

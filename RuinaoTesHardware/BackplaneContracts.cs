@@ -169,6 +169,17 @@ public interface IBackplaneRequestTimeoutTransport
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// 支持只确认Bulk OUT完整写入、不等待Bulk IN回复的传输实现。
+/// 仅用于固件已明确不返回响应的安全命令，普通业务命令仍必须使用请求/回复交换。
+/// </summary>
+public interface IBackplaneOneWayTransport
+{
+    Task SendAsync(
+        ReadOnlyMemory<byte> request,
+        CancellationToken cancellationToken = default);
+}
+
 public sealed class BackplaneConnectionException : Exception
 {
     public BackplaneConnectionException(string message) : base(message)

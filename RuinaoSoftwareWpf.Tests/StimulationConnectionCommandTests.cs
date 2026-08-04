@@ -23,6 +23,14 @@ public sealed class StimulationConnectionCommandTests
 
         connection.SetConnected(true);
 
+        Assert.False(viewModel.SynchronizedStartCommand.CanExecute(null));
+        Assert.False(viewModel.StartChannelCommand.CanExecute(viewModel.Channels[0]));
+
+        foreach (var channel in viewModel.Channels)
+        {
+            channel.UpdateImpedance(500m);
+        }
+
         Assert.True(viewModel.SynchronizedStartCommand.CanExecute(null));
         Assert.True(viewModel.StartChannelCommand.CanExecute(viewModel.Channels[0]));
     }
@@ -161,6 +169,14 @@ public sealed class StimulationConnectionCommandTests
         Assert.True(simulationResult.Succeeded);
         Assert.True(simulation.IsConnected);
         Assert.False(realConnection.IsConnected);
+        Assert.False(viewModel.SynchronizedStartCommand.CanExecute(null));
+        Assert.False(viewModel.StartChannelCommand.CanExecute(viewModel.Channels[0]));
+
+        foreach (var channel in viewModel.Channels)
+        {
+            channel.UpdateImpedance(500m);
+        }
+
         Assert.True(viewModel.SynchronizedStartCommand.CanExecute(null));
         Assert.True(viewModel.StartChannelCommand.CanExecute(viewModel.Channels[0]));
     }

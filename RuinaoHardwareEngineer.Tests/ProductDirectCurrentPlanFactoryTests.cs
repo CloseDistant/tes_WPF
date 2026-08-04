@@ -209,6 +209,8 @@ public sealed class ProductDirectCurrentPlanFactoryTests
             new BackplaneConnectionOptions(0x01, TimeSpan.FromSeconds(1)),
             TestContext.Current.CancellationToken);
 
+        Assert.Equal(0, transport.ExchangeCount);
+        Assert.Equal(1, transport.SendCount);
         var request = Assert.Single(transport.Requests);
         Assert.True(TesV14ProtocolCodec.TryParseFrame(request, out var frame, out var error), error);
         Assert.NotNull(frame);
@@ -269,10 +271,12 @@ public sealed class ProductDirectCurrentPlanFactoryTests
             Task.FromResult<UsbBackplaneDevice?>(null);
     }
 
-    private sealed class RecordingStatusTransport : IBackplaneTransport
+    private sealed class RecordingStatusTransport : IBackplaneTransport, IBackplaneOneWayTransport
     {
         public bool IsOpen => true;
         public List<byte[]> Requests { get; } = [];
+        public int ExchangeCount { get; private set; }
+        public int SendCount { get; private set; }
 
         public Task OpenAsync(
             UsbBackplaneDevice device,
@@ -284,6 +288,7 @@ public sealed class ProductDirectCurrentPlanFactoryTests
             ReadOnlyMemory<byte> request,
             CancellationToken cancellationToken = default)
         {
+            ExchangeCount++;
             Requests.Add(request.ToArray());
             Assert.True(TesV14ProtocolCodec.TryParseFrame(request.Span, out var frame, out var error), error);
             Assert.NotNull(frame);
@@ -296,6 +301,15 @@ public sealed class ProductDirectCurrentPlanFactoryTests
                 frame.SendSequence,
                 [0, 0, 0, 0]);
             return Task.FromResult(response);
+        }
+
+        public Task SendAsync(
+            ReadOnlyMemory<byte> request,
+            CancellationToken cancellationToken = default)
+        {
+            SendCount++;
+            Requests.Add(request.ToArray());
+            return Task.CompletedTask;
         }
 
         public Task CloseAsync(CancellationToken cancellationToken = default) =>

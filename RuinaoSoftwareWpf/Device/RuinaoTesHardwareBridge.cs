@@ -104,7 +104,7 @@ public sealed class RuinaoTesHardwareBridge
     internal async Task EmergencyStopBackplaneAsync(
         CancellationToken cancellationToken = default)
     {
-        _ = await hardwareClient.EmergencyStopBackplaneAsync(cancellationToken);
+        await hardwareClient.EmergencyStopBackplaneAsync(cancellationToken);
     }
 
     /// <summary>
