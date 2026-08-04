@@ -187,7 +187,7 @@
                                FontSize="15"
                                VerticalAlignment="Center"
                                Margin="0,0,3,0" />
-                    <TextBlock Text="经颅直流电刺激上位机软件"
+                    <TextBlock Text="时阈干涉电刺激上位机软件"
                                Foreground="#F1F2F5"
                                FontSize="14"
                                VerticalAlignment="Center" />
