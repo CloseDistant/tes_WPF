@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -131,10 +131,11 @@ public partial class MainWindow
 
             var parameters = configuredPlan.Parameters;
             var confirmation = MessageBox.Show(
-                $"将向业务板0x{parameters.BoardAddress:X2}发送0x0002开始刺激命令。\n"
+                $"将向业务板0x{parameters.BoardAddress:X2}发送业务板级开始命令：\n"
+                    + "0x0002=0x00000000。\n"
                     + "工程师软件不会在总时间结束后追加停止或拉低命令。\n\n"
                     + "请确认输出端只连接测试负载，是否继续？",
-                "确认开始产品tDCS",
+                "确认业务板级开始",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,
                 MessageBoxResult.No);
@@ -150,6 +151,47 @@ public partial class MainWindow
             ProductTdcsStatusText.Text = result.Message;
             ProductTdcsStatusText.Foreground = Brushes.SeaGreen;
             AddLog(new HardwareLogEntry(DateTimeOffset.Now, "TDCS_START", result.Message));
+        }));
+    }
+
+    private async void ProductTdcsStartChannelButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunUiActionAsync(() => RunProductDirectCurrentActionAsync(async () =>
+        {
+            if (!productDirectCurrentConfigurationSent || productDirectCurrentPreview is null)
+            {
+                throw new InvalidOperationException("当前产品tDCS参数尚未成功下发，禁止开始指定通道刺激。");
+            }
+
+            var configuredPlan = productDirectCurrentPreview;
+            if (ProductTdcsTestLoadCheckBox.IsChecked != true)
+            {
+                throw new InvalidOperationException("必须先确认当前连接的是测试负载，不能连接人体。");
+            }
+
+            var parameters = configuredPlan.Parameters;
+            var confirmation = MessageBox.Show(
+                $"将向业务板0x{parameters.BoardAddress:X2}、CH{parameters.Channel}发送指定通道开始命令：\n"
+                    + $"0x0002=0x{configuredPlan.EnableMask:X8}。\n"
+                    + "本按钮只发送这一条硬件命令，不自动停止或拉低。\n\n"
+                    + "请确认输出端只连接测试负载，是否继续？",
+                "确认指定通道开始",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            if (confirmation != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var result = await directCurrentStimulationClient.StartChannelAsync(
+                parameters.BoardAddress,
+                parameters.Channel,
+                ReadOptions());
+            StartProductDirectCurrentProgress(configuredPlan);
+            ProductTdcsStatusText.Text = result.Message;
+            ProductTdcsStatusText.Foreground = Brushes.SeaGreen;
+            AddLog(new HardwareLogEntry(DateTimeOffset.Now, "TDCS_CHANNEL_START", result.Message));
         }));
     }
 
@@ -169,6 +211,31 @@ public partial class MainWindow
             ProductTdcsStatusText.Text = result.Message;
             ProductTdcsStatusText.Foreground = Brushes.SeaGreen;
             AddLog(new HardwareLogEntry(DateTimeOffset.Now, "TDCS_STOP", result.Message));
+        }));
+    }
+
+    private async void ProductTdcsStopChannelButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunUiActionAsync(() => RunProductDirectCurrentActionAsync(async () =>
+        {
+            var configuredParameters = runningProductDirectCurrentPlan?.Parameters
+                ?? productDirectCurrentPreview?.Parameters;
+            var boardAddress = configuredParameters?.BoardAddress
+                ?? (ProductTdcsBoardAddressComboBox.SelectedItem is BoardAddressOption option
+                    ? option.Value
+                    : throw new FormatException("请选择在线业务板槽位。"));
+            var channel = configuredParameters?.Channel
+                ?? (ProductTdcsChannelComboBox.SelectedItem is int selectedChannel
+                    ? selectedChannel
+                    : throw new FormatException("请选择刺激通道。"));
+            var result = await directCurrentStimulationClient.StopChannelAsync(
+                boardAddress,
+                channel,
+                ReadOptions());
+            StopProductDirectCurrentProgress(clearRemaining: true);
+            ProductTdcsStatusText.Text = result.Message;
+            ProductTdcsStatusText.Foreground = Brushes.SeaGreen;
+            AddLog(new HardwareLogEntry(DateTimeOffset.Now, "TDCS_CHANNEL_STOP", result.Message));
         }));
     }
 
@@ -330,7 +397,16 @@ public partial class MainWindow
             && productDirectCurrentConfigurationSent
             && !productDirectCurrentRunning
             && ProductTdcsTestLoadCheckBox.IsChecked == true;
+        ProductTdcsStartChannelButton.IsEnabled =
+            canUseHardware
+            && productDirectCurrentConfigurationSent
+            && !productDirectCurrentRunning
+            && ProductTdcsTestLoadCheckBox.IsChecked == true;
         ProductTdcsStopButton.IsEnabled =
+            !isBusy
+            && handshakeSucceeded
+            && client.State == BackplaneConnectionState.Connected;
+        ProductTdcsStopChannelButton.IsEnabled =
             !isBusy
             && handshakeSucceeded
             && client.State == BackplaneConnectionState.Connected;

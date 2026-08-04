@@ -1,5 +1,6 @@
 ﻿namespace RuinaoSoftwareWpf;
 
+using System.Globalization;
 using RuinaoTesHardware;
 
 /// <summary>
@@ -272,7 +273,11 @@ public sealed class HardwareService : IHardwareService
                 throw new InvalidOperationException("仪器未联机，且未启用 DEBUG 模拟联机，禁止启动电刺激。");
             }
 
-            await RunDeviceOperationAsync(token => StartGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+            await RunDeviceOperationAsync(
+                token => IsDirectCurrent(parameterRecord.StimulationType)
+                    ? StartDirectCurrentGroupOnHardwareBridgeAsync(group, token)
+                    : StartGroupOnProtocolBridgeAsync(group, token),
+                cancellationToken);
         }
 
         try
@@ -288,7 +293,9 @@ public sealed class HardwareService : IHardwareService
                 try
                 {
                     await RunDeviceOperationAsync(
-                        token => StopGroupOnHardwareBridgeAsync(group, token),
+                        token => IsDirectCurrent(parameterRecord.StimulationType)
+                            ? StopDirectCurrentGroupOnHardwareBridgeAsync(group, token)
+                            : StopGroupOnHardwareBridgeAsync(group, token),
                         CancellationToken.None);
                 }
                 catch (Exception stopException)
@@ -326,7 +333,11 @@ public sealed class HardwareService : IHardwareService
         var useDebugMock = ShouldUseDebugStimulationMock();
         if (!useDebugMock)
         {
-            await RunDeviceOperationAsync(token => StopGroupOnHardwareBridgeAsync(group, token), cancellationToken);
+            await RunDeviceOperationAsync(
+                token => IsDirectCurrent(stimulationType)
+                    ? StopDirectCurrentGroupOnHardwareBridgeAsync(group, token)
+                    : StopGroupOnHardwareBridgeAsync(group, token),
+                cancellationToken);
         }
 
         await stimulationRecordService.EndChannelsAsync(
@@ -360,17 +371,25 @@ public sealed class HardwareService : IHardwareService
         var useDebugMock = ShouldUseDebugStimulationMock();
         if (!useDebugMock)
         {
-            await RunDeviceOperationAsync(token => EmergencyStopGroupOnProtocolBridgeAsync(group, token), cancellationToken);
+            await RunDeviceOperationAsync(
+                token => IsDirectCurrent(stimulationType)
+                    ? hardwareBridge.EmergencyStopBackplaneAsync(token)
+                    : EmergencyStopGroupOnProtocolBridgeAsync(group, token),
+                cancellationToken);
         }
 
-        await stimulationRecordService.EndChannelsAsync(
-            new StimulationChannelsEndRequest(
-                stimulationType,
-                GetChannelNames(group).Select(item => new StimulationChannelEndItem(item)).ToArray(),
-                StimulationEndType.ManualTermination,
-                StimulationEndReasonCodes.EmergencyStop,
-                selectedChannelNames),
-            cancellationToken);
+        var emergencyStoppedChannelNames = GetChannelNames(group);
+        if (emergencyStoppedChannelNames.Length > 0)
+        {
+            await stimulationRecordService.EndChannelsAsync(
+                new StimulationChannelsEndRequest(
+                    stimulationType,
+                    emergencyStoppedChannelNames.Select(item => new StimulationChannelEndItem(item)).ToArray(),
+                    StimulationEndType.ManualTermination,
+                    StimulationEndReasonCodes.EmergencyStop,
+                    selectedChannelNames),
+                cancellationToken);
+        }
 
         if (useDebugMock)
         {
@@ -391,7 +410,11 @@ public sealed class HardwareService : IHardwareService
         var useDebugMock = ShouldUseDebugStimulationMock();
         if (!useDebugMock)
         {
-            await RunDeviceOperationAsync(token => StopGroupOnHardwareBridgeAsync(group, token), cancellationToken);
+            await RunDeviceOperationAsync(
+                token => IsDirectCurrent(stimulationType)
+                    ? StopDirectCurrentGroupOnHardwareBridgeAsync(group, token)
+                    : StopGroupOnHardwareBridgeAsync(group, token),
+                cancellationToken);
         }
 
         await stimulationRecordService.EndChannelsAsync(
@@ -493,6 +516,177 @@ public sealed class HardwareService : IHardwareService
         await hardwareBridge.SendTiParametersAsync(group, cancellationToken);
         await hardwareBridge.EmergencyStopAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// tDCS启动顺序：先逐通道下发全部配置，再按业务板合并通道掩码启动。
+    /// 若后续业务板启动失败，立即向背板发送紧急停止，不尝试业务板回滚。
+    /// </summary>
+    private async Task StartDirectCurrentGroupOnHardwareBridgeAsync(
+        TiGroup group,
+        CancellationToken cancellationToken)
+    {
+        var bindings = CreateDirectCurrentBindings(group);
+        foreach (var binding in bindings)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await hardwareBridge.ConfigureDirectCurrentAsync(binding.Parameters, cancellationToken);
+        }
+
+        var startedBoardCount = 0;
+        try
+        {
+            foreach (var board in bindings.GroupBy(binding => binding.BoardAddress))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await hardwareBridge.StartDirectCurrentChannelsAsync(
+                    board.Key,
+                    CombineChannelMask(board),
+                    cancellationToken);
+                startedBoardCount++;
+            }
+        }
+        catch (Exception startException)
+        {
+            var failedBoard = bindings
+                .GroupBy(binding => binding.BoardAddress)
+                .Skip(startedBoardCount)
+                .FirstOrDefault();
+            try
+            {
+                if (startedBoardCount > 0)
+                {
+                    // 已有前序业务板确认启动后，后续业务板失败或取消时，
+                    // 无法再保证多板状态一致，按约定直接执行背板紧急停止。
+                    await hardwareBridge.EmergencyStopBackplaneAsync(CancellationToken.None);
+                }
+                else if (failedBoard is not null)
+                {
+                    // 第一个业务板的启动回复未确认时，只补发本次通道掩码的停止，
+                    // 不扩大为全机急停，也不影响此前独立运行的其他通道。
+                    await hardwareBridge.StopDirectCurrentChannelsAsync(
+                        failedBoard.Key,
+                        CombineChannelMask(failedBoard),
+                        CancellationToken.None);
+                }
+            }
+            catch (Exception safetyStopException)
+            {
+                throw new InvalidOperationException(
+                    "tDCS启动未确认，随后安全停止命令也未确认。请立即人工检查设备并使用紧急停止。",
+                    new AggregateException(startException, safetyStopException));
+            }
+
+            if (startException is OperationCanceledException)
+            {
+                throw;
+            }
+
+            throw new InvalidOperationException(
+                startedBoardCount > 0
+                    ? "tDCS多板启动过程中发生失败，已向背板发送紧急停止。"
+                    : "tDCS启动回复未确认，已向对应业务板补发指定通道停止。",
+                startException);
+        }
+    }
+
+    /// <summary>按业务板合并通道掩码停止，不重新下发配置，不附加通道拉低。</summary>
+    private async Task StopDirectCurrentGroupOnHardwareBridgeAsync(
+        TiGroup group,
+        CancellationToken cancellationToken)
+    {
+        var bindings = CreateDirectCurrentBindings(group);
+        foreach (var board in bindings.GroupBy(binding => binding.BoardAddress))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await hardwareBridge.StopDirectCurrentChannelsAsync(
+                board.Key,
+                CombineChannelMask(board),
+                cancellationToken);
+        }
+    }
+
+    private IReadOnlyList<DirectCurrentChannelBinding> CreateDirectCurrentBindings(TiGroup group)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+        if (group.Channels.Count == 0)
+        {
+            throw new InvalidOperationException("tDCS操作至少需要一个通道。");
+        }
+
+        var boards = CurrentDeviceTopology?.Slots
+            .Where(slot => slot.IsInserted
+                && slot.IsOnline
+                && slot.BoardKind == DeviceBoardKind.Stimulation)
+            .OrderBy(slot => slot.SlotIndex)
+            .ThenBy(slot => slot.Address)
+            .Take(2)
+            .ToArray()
+            ?? [];
+
+        var bindings = new List<DirectCurrentChannelBinding>(group.Channels.Count);
+        foreach (var channel in group.Channels)
+        {
+            var logicalChannel = ParseLogicalChannelNumber(channel.Name);
+            var boardIndex = (logicalChannel - 1) / 8;
+            if (boardIndex >= boards.Length)
+            {
+                throw new InvalidOperationException($"{channel.Name}没有映射到在线电刺激业务板。");
+            }
+
+            var physicalChannel = (logicalChannel - 1) % 8 + 1;
+            var boardAddress = boards[boardIndex].Address;
+            bindings.Add(new DirectCurrentChannelBinding(
+                boardAddress,
+                physicalChannel,
+                new DirectCurrentHardwareParameters(
+                    boardAddress,
+                    physicalChannel,
+                    ParseDecimal(channel.CurrentMA, channel.Name, "幅值"),
+                    ParseDecimal(channel.RampUpS, channel.Name, "渐升时间"),
+                    ParseDecimal(channel.RampDownS, channel.Name, "渐降时间"),
+                    ParseDecimal(channel.DurationS, channel.Name, "刺激时间"),
+                    channel.IsContinuousMode,
+                    channel.IsContinuousMode ? 0 : ParseDecimal(channel.IntervalS, channel.Name, "间隔时间"),
+                    channel.IsContinuousMode ? 0 : ParseDecimal(channel.SingleDurationS, channel.Name, "单次时长"),
+                    string.Equals(channel.Polarity, "调转", StringComparison.Ordinal))));
+        }
+
+        return bindings;
+    }
+
+    private static uint CombineChannelMask(IEnumerable<DirectCurrentChannelBinding> bindings) =>
+        bindings.Aggregate(0U, (mask, binding) => mask | (1U << (binding.PhysicalChannelNumber - 1)));
+
+    private static int ParseLogicalChannelNumber(string channelName)
+    {
+        var digits = new string(channelName.Where(char.IsDigit).ToArray());
+        if (!int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var value)
+            || value is < 1 or > 16)
+        {
+            throw new InvalidOperationException($"无法识别逻辑通道名称“{channelName}”。");
+        }
+
+        return value;
+    }
+
+    private static decimal ParseDecimal(string text, string channelName, string parameterName)
+    {
+        if (decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
+            || decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"{channelName}的{parameterName}不是有效数值。");
+    }
+
+    private static bool IsDirectCurrent(string stimulationType) =>
+        string.Equals(stimulationType, "tDCS", StringComparison.OrdinalIgnoreCase);
+
+    private sealed record DirectCurrentChannelBinding(
+        byte BoardAddress,
+        int PhysicalChannelNumber,
+        DirectCurrentHardwareParameters Parameters);
 
     private bool ShouldUseDebugStimulationMock()
     {
@@ -627,6 +821,7 @@ public sealed class HardwareService : IHardwareService
         bool isManualRefresh,
         CancellationToken cancellationToken)
     {
+        var deviceOperationLockTaken = false;
         var lockTaken = isManualRefresh
             ? await WaitForManualImpedanceRefreshAsync(cancellationToken)
             : await impedanceRefreshLock.WaitAsync(0, cancellationToken);
@@ -662,14 +857,28 @@ public sealed class HardwareService : IHardwareService
                 throw new InvalidOperationException("当前设备拓扑中没有在线电刺激业务板。");
             }
 
+            // 阻抗读取属于低优先级诊断操作，不进入设备命令等待队列。
+            // 自动轮询在总线忙时跳过本轮；手动读取则明确告知用户稍后重试。
+            deviceOperationLockTaken = await operationLock.WaitAsync(0, cancellationToken);
+            if (!deviceOperationLockTaken)
+            {
+                if (isManualRefresh)
+                {
+                    throw new InvalidOperationException(
+                        "设备正在执行刺激控制或其他通信，请稍后重新读取阻抗。");
+                }
+
+                return CurrentStimulationImpedance?.Channels.Count(channel => channel.IsAvailable) ?? 0;
+            }
+
             var successfulBoardCount = 0;
             Exception? lastFailure = null;
             foreach (var board in boards)
             {
                 try
                 {
-                    var hardwareSnapshot = await RunDeviceOperationAsync(
-                        token => hardwareBridge.ReadStimulationBoardImpedanceAsync(board.Address, token),
+                    var hardwareSnapshot = await hardwareBridge.ReadStimulationBoardImpedanceAsync(
+                        board.Address,
                         cancellationToken);
                     lock (stimulationImpedanceStateLock)
                     {
@@ -707,6 +916,11 @@ public sealed class HardwareService : IHardwareService
         }
         finally
         {
+            if (deviceOperationLockTaken)
+            {
+                operationLock.Release();
+            }
+
             impedanceRefreshLock.Release();
         }
     }
@@ -839,7 +1053,23 @@ public sealed class HardwareService : IHardwareService
         {
             try
             {
-                var handshake = await RunDeviceOperationAsync(HandshakeOnProtocolBridgeAsync, cancellationToken);
+                // 心跳不进入命令等待队列；设备正在执行更高优先级操作时跳过本轮，
+                // 等下一周期再握手，不能把软件内部排队时间误判为硬件超时。
+                if (!await operationLock.WaitAsync(0, cancellationToken))
+                {
+                    continue;
+                }
+
+                BackplaneHandshakeResult handshake;
+                try
+                {
+                    handshake = await HandshakeOnProtocolBridgeAsync(cancellationToken);
+                }
+                finally
+                {
+                    operationLock.Release();
+                }
+
                 logger.Hardware(
                     $"心跳检测成功：ackSeq={handshake.ResponseAckSequence}，耗时={handshake.Elapsed.TotalMilliseconds:F1}ms");
             }

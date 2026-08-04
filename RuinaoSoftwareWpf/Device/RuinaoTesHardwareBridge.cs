@@ -53,6 +53,60 @@ public sealed class RuinaoTesHardwareBridge
         CancellationToken cancellationToken = default) =>
         hardwareClient.ReadStimulationBoardImpedanceAsync(boardAddress, cancellationToken);
 
+    /// <summary>把产品单位参数交给共用DLL，由DLL完成校验、换算、拼帧和回复判断。</summary>
+    internal async Task ConfigureDirectCurrentAsync(
+        DirectCurrentHardwareParameters parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        _ = await hardwareClient.ConfigureDirectCurrentAsync(
+            new DirectCurrentStimulationParameters(
+                parameters.BoardAddress,
+                parameters.PhysicalChannelNumber,
+                parameters.CurrentMilliampere,
+                parameters.RampUpSeconds,
+                parameters.RampDownSeconds,
+                parameters.TotalDurationSeconds,
+                parameters.IsContinuous
+                    ? DirectCurrentDeliveryMode.Continuous
+                    : DirectCurrentDeliveryMode.Intermittent,
+                parameters.IntervalSeconds,
+                parameters.SingleDurationSeconds,
+                parameters.ReversePolarity
+                    ? DirectCurrentPolarity.Reversed
+                    : DirectCurrentPolarity.Normal),
+            cancellationToken);
+    }
+
+    internal async Task StartDirectCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await hardwareClient.StartDirectCurrentChannelsAsync(
+            boardAddress,
+            channelMask,
+            cancellationToken);
+    }
+
+    internal async Task StopDirectCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await hardwareClient.StopDirectCurrentChannelsAsync(
+            boardAddress,
+            channelMask,
+            cancellationToken);
+    }
+
+    /// <summary>只发送背板0x0003=0；不遍历业务板，不执行通道拉低。</summary>
+    internal async Task EmergencyStopBackplaneAsync(
+        CancellationToken cancellationToken = default)
+    {
+        _ = await hardwareClient.EmergencyStopBackplaneAsync(cancellationToken);
+    }
+
     /// <summary>
     /// 暂存上位机业务参数日志。生产刺激 API 尚未从临时分支迁入共用硬件 DLL，
     /// 因此这里不得生成旧协议帧或把日志传输冒充为硬件确认。

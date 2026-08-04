@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -438,6 +438,74 @@ public partial class MainWindow
         });
     }
 
+    private async void StartSelectedChannelButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunUiActionAsync(async () =>
+        {
+            if (!rawConfigurationSent)
+            {
+                throw new InvalidOperationException("当前参数尚未完成下发，禁止开始指定通道刺激。");
+            }
+
+            if (TestLoadConfirmedCheckBox.IsChecked != true)
+            {
+                throw new InvalidOperationException("必须先确认当前连接的是测试负载。");
+            }
+
+            var address = ReadSelectedBoardAddress();
+            var channel = ReadSelectedStimulationChannel();
+            var channelMask = UsbTest4RawStimulationService.GetSingleChannelMask(channel);
+            var confirmation = MessageBox.Show(
+                $"将向业务板0x{address:X2}发送指定通道开始命令：\n"
+                    + $"寄存器0x0002，CH{channel}，写入值0x{channelMask:X8}。\n\n"
+                    + "本按钮只发送这一条硬件命令，不自动停止或拉低。\n"
+                    + "请确认输出端连接测试负载，不连接人体。",
+                "确认开始指定通道",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            if (confirmation != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            await rawStimulationService.StartChannelAsync(
+                address,
+                channel,
+                ReadOptions());
+            RawStimulationStatusText.Text =
+                $"业务板0x{address:X2}已返回CH{channel}开始命令回复："
+                + $"0x0002=0x{channelMask:X8}。未追加其他硬件命令。";
+            RawStimulationStatusText.Foreground = System.Windows.Media.Brushes.SeaGreen;
+            AddLog(new HardwareLogEntry(
+                DateTimeOffset.Now,
+                "CHANNEL_START",
+                RawStimulationStatusText.Text));
+        });
+    }
+
+    private async void StopSelectedChannelButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunSafetyActionAsync(async () =>
+        {
+            var address = ReadSelectedBoardAddress();
+            var channel = ReadSelectedStimulationChannel();
+            var channelMask = UsbTest4RawStimulationService.GetSingleChannelMask(channel);
+            await rawStimulationService.StopChannelAsync(
+                address,
+                channel,
+                ReadOptions());
+            RawStimulationStatusText.Text =
+                $"业务板0x{address:X2}已返回CH{channel}停止命令回复："
+                + $"0x0003=0x{channelMask:X8}。未追加全通道拉低或其他硬件命令。";
+            RawStimulationStatusText.Foreground = System.Windows.Media.Brushes.SeaGreen;
+            AddLog(new HardwareLogEntry(
+                DateTimeOffset.Now,
+                "CHANNEL_STOP",
+                RawStimulationStatusText.Text));
+        });
+    }
+
     private async void StopRawStimulationButton_Click(object sender, RoutedEventArgs e)
     {
         stimulationConfigurationCancellation?.Cancel();
@@ -669,6 +737,13 @@ public partial class MainWindow
         throw new FormatException($"{fieldName}必须是UInt32、Int32或0x开头的十六进制值。");
     }
 
+    private int ReadSelectedStimulationChannel()
+    {
+        return StimulationChannelComboBox.SelectedItem is int channel
+            ? channel
+            : throw new InvalidOperationException("请选择1到8之间的刺激通道。");
+    }
+
     private void UpdateTopologyAndStimulationButtons(bool canUseHardware)
     {
         if (ScanTopologyButton is null)
@@ -681,9 +756,12 @@ public partial class MainWindow
         SetAllChannelsHighButton.IsEnabled = canUseHardware;
         StartRawStimulationButton.IsEnabled =
             canUseHardware && rawConfigurationSent && TestLoadConfirmedCheckBox.IsChecked == true;
+        StartSelectedChannelButton.IsEnabled =
+            canUseHardware && rawConfigurationSent && TestLoadConfirmedCheckBox.IsChecked == true;
         var safetyCommandsAvailable =
             handshakeSucceeded && client.State == BackplaneConnectionState.Connected;
         StopRawStimulationButton.IsEnabled = safetyCommandsAvailable;
+        StopSelectedChannelButton.IsEnabled = safetyCommandsAvailable;
         SetAllChannelsLowButton.IsEnabled = safetyCommandsAvailable;
         EmergencyStopAllBoardsButton.IsEnabled = safetyCommandsAvailable;
         UpdateStimulationImpedanceButtons(canUseHardware);

@@ -211,6 +211,69 @@ public sealed class DirectCurrentChannelSelectionTests
     }
 
     [Fact]
+    public void StopChannelCommand_WithRealConnection_StopsOnlyTarget()
+    {
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine);
+        var first = viewModel.Channels[0];
+        var second = viewModel.Channels[1];
+        first.CurrentMA = "1";
+        second.CurrentMA = "1";
+
+        viewModel.StartChannelCommand.Execute(first);
+        viewModel.StartChannelCommand.Execute(second);
+        viewModel.StopChannelCommand.Execute(first);
+
+        Assert.Equal([first.Name], engine.LastStoppedChannelNames);
+        Assert.False(first.IsStimulating);
+        Assert.True(second.IsStimulating);
+    }
+
+    [Fact]
+    public void EmergencyStopCommand_WhenConnectedWithoutRunningChannels_RemainsAvailable()
+    {
+        var engine = new NoopStimulationEngine();
+        var toast = new CapturingToastService();
+        var viewModel = CreateViewModel(engine, toastService: toast);
+
+        Assert.True(viewModel.EmergencyStopCommand.CanExecute(null));
+
+        viewModel.EmergencyStopCommand.Execute(null);
+
+        Assert.Equal(1, engine.DirectCurrentEmergencyStopCount);
+        Assert.Equal("紧急停止", toast.Title);
+    }
+
+    [Fact]
+    public void DebugImpedanceProvider_PopulatesChannelsAndAllowsSynchronizedStart()
+    {
+        var simulation = new ConnectedDebugSimulation();
+        var provider = new DebugStimulationImpedanceProvider(simulation);
+
+#if DEBUG
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(
+            engine,
+            simulation,
+            debugImpedanceProvider: provider,
+            initializeImpedance: false);
+
+        Assert.Equal(500m, viewModel.Channels[0].ImpedanceOhms);
+        Assert.Equal(800m, viewModel.Channels[15].ImpedanceOhms);
+        Assert.All(
+            viewModel.Channels,
+            channel => Assert.Equal(StimulationImpedanceStatus.Normal, channel.ImpedanceStatus));
+        Assert.True(viewModel.SynchronizedStartCommand.CanExecute(null));
+
+        viewModel.SynchronizedStartCommand.Execute(null);
+
+        Assert.Equal(16, engine.LastStartedDirectCurrentGroup?.Channels.Count);
+#else
+        Assert.Null(provider.GetSnapshot());
+#endif
+    }
+
+    [Fact]
     public void ParameterValidationFailedCommand_ShowsWarningToast()
     {
         var toast = new CapturingToastService();
@@ -260,7 +323,9 @@ public sealed class DirectCurrentChannelSelectionTests
         NoopStimulationEngine? stimulationEngine = null,
         IDebugHardwareSimulationService? debugHardwareSimulation = null,
         IToastService? toastService = null,
-        IUserDialogService? userDialogService = null)
+        IUserDialogService? userDialogService = null,
+        IDebugStimulationImpedanceProvider? debugImpedanceProvider = null,
+        bool initializeImpedance = true)
     {
         var viewModel = new DirectCurrentControlViewModel(
             stimulationEngine ?? new NoopStimulationEngine(),
@@ -269,10 +334,14 @@ public sealed class DirectCurrentChannelSelectionTests
             new NoopLoggingService(),
             new LocalizationViewModel(new AppLocalizationService()),
             toastService ?? new NoopToastService(),
-            userDialogService ?? new TestUserDialogService());
-        foreach (var channel in viewModel.Channels)
+            userDialogService ?? new TestUserDialogService(),
+            debugImpedanceProvider);
+        if (initializeImpedance)
         {
-            channel.UpdateImpedance(500m);
+            foreach (var channel in viewModel.Channels)
+            {
+                channel.UpdateImpedance(500m);
+            }
         }
 
         return viewModel;
@@ -309,6 +378,10 @@ public sealed class DirectCurrentChannelSelectionTests
     {
         public TiGroup? LastStartedDirectCurrentGroup { get; private set; }
 
+        public string[] LastStoppedChannelNames { get; private set; } = [];
+
+        public int DirectCurrentEmergencyStopCount { get; private set; }
+
         public bool FailStop { get; init; }
 
         public StimulationExecutionState CurrentState => StimulationExecutionState.Idle;
@@ -333,10 +406,16 @@ public sealed class DirectCurrentChannelSelectionTests
             TiGroup group,
             string selectedChannelNames,
             string stimulationType,
-            CancellationToken cancellationToken = default) =>
-            FailStop
-                ? Task.FromException<HardwareOperationResult>(new TimeoutException("stop timeout"))
-                : Success();
+            CancellationToken cancellationToken = default)
+        {
+            if (FailStop)
+            {
+                return Task.FromException<HardwareOperationResult>(new TimeoutException("stop timeout"));
+            }
+
+            LastStoppedChannelNames = group.Channels.Select(channel => channel.Name).ToArray();
+            return Success();
+        }
 
         public Task<HardwareOperationResult> EmergencyStopTiGroupAsync(
             TiGroup group,
@@ -346,7 +425,11 @@ public sealed class DirectCurrentChannelSelectionTests
         public Task<HardwareOperationResult> EmergencyStopDirectCurrentGroupAsync(
             TiGroup group,
             string reason,
-            CancellationToken cancellationToken = default) => Success();
+            CancellationToken cancellationToken = default)
+        {
+            DirectCurrentEmergencyStopCount++;
+            return Success();
+        }
 
         public Task<HardwareOperationResult> CompleteGroupAsync(
             TiGroup group,

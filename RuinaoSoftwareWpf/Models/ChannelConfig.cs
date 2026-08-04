@@ -27,6 +27,7 @@ public sealed class ChannelConfig : ObservableObject, IStimulationImpedanceChann
     private Brush accentBrush = Brushes.White;
     private bool isParameterEditingEnabled = true;
     private bool isStimulating;
+    private bool isStarting;
     private bool isSelected;
     private decimal? impedanceOhms;
 
@@ -187,6 +188,21 @@ public sealed class ChannelConfig : ObservableObject, IStimulationImpedanceChann
             }
         }
     }
+
+    /// <summary>当前通道正在下发配置或等待启动确认。</summary>
+    public bool IsStarting
+    {
+        get => isStarting;
+        set
+        {
+            if (SetProperty(ref isStarting, value))
+            {
+                OnPropertyChanged(nameof(StartButtonText));
+            }
+        }
+    }
+
+    public string StartButtonText => IsStarting ? "启动中" : "开始";
 
     public DirectCurrentWaveformState DirectCurrentWaveform { get; } = new();
 

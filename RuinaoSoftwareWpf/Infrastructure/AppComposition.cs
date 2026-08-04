@@ -91,6 +91,7 @@ public static class AppComposition
         services.AddSingleton<IHardwareLink, LogOnlyHardwareTransport>(); // 尚未迁移到V1.4的业务命令暂保留日志链路
         services.AddSingleton<IHardwareTransport, ReliableHardwareTransport>(); // 旧业务命令的命令关联、超时与重试
         services.AddSingleton<IDebugHardwareSimulationService, DebugHardwareSimulationService>(); // DEBUG 显式模拟联机状态
+        services.AddSingleton<IDebugStimulationImpedanceProvider, DebugStimulationImpedanceProvider>(); // 仅向DEBUG模拟界面提供稳定阻抗
         services.AddSingleton<IUsbBackplaneDiscovery, WindowsUsbBackplaneDiscovery>();
         services.AddSingleton<IBackplaneTransport, UsbTestCompatibleBackplaneTransport>();
         services.AddSingleton<BackplaneClient>();                         // 真实libusbK链路与V1.4应答匹配
