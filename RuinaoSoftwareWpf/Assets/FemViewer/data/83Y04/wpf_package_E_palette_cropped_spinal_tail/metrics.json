@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "thresholds": {
+    "p90_v_m": 0.07449152095675247,
+    "p95_v_m": 0.08431033539193077,
+    "domain": "FEM brain tetrahedra"
+  },
+  "bilateral_amygdala": {
+    "voxel_count": 3146,
+    "volume_mm3": 3146.0136469093313,
+    "mean_v_m": 0.07016355689799736,
+    "maximum_v_m": 0.11945255100727081,
+    "coverage_p90_percent": 49.10998092816274,
+    "coverage_p95_percent": 42.816274634456455,
+    "coverage_p90_only_percent": 6.293706293706294,
+    "uncovered_percent": 50.89001907183726,
+    "volume_p90_mm3": 1545.0067019945698,
+    "volume_p95_mm3": 1347.0058430981783,
+    "volume_p90_only_mm3": 198.00085889639146,
+    "volume_uncovered_mm3": 1601.0069449147613
+  },
+  "left_amygdala": {
+    "voxel_count": 1558,
+    "volume_mm3": 1558.0067583867572,
+    "mean_v_m": 0.09729113312622242,
+    "maximum_v_m": 0.11945255100727081,
+    "coverage_p90_percent": 99.16559691912708,
+    "coverage_p95_percent": 86.45699614890886,
+    "coverage_p90_only_percent": 12.70860077021823,
+    "uncovered_percent": 0.8344030808729139,
+    "volume_p90_mm3": 1545.0067019945698,
+    "volume_p95_mm3": 1347.0058430981783,
+    "volume_p90_only_mm3": 198.00085889639146,
+    "volume_uncovered_mm3": 13.000056392187318
+  },
+  "right_amygdala": {
+    "voxel_count": 1588,
+    "volume_mm3": 1588.006888522574,
+    "mean_v_m": 0.043548466366779066,
+    "maximum_v_m": 0.06459668278694153,
+    "coverage_p90_percent": 0.0,
+    "coverage_p95_percent": 0.0,
+    "coverage_p90_only_percent": 0.0,
+    "uncovered_percent": 100.0,
+    "volume_p90_mm3": 0.0,
+    "volume_p95_mm3": 0.0,
+    "volume_p90_only_mm3": 0.0,
+    "volume_uncovered_mm3": 1588.006888522574
+  },
+  "quantitative_warning": "ROI preview metrics use trilinear samples from the compact display grid; research metrics should use original tetrahedron-volume integration."
+}

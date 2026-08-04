@@ -1,0 +1,596 @@
+{
+  "schema_version": 2,
+  "subject_id": "83Y04",
+  "status": "PASS",
+  "coordinate_system": "NIfTI RAS millimetres",
+  "inputs": {
+    "t1": {
+      "path": "E:\\TI工作\\FEM对比修复测试\\charm_replacement_pipeline\\test_outputs\\complete_components_83Y04\\m2m_83Y04\\T1.nii.gz",
+      "sha256": "dba1c7dd9be33882d6d370462366d7ea16a8391319c05a550682d0408419c50c"
+    },
+    "tissues": {
+      "path": "E:\\TI工作\\FEM对比修复测试\\charm_replacement_pipeline\\test_outputs\\complete_components_83Y04\\m2m_83Y04\\final_tissues_dl_1mm.nii.gz",
+      "sha256": "abc3d0bf2b12daa033f6e5afb696ff3655454d6a9213e1c970ea9ff777555403"
+    },
+    "roi_labels": {
+      "path": "E:\\TI工作\\FEM对比修复测试\\charm_replacement_pipeline\\test_outputs\\complete_components_83Y04\\m2m_83Y04\\segmentation\\labeling.nii.gz",
+      "sha256": "5b3abe78316fbdd2739dda86fe45e916eef6d93399415d5edbc50425f9357788"
+    },
+    "fem_field": {
+      "path": "E:\\TI工作\\FEM对比修复测试\\charm_replacement_pipeline\\test_outputs\\complete_components_83Y04\\mmg_ab_validation\\fem_C_official_profile\\fem_result\\v3_native_pair_fields.npz",
+      "sha256": "d0172d349bd6793596cdaf1ab4a1e7086574010bae9a06b2221286371e346f5d"
+    },
+    "fem_mesh": {
+      "path": "E:\\TI工作\\FEM对比修复测试\\charm_replacement_pipeline\\test_outputs\\complete_components_83Y04\\self_mesh_v3_official_profile\\optimized_head_mesh.msh",
+      "sha256": "b9be7ef3c3dc557ed909552e3789bc0233fc21ec6c113d59259287ad8ca7775a"
+    },
+    "eeg": {
+      "path": "E:\\TI工作\\FEM对比修复测试\\charm_replacement_pipeline\\test_outputs\\complete_components_83Y04\\m2m_83Y04\\eeg_positions\\EEG10-10_UI_Jurak_2007.csv",
+      "sha256": "3de56b0b3f03ef00ec17e209e2b9fac0cbe2b294015c03cfb4fc59170f544a87"
+    },
+    "montage": {
+      "path": "E:\\TI工作\\FEM对比修复测试\\charm_replacement_pipeline\\config\\default_ti_montage.json",
+      "sha256": "056150e89b42a84f86a69318c321f8b4fd000931478c27cb1695aa92a8ca9ba8"
+    }
+  },
+  "files": {
+    "t1": {
+      "path": "T1.nii.gz",
+      "sha256": "dba1c7dd9be33882d6d370462366d7ea16a8391319c05a550682d0408419c50c"
+    },
+    "field_2d": {
+      "path": "field-2d.fem2d.gz",
+      "sha256": "7e57d5640884fec0494493f4c033c078380e280ca6cb3bebaa2f0ea70e02a7f2"
+    },
+    "field_3d": {
+      "path": "fem-3d-data.json.gz",
+      "sha256": "2ced323a96b0e1e6193e98927a011e5a4b5a7052c1c40bcfd1d84e30b2fcbf25"
+    },
+    "metrics": {
+      "path": "metrics.json",
+      "sha256": "6ddc97684956452d231dbbad14a1bc699bd5f2e437e2cbbbd0e24548715781ec"
+    },
+    "mesh_summary": {
+      "path": "mesh-summary.json",
+      "sha256": "cf1c2b56a1622df01b8034da6a3bdb202fe4335a3094b1cb2834493789f400e8"
+    }
+  },
+  "field_2d": {
+    "path": "E:\\TI工作\\FEM对比修复测试\\charm_replacement_pipeline\\test_outputs\\complete_components_83Y04\\mmg_ab_validation\\wpf_package_E_palette_cropped_spinal_tail\\field-2d.fem2d.gz",
+    "field_grid_shape": [
+      48,
+      59,
+      64
+    ],
+    "spacing_mm": 3.0,
+    "display_maximum_v_m": 0.10453288198228498,
+    "display_minimum_v_m": 0.02110224406231964,
+    "p95_threshold_v_m": 0.08431033539193077,
+    "left_amygdala_voxels": 1558,
+    "right_amygdala_voxels": 1588,
+    "sha256": "7e57d5640884fec0494493f4c033c078380e280ca6cb3bebaa2f0ea70e02a7f2"
+  },
+  "geometry_qc": {
+    "white-matter": {
+      "extraction": "exact_fem_msh_surface_elements",
+      "source_surface_tags": [
+        1001
+      ],
+      "vertex_count": 62625,
+      "triangle_count": 125326,
+      "boundary_edge_count": 16,
+      "nonmanifold_edge_count": 0,
+      "degenerate_triangle_count": 0,
+      "full_fem_surface_preserved": true
+    },
+    "gray-matter": {
+      "extraction": "exact_fem_msh_surface_elements",
+      "source_surface_tags": [
+        1002
+      ],
+      "vertex_count": 78252,
+      "triangle_count": 156263,
+      "boundary_edge_count": 877,
+      "nonmanifold_edge_count": 26,
+      "degenerate_triangle_count": 0,
+      "full_fem_surface_preserved": true
+    },
+    "csf": {
+      "extraction": "exact_fem_msh_surface_elements",
+      "source_surface_tags": [
+        1003
+      ],
+      "vertex_count": 27266,
+      "triangle_count": 51786,
+      "boundary_edge_count": 3362,
+      "nonmanifold_edge_count": 25,
+      "degenerate_triangle_count": 0,
+      "full_fem_surface_preserved": true
+    },
+    "scalp": {
+      "extraction": "exact_fem_msh_surface_elements",
+      "source_surface_tags": [
+        1005
+      ],
+      "vertex_count": 32516,
+      "triangle_count": 64498,
+      "boundary_edge_count": 574,
+      "nonmanifold_edge_count": 0,
+      "degenerate_triangle_count": 0,
+      "full_fem_surface_preserved": true
+    },
+    "eyes": {
+      "extraction": "exact_fem_msh_surface_elements",
+      "source_surface_tags": [
+        1006
+      ],
+      "vertex_count": 763,
+      "triangle_count": 1518,
+      "boundary_edge_count": 0,
+      "nonmanifold_edge_count": 0,
+      "degenerate_triangle_count": 0,
+      "full_fem_surface_preserved": true
+    },
+    "skull": {
+      "extraction": "exact_fem_msh_surface_elements",
+      "source_surface_tags": [
+        1007,
+        1008
+      ],
+      "vertex_count": 68708,
+      "triangle_count": 137082,
+      "boundary_edge_count": 1309,
+      "nonmanifold_edge_count": 459,
+      "degenerate_triangle_count": 0,
+      "full_fem_surface_preserved": true
+    },
+    "blood": {
+      "extraction": "exact_fem_msh_surface_elements",
+      "source_surface_tags": [
+        1009
+      ],
+      "vertex_count": 7362,
+      "triangle_count": 13579,
+      "boundary_edge_count": 1141,
+      "nonmanifold_edge_count": 1,
+      "degenerate_triangle_count": 0,
+      "full_fem_surface_preserved": true
+    },
+    "muscle": {
+      "extraction": "exact_fem_msh_surface_elements",
+      "source_surface_tags": [
+        1010
+      ],
+      "vertex_count": 1128,
+      "triangle_count": 2033,
+      "boundary_edge_count": 209,
+      "nonmanifold_edge_count": 0,
+      "degenerate_triangle_count": 0,
+      "full_fem_surface_preserved": true
+    },
+    "amygdala": {
+      "extraction": "marching_cubes_full_voxel_resolution_smoothed_display",
+      "marching_cubes_step_size": 1,
+      "display_upsample_factor": 2,
+      "source_mask_voxels": 3146,
+      "vertex_count": 9822,
+      "triangle_count": 19636,
+      "exact_duplicate_triangles_removed": 0,
+      "boundary_edge_count": 0,
+      "nonmanifold_edge_count": 0,
+      "degenerate_triangle_count": 0,
+      "closed_edge_manifold": true,
+      "display_smoothing": {
+        "enabled": true,
+        "scalar_pre_smoothing_passes": 1,
+        "isosurface_level": 0.48,
+        "taubin_iterations": 8,
+        "taubin_lambda": 0.34,
+        "taubin_mu": -0.35,
+        "maximum_allowed_displacement_mm": 1.0,
+        "mean_vertex_displacement_mm": 0.10146502161086886,
+        "maximum_vertex_displacement_mm": 0.23435822353803362,
+        "surface_area_before_mm2": 1633.4741250279899,
+        "surface_area_after_mm2": 1624.4442125101962,
+        "surface_area_change_percent": -0.5528041356418156,
+        "volume_before_mm3": 3091.818622353632,
+        "volume_after_mm3": 3091.7053623696497,
+        "volume_change_percent": -0.0036632156609428534,
+        "source_label_volume_mm3": 3146.0136469093313,
+        "display_vs_source_label_volume_percent": -1.726257118847352,
+        "component_filter": {
+          "source_component_count": 4,
+          "retained_component_count": 2,
+          "removed_voxels": 2,
+          "removed_fraction_percent": 0.06357279084551812
+        }
+      }
+    },
+    "ventricles": {
+      "extraction": "marching_cubes_full_voxel_resolution_smoothed_display",
+      "marching_cubes_step_size": 1,
+      "display_upsample_factor": 1,
+      "source_mask_voxels": 20520,
+      "vertex_count": 16418,
+      "triangle_count": 32788,
+      "exact_duplicate_triangles_removed": 0,
+      "boundary_edge_count": 0,
+      "nonmanifold_edge_count": 0,
+      "degenerate_triangle_count": 0,
+      "closed_edge_manifold": true,
+      "display_smoothing": {
+        "enabled": true,
+        "scalar_pre_smoothing_passes": 1,
+        "isosurface_level": 0.48,
+        "taubin_iterations": 8,
+        "taubin_lambda": 0.34,
+        "taubin_mu": -0.35,
+        "maximum_allowed_displacement_mm": 1.0,
+        "mean_vertex_displacement_mm": 0.18588440829490596,
+        "maximum_vertex_displacement_mm": 0.47863465690923085,
+        "surface_area_before_mm2": 10741.73799993976,
+        "surface_area_after_mm2": 10607.605433106983,
+        "surface_area_change_percent": -1.2487045097686167,
+        "volume_before_mm3": 19596.507856584267,
+        "volume_after_mm3": 19583.590438255236,
+        "volume_change_percent": -0.06591694001587545,
+        "source_label_volume_mm3": 20520.089012898752,
+        "display_vs_source_label_volume_percent": -4.5638134125775,
+        "component_filter": {
+          "source_component_count": 31,
+          "retained_component_count": 2,
+          "removed_voxels": 59,
+          "removed_fraction_percent": 0.2875243664717349
+        }
+      }
+    },
+    "thalamus": {
+      "extraction": "marching_cubes_full_voxel_resolution_smoothed_display",
+      "marching_cubes_step_size": 1,
+      "display_upsample_factor": 1,
+      "source_mask_voxels": 12703,
+      "vertex_count": 5786,
+      "triangle_count": 11568,
+      "exact_duplicate_triangles_removed": 0,
+      "boundary_edge_count": 0,
+      "nonmanifold_edge_count": 0,
+      "degenerate_triangle_count": 0,
+      "closed_edge_manifold": true,
+      "display_smoothing": {
+        "enabled": true,
+        "scalar_pre_smoothing_passes": 1,
+        "isosurface_level": 0.48,
+        "taubin_iterations": 8,
+        "taubin_lambda": 0.34,
+        "taubin_mu": -0.35,
+        "maximum_allowed_displacement_mm": 1.0,
+        "mean_vertex_displacement_mm": 0.1916737009060037,
+        "maximum_vertex_displacement_mm": 0.4742181906733191,
+        "surface_area_before_mm2": 3885.662502524061,
+        "surface_area_after_mm2": 3851.8310605120446,
+        "surface_area_change_percent": -0.8706737136856324,
+        "volume_before_mm3": 12535.808567707872,
+        "volume_after_mm3": 12536.926836627708,
+        "volume_change_percent": 0.008920596655537238,
+        "source_label_volume_mm3": 12703.055103842731,
+        "display_vs_source_label_volume_percent": -1.3077819930480183,
+        "component_filter": {
+          "source_component_count": 18,
+          "retained_component_count": 1,
+          "removed_voxels": 40,
+          "removed_fraction_percent": 0.3148862473431473
+        }
+      }
+    },
+    "hippocampus": {
+      "extraction": "marching_cubes_full_voxel_resolution_smoothed_display",
+      "marching_cubes_step_size": 1,
+      "display_upsample_factor": 1,
+      "source_mask_voxels": 7907,
+      "vertex_count": 6182,
+      "triangle_count": 12356,
+      "exact_duplicate_triangles_removed": 0,
+      "boundary_edge_count": 0,
+      "nonmanifold_edge_count": 0,
+      "degenerate_triangle_count": 0,
+      "closed_edge_manifold": true,
+      "display_smoothing": {
+        "enabled": true,
+        "scalar_pre_smoothing_passes": 1,
+        "isosurface_level": 0.48,
+        "taubin_iterations": 8,
+        "taubin_lambda": 0.34,
+        "taubin_mu": -0.35,
+        "maximum_allowed_displacement_mm": 1.0,
+        "mean_vertex_displacement_mm": 0.18335069514749788,
+        "maximum_vertex_displacement_mm": 0.47668126130226907,
+        "surface_area_before_mm2": 4196.726458288318,
+        "surface_area_after_mm2": 4140.9653161912,
+        "surface_area_change_percent": -1.3286818345520812,
+        "volume_before_mm3": 7627.249138304537,
+        "volume_after_mm3": 7621.71858448648,
+        "volume_change_percent": -0.07251046501526304,
+        "source_label_volume_mm3": 7907.034299463471,
+        "display_vs_source_label_volume_percent": -3.6083783650255774,
+        "component_filter": {
+          "source_component_count": 9,
+          "retained_component_count": 2,
+          "removed_voxels": 12,
+          "removed_fraction_percent": 0.15176425951688377
+        }
+      }
+    },
+    "basal": {
+      "extraction": "marching_cubes_full_voxel_resolution_smoothed_display",
+      "marching_cubes_step_size": 1,
+      "display_upsample_factor": 1,
+      "source_mask_voxels": 27477,
+      "vertex_count": 17058,
+      "triangle_count": 34132,
+      "exact_duplicate_triangles_removed": 0,
+      "boundary_edge_count": 0,
+      "nonmanifold_edge_count": 0,
+      "degenerate_triangle_count": 0,
+      "closed_edge_manifold": true,
+      "display_smoothing": {
+        "enabled": true,
+        "scalar_pre_smoothing_passes": 1,
+        "isosurface_level": 0.48,
+        "taubin_iterations": 8,
+        "taubin_lambda": 0.34,
+        "taubin_mu": -0.35,
+        "maximum_allowed_displacement_mm": 1.0,
+        "mean_vertex_displacement_mm": 0.1932190060245435,
+        "maximum_vertex_displacement_mm": 0.5041352100978788,
+        "surface_area_before_mm2": 11242.106469367902,
+        "surface_area_after_mm2": 11117.042680915198,
+        "surface_area_change_percent": -1.1124586730562824,
+        "volume_before_mm3": 26905.219468059728,
+        "volume_after_mm3": 26899.394025076388,
+        "volume_change_percent": -0.021651720738624647,
+        "source_label_volume_mm3": 27477.11919139469,
+        "display_vs_source_label_volume_percent": -2.102568185165621,
+        "component_filter": {
+          "source_component_count": 18,
+          "retained_component_count": 2,
+          "removed_voxels": 30,
+          "removed_fraction_percent": 0.10918222513374821
+        }
+      }
+    },
+    "brainstem": {
+      "extraction": "marching_cubes_full_voxel_resolution_smoothed_display",
+      "marching_cubes_step_size": 1,
+      "display_upsample_factor": 1,
+      "source_mask_voxels": 18323,
+      "vertex_count": 7178,
+      "triangle_count": 14356,
+      "exact_duplicate_triangles_removed": 0,
+      "boundary_edge_count": 0,
+      "nonmanifold_edge_count": 0,
+      "degenerate_triangle_count": 0,
+      "closed_edge_manifold": true,
+      "display_smoothing": {
+        "enabled": true,
+        "scalar_pre_smoothing_passes": 1,
+        "isosurface_level": 0.48,
+        "taubin_iterations": 8,
+        "taubin_lambda": 0.34,
+        "taubin_mu": -0.35,
+        "maximum_allowed_displacement_mm": 1.0,
+        "mean_vertex_displacement_mm": 0.17902515954573386,
+        "maximum_vertex_displacement_mm": 0.4673457039895733,
+        "surface_area_before_mm2": 4955.981280672271,
+        "surface_area_after_mm2": 4924.535658443343,
+        "surface_area_change_percent": -0.6344984060283387,
+        "volume_before_mm3": 18277.94623666696,
+        "volume_after_mm3": 18277.03806458389,
+        "volume_change_percent": -0.004968676848660092,
+        "source_label_volume_mm3": 18323.079482619094,
+        "display_vs_source_label_volume_percent": -0.2512755461159255,
+        "component_filter": {
+          "source_component_count": 6,
+          "retained_component_count": 1,
+          "removed_voxels": 6,
+          "removed_fraction_percent": 0.03274572941112263
+        }
+      }
+    }
+  },
+  "display_geometry_qc": {
+    "brain": {
+      "extraction": "marching_cubes_display_surface_smoothed",
+      "marching_cubes_step_size": 2,
+      "display_upsample_factor": 1,
+      "source_mask_voxels": 1135741,
+      "vertex_count": 57908,
+      "triangle_count": 116036,
+      "exact_duplicate_triangles_removed": 0,
+      "boundary_edge_count": 0,
+      "nonmanifold_edge_count": 0,
+      "degenerate_triangle_count": 0,
+      "closed_edge_manifold": true,
+      "display_smoothing": {
+        "enabled": true,
+        "scalar_pre_smoothing_passes": 1,
+        "isosurface_level": 0.48,
+        "taubin_iterations": 12,
+        "taubin_lambda": 0.34,
+        "taubin_mu": -0.35,
+        "maximum_allowed_displacement_mm": 1.0,
+        "mean_vertex_displacement_mm": 0.4524509909294861,
+        "maximum_vertex_displacement_mm": 1.0000000000000033,
+        "surface_area_before_mm2": 149728.4128601252,
+        "surface_area_after_mm2": 142856.05660546874,
+        "surface_area_change_percent": -4.589881187798694,
+        "volume_before_mm3": 1162856.1522279317,
+        "volume_after_mm3": 1163246.8872402487,
+        "volume_change_percent": 0.03360131961021029,
+        "source_label_volume_mm3": 1135745.9266860937,
+        "display_vs_source_label_volume_percent": 2.421400764728965,
+        "component_filter": {
+          "source_component_count": 1,
+          "retained_component_count": 1,
+          "removed_voxels": 0,
+          "removed_fraction_percent": 0.0
+        }
+      },
+      "display_source": "largest connected white+gray matter mask with enclosed cavities filled; display-only inferior spinal tail cropped relative to the brainstem label",
+      "source_component_filter": {
+        "source_component_count": 2,
+        "retained_component_count": 1,
+        "removed_voxels": 112,
+        "removed_fraction_percent": 0.009842389943186562
+      },
+      "enclosed_cavity_voxels_filled": 2319,
+      "inferior_spinal_tail_crop": {
+        "enabled": true,
+        "method": "crop display-only white+gray mask inferior to brainstem",
+        "inferior_margin_mm": 4.0,
+        "inferior_cutoff_world_z_mm": -68.62503765709698,
+        "brainstem_inferior_world_z_mm": -64.62503765709698,
+        "removed_voxels": 4401,
+        "removed_fraction_percent": 0.38600455031039993,
+        "removed_brainstem_voxels": 0,
+        "scope": "display surface only; FEM mesh and tissue labels unchanged"
+      }
+    }
+  },
+  "compatibility_gate": {
+    "checks": {
+      "full_fem_mesh_present": true,
+      "brain_surface_present": true,
+      "scalp_surface_present": true,
+      "white_matter_surface_present": true,
+      "six_target_anatomy_meshes_present": true,
+      "p90_p95_field_shells_present": true,
+      "target_coverage_present": true,
+      "subvoxel_target_surface_present": true,
+      "subvoxel_closed_clip_cap_sources_present": true,
+      "p90_p95_metric_thresholds_present": true,
+      "four_montage_electrodes_present": true
+    },
+    "passed": true
+  },
+  "computational_mesh": {
+    "path": "E:\\TI工作\\FEM对比修复测试\\charm_replacement_pipeline\\test_outputs\\complete_components_83Y04\\self_mesh_v3_official_profile\\optimized_head_mesh.msh",
+    "sha256": "b9be7ef3c3dc557ed909552e3789bc0233fc21ec6c113d59259287ad8ca7775a",
+    "nodes": 390368,
+    "elements": 2715007,
+    "element_type_counts": {
+      "2": 577177,
+      "4": 2137830
+    },
+    "tag_counts": {
+      "1001": 125326,
+      "1002": 156263,
+      "1003": 51786,
+      "1005": 64498,
+      "1006": 1518,
+      "1007": 73798,
+      "1008": 63284,
+      "1009": 13579,
+      "1010": 2033,
+      "1099": 25092,
+      "1": 245293,
+      "2": 612935,
+      "3": 362934,
+      "5": 334942,
+      "6": 2692,
+      "7": 443378,
+      "8": 106880,
+      "9": 25043,
+      "10": 3733
+    },
+    "tetrahedra": 2137830,
+    "surface_triangles": 577177,
+    "full_computational_mesh_preserved": true
+  },
+  "field_shells": [
+    {
+      "key": "ti-outer",
+      "threshold_v_m": 0.07449152095675247,
+      "vertex_count": 11888,
+      "triangle_count": 23284
+    },
+    {
+      "key": "ti-core",
+      "threshold_v_m": 0.08431033539193077,
+      "vertex_count": 6430,
+      "triangle_count": 12328
+    }
+  ],
+  "electrodes": [
+    {
+      "name": "F7",
+      "xyzMm": [
+        -64.684947509,
+        60.668779206,
+        -7.772958642
+      ],
+      "radiusMm": 5.0,
+      "polarity": "anode",
+      "drive": "pair1",
+      "currentA": 0.000724
+    },
+    {
+      "name": "T7",
+      "xyzMm": [
+        -75.237442188,
+        6.820419565,
+        -7.774579234
+      ],
+      "radiusMm": 5.0,
+      "polarity": "cathode",
+      "drive": "pair1",
+      "currentA": -0.000724
+    },
+    {
+      "name": "T8",
+      "xyzMm": [
+        75.791206798,
+        15.646845873,
+        -9.682605622
+      ],
+      "radiusMm": 5.0,
+      "polarity": "anode",
+      "drive": "pair2",
+      "currentA": 0.001277
+    },
+    {
+      "name": "P8",
+      "xyzMm": [
+        70.156425836,
+        -40.038153406,
+        -5.75445977
+      ],
+      "radiusMm": 5.0,
+      "polarity": "cathode",
+      "drive": "pair2",
+      "currentA": -0.001277
+    }
+  ],
+  "field_3d_sampling": {
+    "source_point_count": 858228,
+    "display_point_count": 20000,
+    "purpose": "display_only_not_used_by_fem_or_metrics",
+    "method": "value_stratified_with_high_field_retention"
+  },
+  "generation_timing_seconds": {
+    "t1_field_grid_and_metrics": 0.6616702000001169,
+    "display_asset_generation": 9.805003800000122,
+    "json_serialization_and_gzip": 7.919201599999724,
+    "total": 18.38758189999953,
+    "payload_phases": {
+      "mesh_read": 0.0635152000004382,
+      "fem_surface_extraction": 1.2802865000003294,
+      "brain_display_surface": 2.2714316000001418,
+      "roi_surface_extraction": 4.758269699999801,
+      "field_shell_and_coverage_extraction": 0.9871614000003319,
+      "field_sampling_and_electrodes": 0.1797508999998172,
+      "payload_build_total": 9.793183800000406
+    }
+  },
+  "elapsed_seconds": 18.38758189999953,
+  "wpf_contract": "Schema v2: full FEM MSH is validated and retained for computation; WPF receives exact MSH boundary surfaces, continuous P90/P95 field shells, a subvoxel target display surface, independent closed clip-cap source volumes, complete target thresholds and montage electrodes."
+}

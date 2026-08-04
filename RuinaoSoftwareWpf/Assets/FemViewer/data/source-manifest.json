@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "subject": "83Y04",
+  "purpose": "WPF FEM demonstration package",
+  "t1": {
+    "file": "83Y04/T1.nii.gz",
+    "format": "NIfTI-1 gzip",
+    "source": "charm_e2e_inputs/83Y04/T1.nii.gz",
+    "sha256": "ACFF9F7B66BDD96372B2E5924D3A12CCDFD9602E5AA3FE500BD393258D38201E"
+  },
+  "slice2d": {
+    "file": "83Y04/83Y04-ti-amygdala.fem2d.gz",
+    "format": "gzip compact world-coordinate TI field grid plus MRI-grid ROI bit mask",
+    "sourceField": "charm_e2e_runs/83Y04_20260714_run3/fem_pipeline/fem_result/v3_native_pair_fields.npz:values_ti_envelope",
+    "sourceRoi": "m2m_83Y04/segmentation/labeling.nii.gz labels 18 and 54",
+    "target": "bilateral amygdala",
+    "displayMaximumVm": 0.105833,
+    "highFieldThresholdVm": 0.083958,
+    "sha256": "755AF5DBD7C67148420336726550F49331DF67EA1338C0DF5838FD8E3A922531"
+  },
+  "interactive3d": {
+    "file": "../fem-original-83y04.html",
+    "format": "HTML viewer with local Three.js modules and generated atlas mesh payload",
+    "sourceField": "charm_e2e_runs/83Y04_20260714_run3/fem_pipeline/fem_result/v3_native_pair_fields.npz",
+    "sourceModel": "m2m_83Y04",
+    "sourceMesh": "charm_e2e_runs/83Y04_20260714_run3/charm_work/m2m_83Y04_e2e_20260714_run3/83Y04_e2e_20260714_run3.msh",
+    "coverageMetric": "original FEM tetrahedron volume integration; 3D surface colors use the resampled display grid",
+    "montage": "F7/T7 and T8/P8",
+    "sha256": "6A43FCAD359677C3E11EABD92D0375A0039EB9EDC78740F20D382B92D160DBB2"
+  }
+}

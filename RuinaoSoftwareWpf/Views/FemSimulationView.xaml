@@ -1,224 +1,371 @@
 <UserControl x:Class="RuinaoSoftwareWpf.Views.FemSimulationView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:local="clr-namespace:RuinaoSoftwareWpf"
-             mc:Ignorable="d"
-             Background="#11141D">
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+             Background="#11141D" Loaded="ViewLoaded">
+    <UserControl.Resources>
+        <Style x:Key="FemButton" TargetType="Button">
+            <Setter Property="Background" Value="#17212E"/><Setter Property="BorderBrush" Value="#2B3A4D"/><Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="#DCE7F3"/><Setter Property="Padding" Value="10,6"/><Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+                <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonBorder" Property="Background" Value="#1D2C3B"/><Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#35D8E8"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonBorder" Property="Background" Value="#123945"/></Trigger>
+                    <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ButtonBorder" Property="Background" Value="#121922"/><Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#202C3A"/><Setter Property="Foreground" Value="#586777"/><Setter Property="Cursor" Value="Arrow"/><Setter Property="Opacity" Value="1"/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+        <Style x:Key="FemPrimaryButton" TargetType="Button" BasedOn="{StaticResource FemButton}">
+            <Setter Property="Background" Value="#123845"/><Setter Property="BorderBrush" Value="#35D8E8"/><Setter Property="Foreground" Value="#E9FDFF"/>
+            <Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Padding" Value="12,8"/>
+        </Style>
+        <Style x:Key="FemDangerAccentButton" TargetType="Button" BasedOn="{StaticResource FemButton}">
+            <Setter Property="BorderBrush" Value="#59343A"/><Setter Property="Foreground" Value="#FFB5B5"/>
+        </Style>
+        <Style x:Key="FemSectionLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#6F8297"/><Setter Property="FontSize" Value="10"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Margin" Value="0,0,0,7"/>
+        </Style>
+        <Style x:Key="FemTechCheckBox" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#C6D2DF"/><Setter Property="Margin" Value="2,5"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="FemExpander" TargetType="Expander">
+            <Setter Property="Foreground" Value="#CAD7E4"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style x:Key="StepCard" TargetType="Button" BasedOn="{StaticResource FemButton}">
+            <Setter Property="Background" Value="#20242E"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Foreground" Value="#E4E8EF"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/><Setter Property="Padding" Value="12,8"/><Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style x:Key="SliceButton" TargetType="Button" BasedOn="{StaticResource FemButton}">
+            <Setter Property="Width" Value="34"/><Setter Property="Height" Value="30"/><Setter Property="Padding" Value="0"/><Setter Property="FontSize" Value="16"/>
+        </Style>
+        <Style x:Key="ViewMode" TargetType="Button" BasedOn="{StaticResource FemButton}">
+            <Setter Property="Padding" Value="14,7"/><Setter Property="Margin" Value="4,0"/>
+        </Style>
+        <Style x:Key="ActionButton" TargetType="Button" BasedOn="{StaticResource FemButton}"><Setter Property="Background" Value="#4A4D56"/><Setter Property="HorizontalContentAlignment" Value="Center"/></Style>
+        <Style x:Key="SliceZoomButton" TargetType="Button" BasedOn="{StaticResource FemButton}">
+            <Setter Property="MinWidth" Value="25"/><Setter Property="Height" Value="24"/><Setter Property="Padding" Value="5,1"/><Setter Property="FontSize" Value="11"/><Setter Property="Margin" Value="1,0"/>
+        </Style>
+    </UserControl.Resources>
 
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="420" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
+    <Grid Margin="14">
+        <Grid.RowDefinitions><RowDefinition Height="52"/><RowDefinition Height="*"/><RowDefinition Height="30"/></Grid.RowDefinitions>
 
-            <Border Grid.Column="0"
-                    Background="#1C202B"
-                    BorderBrush="#242A36"
-                    BorderThickness="0,0,1,0"
->
-                <DockPanel Margin="18,14">
-                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,14">
-                        <Grid Height="44" Margin="0,0,0,14">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border Background="#2D303A"
-                                    CornerRadius="4,0,0,4"
-                                    Padding="10,7"
-                                    Margin="0,0,3,0">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Context.Localization.FemStep1Text}" Foreground="{StaticResource SubText}" FontSize="12" />
-                                    <TextBlock Text="{Binding Context.Localization.FemLoadModelText}" FontSize="13" />
-                                </StackPanel>
-                            </Border>
-                            <Border Grid.Column="1"
-                                    Background="#20242E"
-                                    CornerRadius="0,4,4,0"
-                                    Padding="10,7">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Context.Localization.FemStep2Text}" Foreground="{StaticResource SubText}" FontSize="12" />
-                                    <TextBlock Text="{Binding Context.Localization.FemVisualizationText}" FontSize="13" />
-                                </StackPanel>
-                            </Border>
-                        </Grid>
+        <StackPanel Orientation="Horizontal">
+            <Button Width="168" Command="{Binding PreviousStepCommand}">
+                <StackPanel><TextBlock Text="步骤 1" FontSize="11" Foreground="#9CA3B0"/><TextBlock Text="导入计算结果" Margin="0,3,0,0"/></StackPanel>
+                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource StepCard}"><Style.Triggers><DataTrigger Binding="{Binding IsLoadStep}" Value="True"><Setter Property="Background" Value="#30313A"/></DataTrigger></Style.Triggers></Style></Button.Style>
+            </Button>
+            <Button Width="168" Command="{Binding GenerateMontageCommand}" Margin="3,0,0,0">
+                <StackPanel><TextBlock Text="步骤 2" FontSize="11" Foreground="#9CA3B0"/><TextBlock Text="可视化" Margin="0,3,0,0"/></StackPanel>
+                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource StepCard}"><Style.Triggers><DataTrigger Binding="{Binding IsVisualizationStep}" Value="True"><Setter Property="Background" Value="#30313A"/></DataTrigger></Style.Triggers></Style></Button.Style>
+            </Button>
+        </StackPanel>
+
+        <Grid Grid.Row="1" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition x:Name="FemControlColumn" Width="350"/><ColumnDefinition Width="26"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border x:Name="FemControlPanel" Grid.Column="0" Background="#101721" BorderBrush="#233142" BorderThickness="1" CornerRadius="7" Padding="14">
+                <Grid><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,0,4,0">
+                    <DockPanel Margin="0,0,0,8" Visibility="{Binding IsLoadStep, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock Text="读取自研 CHARM/FEM 已完成结果" VerticalAlignment="Center" FontSize="12"/>
+                        <Button DockPanel.Dock="Right" Content="选择清单" Click="ChooseModelClick" Style="{StaticResource FemButton}" Padding="10,5"/>
+                    </DockPanel>
+                    <Border Background="#23262E" CornerRadius="3" Padding="10,7" Margin="0,0,0,16" Visibility="{Binding IsLoadStep, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock Text="{Binding ModelFileName}" Foreground="#AEB5C2" TextTrimming="CharacterEllipsis" ToolTip="{Binding ModelPath}"/>
+                    </Border>
+                    <TextBlock Text="页面会自动读取内置示例；“选择清单”可改为其他 result-manifest.json。WPF 仅校验和显示结果，不在本地启动分割或有限元计算。"
+                               Foreground="#75879A" TextWrapping="Wrap" FontSize="10" Margin="0,0,0,16"
+                               Visibility="{Binding IsLoadStep, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                    <StackPanel>
+                        <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Is3D}" Value="False"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
+                    <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="125"/><ColumnDefinition Width="34"/><ColumnDefinition Width="*"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="冠状位切片" VerticalAlignment="Center"/><Button Grid.Column="1" Content="−" Command="{Binding DecreaseSliceCommand}" CommandParameter="Coronal" Style="{StaticResource SliceButton}"/>
+                        <TextBox Grid.Column="2" Text="{Binding CoronalSlice, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource FieldBox}" Height="30" Margin="8,0" HorizontalContentAlignment="Center"/>
+                        <Button Grid.Column="3" Content="+" Command="{Binding IncreaseSliceCommand}" CommandParameter="Coronal" Style="{StaticResource SliceButton}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="125"/><ColumnDefinition Width="34"/><ColumnDefinition Width="*"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="矢状位切片" VerticalAlignment="Center"/><Button Grid.Column="1" Content="−" Command="{Binding DecreaseSliceCommand}" CommandParameter="Sagittal" Style="{StaticResource SliceButton}"/>
+                        <TextBox Grid.Column="2" Text="{Binding SagittalSlice, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource FieldBox}" Height="30" Margin="8,0" HorizontalContentAlignment="Center"/>
+                        <Button Grid.Column="3" Content="+" Command="{Binding IncreaseSliceCommand}" CommandParameter="Sagittal" Style="{StaticResource SliceButton}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,18"><Grid.ColumnDefinitions><ColumnDefinition Width="125"/><ColumnDefinition Width="34"/><ColumnDefinition Width="*"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="轴位切片" VerticalAlignment="Center"/><Button Grid.Column="1" Content="−" Command="{Binding DecreaseSliceCommand}" CommandParameter="Axial" Style="{StaticResource SliceButton}"/>
+                        <TextBox Grid.Column="2" Text="{Binding AxialSlice, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource FieldBox}" Height="30" Margin="8,0" HorizontalContentAlignment="Center"/>
+                        <Button Grid.Column="3" Content="+" Command="{Binding IncreaseSliceCommand}" CommandParameter="Axial" Style="{StaticResource SliceButton}"/>
+                    </Grid>
                     </StackPanel>
 
-                    <Border Style="{StaticResource Card}" Padding="14">
-                        <StackPanel>
-                            <DockPanel Margin="0,0,0,20">
-                                <TextBlock Text="{Binding Context.Localization.FemLoadHeadModelText}"
-                                           VerticalAlignment="Center"
-                                           Foreground="{StaticResource Text}" />
-                                <Button Content="{Binding Context.Localization.FemChooseFileText}"
-                                        Style="{StaticResource ToggleButton}"
-                                        DockPanel.Dock="Right"
-                                        Padding="12,6" />
-                            </DockPanel>
-
-                            <Grid Margin="0,0,0,14">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="120" />
-                                    <ColumnDefinition Width="32" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="32" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="{Binding Context.Localization.FemCoronalSliceText}" VerticalAlignment="Center" Foreground="{StaticResource Text}" />
-                                <Button Grid.Column="1" Content="-" Style="{StaticResource ToggleButton}" Padding="0" />
-                                <TextBox Grid.Column="2" Text="12" Style="{StaticResource FieldBox}" HorizontalContentAlignment="Center" Margin="8,0" />
-                                <Button Grid.Column="3" Content="+" Style="{StaticResource ToggleButton}" Padding="0" />
+                    <StackPanel x:Name="WpfThreeDimensionalControls" Margin="0,0,0,16" IsEnabled="False">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers><MultiDataTrigger><MultiDataTrigger.Conditions><Condition Binding="{Binding Is3D}" Value="True"/><Condition Binding="{Binding HasCompatible3DResult}" Value="True"/></MultiDataTrigger.Conditions><Setter Property="Visibility" Value="Visible"/></MultiDataTrigger></Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <Border Background="#111D29" BorderBrush="#274052" BorderThickness="1" CornerRadius="6" Padding="11" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="4"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Border Background="#35D8E8" CornerRadius="2" Margin="0,1"/>
+                                <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                    <TextBlock Text="三维有限元分析" Foreground="#35D8E8" FontSize="10" FontWeight="Bold"/>
+                                    <TextBlock Text="三维刺激场分析" FontSize="16" FontWeight="SemiBold" Foreground="#ECF4FA" Margin="0,2,0,0"/>
+                                    <TextBlock Text="{Binding SubjectId, StringFormat={}{0} · 刺激场包络}" Foreground="#7D91A6" FontSize="10" Margin="0,3,0,0"/>
+                                </StackPanel>
+                                <Border Grid.Column="2" Background="#102D2B" BorderBrush="#255D58" BorderThickness="1" CornerRadius="9" Padding="7,2" VerticalAlignment="Top">
+                                    <StackPanel Orientation="Horizontal"><Ellipse Width="6" Height="6" Fill="#44E6A8" Margin="0,0,5,0"/><TextBlock Text="就绪" Foreground="#85EBC4" FontSize="9"/></StackPanel>
+                                </Border>
                             </Grid>
+                        </Border>
 
-                            <Grid Margin="0,0,0,14">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="120" />
-                                    <ColumnDefinition Width="32" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="32" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="{Binding Context.Localization.FemSagittalSliceText}" VerticalAlignment="Center" Foreground="{StaticResource Text}" />
-                                <Button Grid.Column="1" Content="-" Style="{StaticResource ToggleButton}" Padding="0" />
-                                <TextBox Grid.Column="2" Text="12" Style="{StaticResource FieldBox}" HorizontalContentAlignment="Center" Margin="8,0" />
-                                <Button Grid.Column="3" Content="+" Style="{StaticResource ToggleButton}" Padding="0" />
-                            </Grid>
+                        <Border Background="#141D28" BorderBrush="#243345" BorderThickness="1" CornerRadius="6" Padding="11" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="01  场景" Style="{StaticResource FemSectionLabel}"/>
+                                <Grid Margin="0,0,0,8">
+                                    <Button x:Name="WpfFocusStimulusButton" Content="聚焦杏仁核刺激区" Click="FocusStimulusClick" Style="{StaticResource FemButton}" HorizontalContentAlignment="Center"/>
+                                    <Button x:Name="WpfRestoreFullModelButton" Content="退出聚焦 · 返回完整模型" Click="RestoreFullModelClick" Style="{StaticResource FemDangerAccentButton}" HorizontalContentAlignment="Center" Visibility="Collapsed"/>
+                                </Grid>
+                                <Button x:Name="WpfToggleScalpButton" Content="隐藏头部轮廓" Click="ToggleScalpClick" Style="{StaticResource FemButton}" HorizontalContentAlignment="Center" Margin="0,0,0,9"/>
+                                <StackPanel x:Name="WpfHeatThresholdPanel">
+                                    <DockPanel Margin="0,0,0,5"><TextBlock Text="全脑刺激显示阈值" Foreground="#AEBCCA"/><TextBlock x:Name="WpfHeatThresholdLabel" Text="90%" Foreground="#35D8E8" FontWeight="SemiBold" HorizontalAlignment="Right"/></DockPanel>
+                                    <Slider x:Name="WpfHeatThreshold" Minimum="85" Maximum="99" TickFrequency="0.5" IsSnapToTickEnabled="True" Value="90" ValueChanged="HeatThresholdChanged" Foreground="#35D8E8"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
 
-                            <Grid Margin="0,0,0,22">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="120" />
-                                    <ColumnDefinition Width="32" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="32" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="{Binding Context.Localization.FemAxialSliceText}" VerticalAlignment="Center" Foreground="{StaticResource Text}" />
-                                <Button Grid.Column="1" Content="-" Style="{StaticResource ToggleButton}" Padding="0" />
-                                <TextBox Grid.Column="2" Text="12" Style="{StaticResource FieldBox}" HorizontalContentAlignment="Center" Margin="8,0" />
-                                <Button Grid.Column="3" Content="+" Style="{StaticResource ToggleButton}" Padding="0" />
-                            </Grid>
+                        <Border Background="#141D28" BorderBrush="#243345" BorderThickness="1" CornerRadius="6" Padding="11" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="02  医学视角" Style="{StaticResource FemSectionLabel}"/>
+                                <UniformGrid Columns="3" Margin="0,0,0,7">
+                                    <Button x:Name="WpfSagittalViewButton" Content="矢状位" Tag="sagittal" Click="MedicalViewClick" Style="{StaticResource FemButton}" Margin="0,0,4,0" Padding="5,6"/>
+                                    <Button x:Name="WpfCoronalViewButton" Content="冠状位" Tag="coronal" Click="MedicalViewClick" Style="{StaticResource FemButton}" Margin="2,0" Padding="5,6"/>
+                                    <Button x:Name="WpfAxialViewButton" Content="轴位" Tag="axial" Click="MedicalViewClick" Style="{StaticResource FemButton}" Margin="4,0,0,0" Padding="5,6"/>
+                                </UniformGrid>
+                                <TextBlock x:Name="WpfMedicalViewStatus" Text="未聚焦 · 可自由旋转" Foreground="#71869B" FontSize="10" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
 
-                            <Button Content="{Binding Context.Localization.FemGenerateMontageText}"
-                                    Style="{StaticResource TopButton}"
-                                    Background="#555862"
-                                    Margin="0"
-                                    Padding="12,8" />
+                        <StackPanel x:Name="WpfFemFocusControls" IsEnabled="False" Visibility="Collapsed">
+                            <Border Background="#112630" BorderBrush="#27616B" BorderThickness="1" CornerRadius="6" Padding="11" Margin="0,0,0,10">
+                                <DockPanel>
+                                    <StackPanel><TextBlock Text="刺激场与目标检查" Foreground="#35D8E8" FontSize="9" FontWeight="Bold"/><TextBlock Text="杏仁核刺激场分析" Foreground="#EAF4F8" FontWeight="SemiBold" Margin="0,2,0,0"/><TextBlock x:Name="WpfLayerStatus" Text="目标表面覆盖：侧别 2/2 · 场轮廓" Foreground="#8EA6B8" FontSize="10" Margin="0,3,0,0"/></StackPanel>
+                                    <Button DockPanel.Dock="Right" Content="重置" Click="ResetFocusDisplayClick" Style="{StaticResource FemButton}" Padding="9,4" VerticalAlignment="Center"/>
+                                </DockPanel>
+                            </Border>
+                            <StackPanel x:Name="WpfFieldOverviewOptions" Visibility="Collapsed" Height="0">
+                                <Button x:Name="WpfFieldOverviewButton" Content="整体刺激场" Tag="show-field-overview" Click="CoverageModeClick" Style="{StaticResource FemButton}" Background="#5A422A" BorderBrush="#B78245" Margin="0,0,3,0" Padding="5,5"/>
+                                <Button x:Name="WpfP95ComparisonButton" Content="P95覆盖对比" Tag="show-p95-comparison" Click="CoverageModeClick" Style="{StaticResource FemButton}" Margin="3,0,0,0" Padding="5,5"/>
+                                <CheckBox x:Name="WpfShowFieldOuter" Content="黄色刺激外层 P90" IsChecked="True" Click="FieldLayerClick" Tag="show-field-outer" Foreground="#FFD95A" Margin="2,4"/>
+                                <CheckBox x:Name="WpfShowFieldCore" Content="红色刺激核心 P95" IsChecked="True" Click="FieldLayerClick" Tag="show-field-core" Foreground="#FF726C" Margin="2,4"/>
+                                <CheckBox x:Name="WpfShowWhiteMatter" Content="显示平滑白质" Click="FieldLayerClick" Tag="show-white" Foreground="#C8CED8" Margin="2,4,2,10"/>
+                            </StackPanel>
+
+                            <Border Background="#141D28" BorderBrush="#243345" BorderThickness="1" CornerRadius="6" Padding="11" Margin="0,0,0,10">
+                                <StackPanel x:Name="WpfCoverageOptions">
+                                    <TextBlock Text="03  刺激场 / 目标覆盖" Style="{StaticResource FemSectionLabel}"/>
+                                    <CheckBox x:Name="WpfShowStimField" Content="显示覆盖分析" IsChecked="True" Click="FieldLayerClick" Tag="show-stim-field" Style="{StaticResource FemTechCheckBox}" Foreground="#DFFBFF" FontWeight="SemiBold" Margin="0,0,0,7"/>
+                                    <UniformGrid x:Name="WpfCoverageViewModeOptions" Columns="2" Margin="0,0,0,7">
+                                        <Button x:Name="WpfSolidCoverageButton" Content="实体覆盖" Tag="coverage-view-solid" Click="CoverageViewModeClick" Style="{StaticResource FemButton}" Background="#123845" BorderBrush="#35D8E8" Margin="0,0,3,0" Padding="5,5" ToolTip="用不透明分区直接判断杏仁核被覆盖的部位"/>
+                                        <Button x:Name="WpfFieldDistributionButton" Content="场分布" Tag="coverage-view-field" Click="CoverageViewModeClick" Style="{StaticResource FemButton}" Margin="3,0,0,0" Padding="5,5" ToolTip="查看杏仁核附近的空间等值场"/>
+                                    </UniformGrid>
+                                    <UniformGrid x:Name="WpfCoverageBandOptions" Columns="3" Margin="0,0,0,7">
+                                        <Button x:Name="WpfCoverageBandAllButton" Content="全部" Tag="coverage-band-all" Click="CoverageBandModeClick" Style="{StaticResource FemButton}" Background="#123845" BorderBrush="#35D8E8" Margin="0,0,3,0" Padding="4"/>
+                                        <Button x:Name="WpfCoverageBandP95Button" Content="仅 P95" Tag="coverage-band-p95" Click="CoverageBandModeClick" Style="{StaticResource FemButton}" Margin="2,0" Padding="4"/>
+                                        <Button x:Name="WpfCoverageBandUncoveredButton" Content="仅未覆盖" Tag="coverage-band-uncovered" Click="CoverageBandModeClick" Style="{StaticResource FemButton}" Margin="3,0,0,0" Padding="4"/>
+                                    </UniformGrid>
+                                    <Border x:Name="WpfStimFieldDetails" Background="#101923" BorderBrush="#28485A" BorderThickness="1" CornerRadius="4" Padding="8,5" Margin="0,0,0,8" Visibility="Collapsed">
+                                        <CheckBox x:Name="WpfShowFieldContours" Content="叠加全局等值面：金色 P90 / 玫红 P95" Click="FieldLayerClick" Tag="show-field-contours" Style="{StaticResource FemTechCheckBox}" Foreground="#D9AE4E" ToolTip="目标邻域场始终显示；此项仅控制额外的全局等值面"/>
+                                    </Border>
+                                    <WrapPanel x:Name="WpfCoverageLegendHelp" Margin="0,0,0,8">
+                                        <Ellipse Width="7" Height="7" Fill="#24384A" Margin="0,4,4,0"/><TextBlock Text="低于 P90" Foreground="#7FA8BC" FontSize="10" Margin="0,0,9,0"/>
+                                        <Ellipse Width="7" Height="7" Fill="#D99A2B" Margin="0,4,4,0"/><TextBlock Text="P90–P95" Foreground="#E1B35B" FontSize="10" Margin="0,0,9,0"/>
+                                        <Ellipse Width="7" Height="7" Fill="#FF2F7D" Margin="0,4,4,0"/><TextBlock Text="达到 P95" Foreground="#FF8EC5" FontSize="10" Margin="0,0,9,0"/>
+                                        <Ellipse Width="7" Height="7" Fill="#176B73" Margin="0,4,4,0"/><TextBlock Text="目标剖面基底" Foreground="#50D6A0" FontSize="10" Margin="0,0,9,0"/>
+                                        <Ellipse Width="7" Height="7" Fill="#B9F6FF" Margin="0,4,4,0"/><TextBlock Text="阈值交界" Foreground="#B9F6FF" FontSize="10"/>
+                                    </WrapPanel>
+                                    <UniformGrid x:Name="WpfCoverageSideOptions" Columns="2" Margin="0,0,0,4">
+                                        <CheckBox x:Name="WpfCoverageLeft" Content="左侧杏仁核" IsChecked="True" Click="FieldLayerClick" Tag="show-coverage-left" Style="{StaticResource FemTechCheckBox}"/>
+                                        <CheckBox x:Name="WpfCoverageRight" Content="右侧杏仁核" IsChecked="True" Click="FieldLayerClick" Tag="show-coverage-right" Style="{StaticResource FemTechCheckBox}"/>
+                                    </UniformGrid>
+                                    <Expander x:Name="WpfCoverageClipExpander" Header="高级检查" Style="{StaticResource FemExpander}" Margin="0,5,0,0">
+                                        <StackPanel Margin="18,7,0,2">
+                                            <DockPanel Margin="0,0,0,4"><TextBlock Text="脑轮廓透明度" Foreground="#8296A9"/><TextBlock x:Name="WpfContextOpacityLabel" Text="6%" Foreground="#35D8E8" HorizontalAlignment="Right"/></DockPanel>
+                                            <Slider x:Name="WpfContextOpacity" Minimum="6" Maximum="30" TickFrequency="2" IsSnapToTickEnabled="True" Value="6" ValueChanged="ContextOpacityChanged" Foreground="#35D8E8" Margin="0,0,0,8"/>
+                                            <CheckBox x:Name="WpfCoverageClipEnabled" Content="启用剖切检查" Click="FieldLayerClick" Tag="enable-coverage-clip" Style="{StaticResource FemTechCheckBox}"/>
+                                            <StackPanel x:Name="WpfCoverageClipDetails" Visibility="Collapsed" Margin="0,5,0,0">
+                                                <TextBlock Text="剖切方向" Foreground="#8296A9" FontSize="10" Margin="0,0,0,5"/>
+                                                <UniformGrid Columns="3" Margin="0,0,0,7">
+                                                    <Button x:Name="WpfClipSagittalButton" Content="矢状" Tag="clip-axis-sagittal" Click="CoverageClipAxisClick" Style="{StaticResource FemButton}" Margin="0,0,3,0" Padding="4" ToolTip="矢状剖切一次检查一侧杏仁核，选择左右侧可切换"/>
+                                                    <Button x:Name="WpfClipCoronalButton" Content="冠状" Tag="clip-axis-coronal" Click="CoverageClipAxisClick" Style="{StaticResource FemButton}" Background="#123845" BorderBrush="#35D8E8" Margin="3,0" Padding="4"/>
+                                                    <Button x:Name="WpfClipAxialButton" Content="轴位" Tag="clip-axis-axial" Click="CoverageClipAxisClick" Style="{StaticResource FemButton}" Margin="3,0,0,0" Padding="4"/>
+                                                </UniformGrid>
+                                                <DockPanel Margin="0,0,0,4"><TextBlock Text="目标内剖切位置" Foreground="#8296A9"/><TextBlock x:Name="WpfCoverageClipPositionLabel" Text="50%" Foreground="#35D8E8" HorizontalAlignment="Right"/></DockPanel>
+                                                <Slider x:Name="WpfCoverageClipPosition" Minimum="5" Maximum="95" TickFrequency="2" IsSnapToTickEnabled="True" Value="50" IsEnabled="False" ValueChanged="CoverageClipPositionChanged" Foreground="#35D8E8"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Expander>
+                                </StackPanel>
+                            </Border>
+
+                            <Expander x:Name="WpfAnatomyOptions" Header="参考解剖结构" Style="{StaticResource FemExpander}" IsExpanded="False" Margin="0,0,0,10">
+                                <Border Background="#141D28" BorderBrush="#243345" BorderThickness="1" CornerRadius="6" Padding="11" Margin="0,7,0,0">
+                                    <StackPanel>
+                                        <DockPanel Margin="0,0,0,6"><TextBlock Text="脑区显示" Foreground="#8DA1B5"/><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><CheckBox x:Name="WpfSelectAllStructures" Content="全选参考" IsThreeState="True" IsChecked="True" Click="SelectAllStructuresCheckClick" Style="{StaticResource FemTechCheckBox}" Margin="0,0,7,0"/><Button Content="仅目标" Click="SelectTargetOnlyClick" Style="{StaticResource FemButton}" Padding="6,2"/><Button Content="适配已选" Click="FitVisibleStructuresClick" Style="{StaticResource FemButton}" Padding="6,2" Margin="5,0,0,0"/></StackPanel></DockPanel>
+                                        <TextBlock Text="勾选需要叠加显示的脑内解剖结构。" Foreground="#687C8F" FontSize="9" TextWrapping="Wrap" Margin="0,0,0,5"/>
+                                        <WrapPanel x:Name="WpfStructurePicker" Margin="0,0,0,8">
+                                            <CheckBox Content="杏仁核" Tag="amygdala" IsChecked="True" Click="StructureCheckClick" Style="{StaticResource FemTechCheckBox}" Margin="2,5,12,5"/>
+                                            <CheckBox Content="脑室" Tag="ventricles" IsChecked="True" Click="StructureCheckClick" Style="{StaticResource FemTechCheckBox}" Margin="2,5,12,5"/>
+                                            <CheckBox Content="丘脑" Tag="thalamus" IsChecked="True" Click="StructureCheckClick" Style="{StaticResource FemTechCheckBox}" Margin="2,5,12,5"/>
+                                            <CheckBox Content="海马" Tag="hippocampus" IsChecked="True" Click="StructureCheckClick" Style="{StaticResource FemTechCheckBox}" Margin="2,5,12,5"/>
+                                            <CheckBox Content="基底节" Tag="basal" IsChecked="True" Click="StructureCheckClick" Style="{StaticResource FemTechCheckBox}" Margin="2,5,12,5"/>
+                                            <CheckBox Content="脑干" Tag="brainstem" IsChecked="True" Click="StructureCheckClick" Style="{StaticResource FemTechCheckBox}" Margin="2,5,12,5"/>
+                                        </WrapPanel>
+                                        <DockPanel Margin="0,0,0,5"><TextBlock Text="结构透明度" Foreground="#8296A9"/><TextBlock x:Name="WpfStructureOpacityLabel" Text="30%" Foreground="#35D8E8" HorizontalAlignment="Right"/></DockPanel>
+                                        <Slider x:Name="WpfStructureOpacity" Minimum="15" Maximum="60" TickFrequency="5" IsSnapToTickEnabled="True" Value="30" ValueChanged="StructureOpacityChanged" Foreground="#35D8E8"/>
+                                    </StackPanel>
+                                </Border>
+                            </Expander>
+
+                            <Border Background="#111923" BorderBrush="#26384A" BorderThickness="1" CornerRadius="6" Padding="11">
+                                <StackPanel>
+                                    <TextBlock Text="杏仁核 P95 覆盖" Style="{StaticResource FemSectionLabel}" Foreground="#718BA0"/>
+                                    <TextBlock x:Name="WpfTargetMetrics" Text="等待三维数据" Foreground="#C2D0DD" TextWrapping="Wrap" FontSize="11"/>
+                                    <TextBlock Text="左侧" Foreground="#91A4B6" FontSize="10" Margin="0,8,0,3"/>
+                                    <Grid Height="8" ClipToBounds="True"><Grid.ColumnDefinitions><ColumnDefinition x:Name="WpfLeftUncoveredColumn"/><ColumnDefinition x:Name="WpfLeftP95Column"/></Grid.ColumnDefinitions><Border Grid.Column="0" Background="#52677A"/><Border Grid.Column="1" Background="#FF2F7D"/></Grid>
+                                    <TextBlock Text="右侧" Foreground="#91A4B6" FontSize="10" Margin="0,7,0,3"/>
+                                    <Grid Height="8" ClipToBounds="True"><Grid.ColumnDefinitions><ColumnDefinition x:Name="WpfRightUncoveredColumn"/><ColumnDefinition x:Name="WpfRightP95Column"/></Grid.ColumnDefinitions><Border Grid.Column="0" Background="#52677A"/><Border Grid.Column="1" Background="#FF2F7D"/></Grid>
+                                    <WrapPanel Margin="0,8,0,0"><Ellipse Width="7" Height="7" Fill="#52677A" Margin="0,0,4,0"/><TextBlock Text="未达 P95" Foreground="#8FA6B8" FontSize="9" Margin="0,0,12,0"/><Ellipse Width="7" Height="7" Fill="#FF2F7D" Margin="0,0,4,0"/><TextBlock Text="达到 P95" Foreground="#FF8EC5" FontSize="9"/></WrapPanel>
+                                    <TextBlock Text="P95指脑组织场强分布第95百分位阈值，不是置信度；科研定量以原始四面体积分为准。" Foreground="#657789" TextWrapping="Wrap" FontSize="9" Margin="0,7,0,0"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
-                    </Border>
-                </DockPanel>
-            </Border>
-
-
-            <Grid Grid.Column="1"
-                  Margin="14"
-                  Background="#20242B"
->
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <StackPanel Grid.Row="0"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Center"
-                            Margin="0,18,0,8">
-                    <Button Content="2D"
-                            Style="{StaticResource ToggleButton}"
-                            Padding="14,7"
-                            Margin="0,0,8,0" />
-                    <Button Content="3D"
-                            Style="{StaticResource ToggleButton}"
-                            Background="#4A3B28"
-                            BorderBrush="#5E4930"
-                            Padding="14,7" />
+                    </StackPanel>
                 </StackPanel>
+                </ScrollViewer>
+                <StackPanel Grid.Row="1" Margin="0,10,4,0">
+                    <Button Content="重新加载当前结果" Command="{Binding GenerateMontageCommand}" Style="{StaticResource ActionButton}" Padding="10,8" Visibility="{Binding IsLoadStep, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <StackPanel Visibility="{Binding IsVisualizationStep, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Button Content="发送至刺激设备" Command="{Binding SendToDeviceCommand}" Style="{StaticResource ActionButton}" Margin="0,0,0,10" Padding="10,8"/>
+                        <Button Content="导出" Click="ExportClick" IsEnabled="{Binding HasVolume}" Style="{StaticResource ActionButton}" Margin="0" Padding="10,8"/>
+                    </StackPanel>
+                </StackPanel>
+                </Grid>
+            </Border>
+            <Button x:Name="FemSidebarToggle" Grid.Column="1" Content="‹" Click="ToggleFemControlPanelClick" Style="{StaticResource FemButton}" Width="22" Height="72" Padding="0" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="18" ToolTip="收起参数栏"/>
 
-                <Viewbox Grid.Row="1" Stretch="Uniform" Margin="80,40">
-                    <Border Width="760"
-                            Height="400"
-                            Background="Black"
-                            BorderBrush="#E5E5E5"
-                            BorderThickness="2"
-                            Padding="12">
-                        <UniformGrid Rows="2" Columns="4">
-                            <Border Margin="5" Background="#111">
-                                <Grid>
-                                    <Ellipse Stroke="#D7D7D7" StrokeThickness="8" Fill="#444" Margin="12" />
-                                    <Ellipse Stroke="#7A7A7A" StrokeThickness="4" Fill="#9A9A9A" Margin="32,28" />
-                                    <Path Data="M95,120 L115,82 L132,120 Z" Fill="White" />
-                                    <TextBlock Text="A" FontSize="26" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,8,2" />
-                                </Grid>
-                            </Border>
-                            <Border Margin="5" Background="#111">
-                                <Grid>
-                                    <Ellipse Stroke="#D7D7D7" StrokeThickness="8" Fill="#4A4A4A" Margin="12" />
-                                    <Ellipse Stroke="#7A7A7A" StrokeThickness="4" Fill="#A6A6A6" Margin="30,24" />
-                                    <Path Data="M120,142 L138,100 L154,142 Z" Fill="White" />
-                                    <TextBlock Text="B" FontSize="26" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,8,2" />
-                                </Grid>
-                            </Border>
-                            <Border Margin="5" Background="#111">
-                                <Grid>
-                                    <Ellipse Stroke="#D7D7D7" StrokeThickness="8" Fill="#464646" Margin="14" />
-                                    <Ellipse Stroke="#7A7A7A" StrokeThickness="4" Fill="#B0B0B0" Margin="36,30" />
-                                    <Path Data="M130,146 L152,108 L164,148 Z" Fill="White" />
-                                    <TextBlock Text="C" FontSize="26" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,8,2" />
-                                </Grid>
-                            </Border>
-                            <Border Margin="5" Background="#111">
-                                <Grid>
-                                    <Ellipse Stroke="#D7D7D7" StrokeThickness="8" Fill="#393939" Margin="14" />
-                                    <Ellipse Stroke="#888" StrokeThickness="4" Fill="#969696" Margin="38,34" />
-                                    <Path Data="M148,132 L188,118 L170,154 Z" Fill="White" />
-                                    <TextBlock Text="D" FontSize="26" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,8,2" />
-                                </Grid>
-                            </Border>
-                            <Border Margin="5" Background="#111">
-                                <Grid>
-                                    <Ellipse Stroke="#CFCFCF" StrokeThickness="8" Fill="#3B3B3B" Margin="14,24" />
-                                    <Ellipse Stroke="#777" StrokeThickness="4" Fill="#8A8A8A" Margin="45,50" />
-                                    <Path Data="M110,128 L146,112 L132,150 Z" Fill="White" />
-                                    <TextBlock Text="E" FontSize="26" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,8,2" />
-                                </Grid>
-                            </Border>
-                            <Border Margin="5" Background="#111">
-                                <Grid>
-                                    <Ellipse Stroke="#CFCFCF" StrokeThickness="8" Fill="#404040" Margin="14,24" />
-                                    <Ellipse Stroke="#777" StrokeThickness="4" Fill="#929292" Margin="44,48" />
-                                    <Path Data="M94,126 L130,110 L118,150 Z" Fill="White" />
-                                    <TextBlock Text="F" FontSize="26" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,8,2" />
-                                </Grid>
-                            </Border>
-                            <Border Margin="5" Background="#111">
-                                <Grid>
-                                    <Ellipse Stroke="#D0D0D0" StrokeThickness="8" Fill="#444" Margin="14,24" />
-                                    <Ellipse Stroke="#777" StrokeThickness="4" Fill="#999" Margin="44,48" />
-                                    <Path Data="M112,116 L152,104 L136,144 Z" Fill="White" />
-                                    <TextBlock Text="G" FontSize="26" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,8,2" />
-                                </Grid>
-                            </Border>
-                            <Border Margin="5" Background="#111">
-                                <Grid>
-                                    <Ellipse Stroke="#CFCFCF" StrokeThickness="8" Fill="#3B3B3B" Margin="14,24" />
-                                    <Ellipse Stroke="#777" StrokeThickness="4" Fill="#8F8F8F" Margin="42,46" />
-                                    <Path Data="M116,100 L154,82 L142,124 Z" Fill="White" />
-                                    <TextBlock Text="H" FontSize="26" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,8,2" />
-                                </Grid>
-                            </Border>
-                        </UniformGrid>
-                    </Border>
-                </Viewbox>
+            <Border Grid.Column="2" Background="#20242B" CornerRadius="5" Padding="12">
+                <Grid><Grid.RowDefinitions><RowDefinition Height="45"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Button Content="二维" Command="{Binding Select2DCommand}"><Button.Style><Style TargetType="Button" BasedOn="{StaticResource ViewMode}"><Style.Triggers><DataTrigger Binding="{Binding Is3D}" Value="False"><Setter Property="Background" Value="#123845"/><Setter Property="BorderBrush" Value="#35D8E8"/></DataTrigger></Style.Triggers></Style></Button.Style></Button>
+                            <Button Content="三维" Command="{Binding Select3DCommand}" ToolTip="{Binding ThreeDimensionalStatus}" ToolTipService.ShowOnDisabled="True"><Button.Style><Style TargetType="Button" BasedOn="{StaticResource ViewMode}"><Style.Triggers><DataTrigger Binding="{Binding Is3D}" Value="True"><Setter Property="Background" Value="#123845"/><Setter Property="BorderBrush" Value="#35D8E8"/></DataTrigger></Style.Triggers></Style></Button.Style></Button>
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" Text="{Binding VolumeInformation}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="#AEB6C3" TextTrimming="CharacterEllipsis" MaxWidth="320" ToolTip="{Binding VolumeInformation}"/>
+                    </Grid>
+                    <Grid Grid.Row="1" Margin="10,8">
+                        <Border Background="#090A0C" BorderBrush="#E1E4E8" BorderThickness="2">
+                            <Grid>
+                                <Grid x:Name="TwoDimensionalView" Background="#090A0C">
+                                    <Grid.Style><Style TargetType="Grid"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Is3D}" Value="False"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Grid.Style>
+                                    <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="34"/></Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition Width="92"/></Grid.ColumnDefinitions>
 
-                <DockPanel Grid.Row="2" Margin="18,0,18,14">
-                    <TextBlock Text="{Binding Context.Localization.FemModelStatusText}"
-                               Foreground="{StaticResource SubText}"
-                               DockPanel.Dock="Left" />
-                    <TextBlock Text="{Binding Context.Localization.FemSimulationStatusText}"
-                               Foreground="{StaticResource SubText}"
-                               HorizontalAlignment="Right" />
-                </DockPanel>
-            </Grid>
+                                    <Border Margin="5" BorderBrush="#303645" BorderThickness="1" Background="#050608" ClipToBounds="True">
+                                        <Grid>
+                                            <ScrollViewer x:Name="SagittalScrollViewer" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" PanningMode="Both" PreviewMouseWheel="SlicePreviewMouseWheel" PreviewMouseLeftButtonDown="SlicePanStart" PreviewMouseLeftButtonUp="SlicePanEnd" PreviewMouseMove="SlicePanMove" MouseLeave="SlicePanEnd">
+                                                <Grid Width="{Binding ActualWidth, ElementName=SagittalScrollViewer}" Height="{Binding ActualHeight, ElementName=SagittalScrollViewer}"><Grid.LayoutTransform><ScaleTransform x:Name="SagittalScaleTransform" ScaleX="1" ScaleY="1"/></Grid.LayoutTransform><Image Source="{Binding SagittalImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/></Grid>
+                                            </ScrollViewer>
+                                            <Border Margin="8" Padding="6,3" Background="#B312151B" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False"><TextBlock Text="{Binding SagittalSlice, StringFormat=矢状位 · 体素 {0}}" Foreground="#F0A33C"/></Border>
+                                            <Border Margin="6" Padding="2" Background="#D9181C24" HorizontalAlignment="Right" VerticalAlignment="Bottom"><StackPanel Orientation="Horizontal"><Button Content="−" Tag="Sagittal:Out" Click="SliceZoomClick" Style="{StaticResource SliceZoomButton}"/><TextBlock x:Name="SagittalZoomLabel" Text="100%" Width="40" TextAlignment="Center" VerticalAlignment="Center" Foreground="#DDE3EC"/><Button Content="+" Tag="Sagittal:In" Click="SliceZoomClick" Style="{StaticResource SliceZoomButton}"/><Button Content="复位" Tag="Sagittal:Reset" Click="SliceZoomClick" Style="{StaticResource SliceZoomButton}"/></StackPanel></Border>
+                                        </Grid>
+                                    </Border>
+                                    <Border Grid.Column="1" Margin="5" BorderBrush="#303645" BorderThickness="1" Background="#050608">
+                                        <Grid ClipToBounds="True">
+                                            <ScrollViewer x:Name="CoronalScrollViewer" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" PanningMode="Both" PreviewMouseWheel="SlicePreviewMouseWheel" PreviewMouseLeftButtonDown="SlicePanStart" PreviewMouseLeftButtonUp="SlicePanEnd" PreviewMouseMove="SlicePanMove" MouseLeave="SlicePanEnd">
+                                                <Grid Width="{Binding ActualWidth, ElementName=CoronalScrollViewer}" Height="{Binding ActualHeight, ElementName=CoronalScrollViewer}"><Grid.LayoutTransform><ScaleTransform x:Name="CoronalScaleTransform" ScaleX="1" ScaleY="1"/></Grid.LayoutTransform><Image Source="{Binding CoronalImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/></Grid>
+                                            </ScrollViewer>
+                                            <Border Margin="8" Padding="6,3" Background="#B312151B" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False"><TextBlock Text="{Binding CoronalSlice, StringFormat=冠状位 · 体素 {0}}" Foreground="#F0A33C"/></Border>
+                                            <Border Margin="6" Padding="2" Background="#D9181C24" HorizontalAlignment="Right" VerticalAlignment="Bottom"><StackPanel Orientation="Horizontal"><Button Content="−" Tag="Coronal:Out" Click="SliceZoomClick" Style="{StaticResource SliceZoomButton}"/><TextBlock x:Name="CoronalZoomLabel" Text="100%" Width="40" TextAlignment="Center" VerticalAlignment="Center" Foreground="#DDE3EC"/><Button Content="+" Tag="Coronal:In" Click="SliceZoomClick" Style="{StaticResource SliceZoomButton}"/><Button Content="复位" Tag="Coronal:Reset" Click="SliceZoomClick" Style="{StaticResource SliceZoomButton}"/></StackPanel></Border>
+                                        </Grid>
+                                    </Border>
+                                    <Border Grid.Column="2" Margin="5" BorderBrush="#303645" BorderThickness="1" Background="#050608">
+                                        <Grid ClipToBounds="True">
+                                            <ScrollViewer x:Name="AxialScrollViewer" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" PanningMode="Both" PreviewMouseWheel="SlicePreviewMouseWheel" PreviewMouseLeftButtonDown="SlicePanStart" PreviewMouseLeftButtonUp="SlicePanEnd" PreviewMouseMove="SlicePanMove" MouseLeave="SlicePanEnd">
+                                                <Grid Width="{Binding ActualWidth, ElementName=AxialScrollViewer}" Height="{Binding ActualHeight, ElementName=AxialScrollViewer}"><Grid.LayoutTransform><ScaleTransform x:Name="AxialScaleTransform" ScaleX="1" ScaleY="1"/></Grid.LayoutTransform><Image Source="{Binding AxialImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/></Grid>
+                                            </ScrollViewer>
+                                            <Border Margin="8" Padding="6,3" Background="#B312151B" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False"><TextBlock Text="{Binding AxialSlice, StringFormat=轴位 · 体素 {0}}" Foreground="#F0A33C"/></Border>
+                                            <Border Margin="6" Padding="2" Background="#D9181C24" HorizontalAlignment="Right" VerticalAlignment="Bottom"><StackPanel Orientation="Horizontal"><Button Content="−" Tag="Axial:Out" Click="SliceZoomClick" Style="{StaticResource SliceZoomButton}"/><TextBlock x:Name="AxialZoomLabel" Text="100%" Width="40" TextAlignment="Center" VerticalAlignment="Center" Foreground="#DDE3EC"/><Button Content="+" Tag="Axial:In" Click="SliceZoomClick" Style="{StaticResource SliceZoomButton}"/><Button Content="复位" Tag="Axial:Reset" Click="SliceZoomClick" Style="{StaticResource SliceZoomButton}"/></StackPanel></Border>
+                                        </Grid>
+                                    </Border>
+
+                                    <Border Grid.Column="3" Margin="5" Padding="7,10" BorderBrush="#303645" BorderThickness="1" Background="#11141A" Visibility="{Binding HasFemOverlay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Grid>
+                                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                            <TextBlock Text="刺激场包络" Foreground="#D9DEE7" HorizontalAlignment="Center" FontWeight="SemiBold"/>
+                                            <Grid Grid.Row="1" Margin="0,12,0,8">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                                <Rectangle Width="14" HorizontalAlignment="Left" Stroke="#697080" StrokeThickness="1">
+                                                    <Rectangle.Fill><LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                        <GradientStop Offset="0.00" Color="#302288"/><GradientStop Offset="0.18" Color="#2A5CD2"/>
+                                                        <GradientStop Offset="0.36" Color="#17BED2"/><GradientStop Offset="0.54" Color="#3FD566"/>
+                                                        <GradientStop Offset="0.72" Color="#DCE53C"/><GradientStop Offset="0.87" Color="#FF8B22"/><GradientStop Offset="1.00" Color="#D21E18"/>
+                                                    </LinearGradientBrush></Rectangle.Fill>
+                                                </Rectangle>
+                                                <Grid Grid.Column="1" Margin="5,0,0,0">
+                                                    <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                                                    <TextBlock Text="{Binding FieldLegendMaximumText}" VerticalAlignment="Top" Foreground="#DDE2EA" FontSize="10"/>
+                                                    <TextBlock Grid.Row="1" Text="{Binding FieldLegendThreeQuarterText}" VerticalAlignment="Center" Foreground="#B8C0CC" FontSize="10"/>
+                                                    <TextBlock Grid.Row="2" Text="{Binding FieldLegendHalfText}" VerticalAlignment="Center" Foreground="#B8C0CC" FontSize="10"/>
+                                                    <TextBlock Grid.Row="3" Text="{Binding FieldLegendQuarterText}" VerticalAlignment="Center" Foreground="#B8C0CC" FontSize="10"/>
+                                                    <TextBlock Grid.Row="4" Text="0.000" VerticalAlignment="Bottom" Foreground="#B8C0CC" FontSize="10"/>
+                                                </Grid>
+                                            </Grid>
+                                            <TextBlock Grid.Row="2" Text="V/m" Foreground="#AEB5C2" HorizontalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <StackPanel Grid.Row="1" Grid.ColumnSpan="4" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{Binding HasFemOverlay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Ellipse Width="10" Height="10" Stroke="#24FF50" StrokeThickness="2"/><TextBlock Text=" 双侧杏仁核目标区" Foreground="#BFC6D1" Margin="0,0,18,0"/>
+                                        <Rectangle Width="12" Height="2" Fill="#FF2D1C" VerticalAlignment="Center"/><TextBlock Text=" 高场阈值轮廓" Foreground="#BFC6D1" Margin="3,0,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                                <Grid x:Name="ThreeDimensionalView" Background="#080A0D">
+                                    <Grid.Style><Style TargetType="Grid"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding Is3D}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Grid.Style>
+                                    <Grid>
+                                        <Grid.Style>
+                                            <Style TargetType="Grid">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasCompatible3DResult}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Grid.Style>
+                                        <wv2:WebView2 x:Name="FemWebView" DefaultBackgroundColor="#080A0D" Visibility="Collapsed"/>
+                                    </Grid>
+                                    <StackPanel x:Name="FemViewerLoading" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Visibility="Visible">
+                                        <ProgressBar Width="220" Height="4" IsIndeterminate="True" Foreground="#35D8E8"/>
+                                        <TextBlock Text="正在准备真实三维有限元模型…" Margin="0,12,0,0" Foreground="#AEB5C2" HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                    <StackPanel x:Name="FemViewerError" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" MaxWidth="520">
+                                        <TextBlock Text="三维查看器加载失败" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                        <TextBlock x:Name="FemViewerErrorMessage" Margin="0,8,0,0" TextWrapping="Wrap" TextAlignment="Center" Foreground="#AEB5C2"/>
+                                        <Button Content="重新加载" Click="ReloadFemViewerClick" Style="{StaticResource FemButton}" Margin="0,14,0,0" HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </Grid>
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+                                    <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding HasVolume}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
+                                    <TextBlock Text="等待受试者计算结果" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="正在自动读取示例 result-manifest.json…" Foreground="#8E96A8" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+        <DockPanel Grid.Row="2" Margin="6,8,6,0"><TextBlock Text="{Binding ModelStatus}" Foreground="#8E96A8"/><TextBlock Text="{Binding SimulationStatus}" Foreground="#8E96A8" HorizontalAlignment="Right"/></DockPanel>
     </Grid>
 </UserControl>
-
-

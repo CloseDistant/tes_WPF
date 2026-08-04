@@ -30,18 +30,11 @@
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
     <PackageReference Include="System.Management" Version="10.0.0" />
     <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
-    <Reference Include="RuinaoTesHardware">
-      <HintPath>Libs\RuinaoTesHardware\RuinaoTesHardware.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
+    <ProjectReference Include="..\RuinaoTesHardware\RuinaoTesHardware.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Libs\RuinaoTesHardware\RuinaoTesProtocol.dll">
-      <Link>RuinaoTesProtocol.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
     <Content Include="Libs\RuinaoTesHardware\libusbK.dll">
       <Link>libusbK.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -103,6 +96,10 @@
     </Content>
     <Content Include="Assets\Eeg\EEG_64_standard_1020_coordinates.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\FemViewer\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
     <Content Include="Tools\ffmpeg\ffmpeg.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

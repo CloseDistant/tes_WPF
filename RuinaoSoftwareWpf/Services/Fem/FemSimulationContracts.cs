@@ -28,3 +28,8 @@ public interface ISimulationService
 
     Task CancelAsync();
 }
+
+public interface IFemSampleResultLocator
+{
+    string? FindBundledManifest();
+}

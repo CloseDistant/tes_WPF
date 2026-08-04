@@ -16,10 +16,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <ProjectReference Include="..\RuinaoSoftwareWpf\RuinaoSoftwareWpf.csproj" />
-    <Reference Include="RuinaoTesProtocol">
-      <HintPath>..\RuinaoSoftwareWpf\Libs\RuinaoTesHardware\RuinaoTesProtocol.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
+    <ProjectReference Include="..\RuinaoTesProtocol\RuinaoTesProtocol.csproj" />
   </ItemGroup>
 
 </Project>

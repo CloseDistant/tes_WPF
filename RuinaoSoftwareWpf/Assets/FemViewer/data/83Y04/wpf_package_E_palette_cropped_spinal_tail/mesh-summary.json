@@ -1,0 +1,34 @@
+{
+  "path": "E:\\TI工作\\FEM对比修复测试\\charm_replacement_pipeline\\test_outputs\\complete_components_83Y04\\self_mesh_v3_official_profile\\optimized_head_mesh.msh",
+  "sha256": "b9be7ef3c3dc557ed909552e3789bc0233fc21ec6c113d59259287ad8ca7775a",
+  "nodes": 390368,
+  "elements": 2715007,
+  "element_type_counts": {
+    "2": 577177,
+    "4": 2137830
+  },
+  "tag_counts": {
+    "1001": 125326,
+    "1002": 156263,
+    "1003": 51786,
+    "1005": 64498,
+    "1006": 1518,
+    "1007": 73798,
+    "1008": 63284,
+    "1009": 13579,
+    "1010": 2033,
+    "1099": 25092,
+    "1": 245293,
+    "2": 612935,
+    "3": 362934,
+    "5": 334942,
+    "6": 2692,
+    "7": 443378,
+    "8": 106880,
+    "9": 25043,
+    "10": 3733
+  },
+  "tetrahedra": 2137830,
+  "surface_triangles": 577177,
+  "full_computational_mesh_preserved": true
+}

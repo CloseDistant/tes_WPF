@@ -159,6 +159,7 @@ public static class AppComposition
         // ---------- 占位服务（当前功能未实现，先使用 Null 实现） ----------
         services.AddSingleton<IDataProcessingService, NullDataProcessingService>();
         services.AddSingleton<ISimulationService, FemWorkerSimulationService>();
+        services.AddSingleton<IFemSampleResultLocator, BundledFemSampleResultLocator>();
         services.AddSingleton<IConfigService, NullConfigService>();
         services.AddSingleton<IReportService, NullReportService>();
 
