@@ -29,7 +29,9 @@ public partial class StimulationPrescriptionPickerDialog : Window
         IEnumerable<PrescriptionDefinition> prescriptions)
     {
         InitializeComponent();
-        StimulationType = stimulationType;
+        StimulationType = string.Equals(stimulationType, "tDCS", StringComparison.Ordinal)
+            ? "TI"
+            : stimulationType;
         ApplyScopeText = applyScopeText;
         Prescriptions = new ObservableCollection<PrescriptionDefinition>(prescriptions);
         if (Prescriptions.Count > 0)

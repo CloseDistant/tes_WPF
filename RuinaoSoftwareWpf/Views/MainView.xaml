@@ -229,7 +229,7 @@
                     <StackPanel Orientation="Horizontal"
                                 Margin="10,0"
                                 VerticalAlignment="Center"
-                                Visibility="{Binding SimulationMenuVisibility}">
+                                Visibility="Collapsed">
                         <ToggleButton x:Name="SimulationDropDownToggle"
                                       Content="{Binding Localization.SimulationMenuText}"
                                       Style="{StaticResource ToolbarDropDownButton}" />

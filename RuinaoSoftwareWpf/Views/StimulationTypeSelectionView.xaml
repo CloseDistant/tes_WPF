@@ -145,7 +145,7 @@
                     <StackPanel Margin="0,32,0,0">
                         <TextBlock Text="{Binding Localization.TranscranialDirectCurrentText}"
                                    FontSize="24" FontWeight="SemiBold" />
-                        <TextBlock Text="tDCS" Foreground="#9BA4B7" FontSize="13" Margin="0,9,0,0" />
+                        <TextBlock Text="TI" Foreground="#9BA4B7" FontSize="13" Margin="0,9,0,0" />
                     </StackPanel>
                     </StackPanel>
                 </Grid>
