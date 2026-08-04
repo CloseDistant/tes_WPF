@@ -328,7 +328,7 @@
                                     </Border>
 
                                     <StackPanel Grid.Row="1" Grid.ColumnSpan="4" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{Binding HasFemOverlay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                        <Ellipse Width="10" Height="10" Stroke="#24FF50" StrokeThickness="2"/><TextBlock Text=" 双侧杏仁核目标区" Foreground="#BFC6D1" Margin="0,0,18,0"/>
+                                        <Ellipse Width="10" Height="10" Stroke="#24FF50" StrokeThickness="2"/><TextBlock Text=" 右侧杏仁核目标区" Foreground="#BFC6D1" Margin="0,0,18,0"/>
                                         <Rectangle Width="12" Height="2" Fill="#FF2D1C" VerticalAlignment="Center"/><TextBlock Text=" 高场阈值轮廓" Foreground="#BFC6D1" Margin="3,0,0,0"/>
                                     </StackPanel>
                                 </Grid>
