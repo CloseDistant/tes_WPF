@@ -89,7 +89,9 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         });
         synchronizedStartCommand = new AsyncRelayCommand(
             (_, cancellationToken) => StartSynchronizedAsync(cancellationToken),
-            _ => CanStartStimulation && activeChannels.Count == 0,
+            _ => CanStartStimulation
+                && activeChannels.Count == 0
+                && Channels.Any(IsImpedanceEligibleForStart),
             HandleStartFailure);
         SynchronizedStartCommand = synchronizedStartCommand;
         startChannelCommand = new AsyncRelayCommand(
@@ -101,7 +103,8 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
                 }
             }, parameter => CanStartStimulation
                 && parameter is ChannelConfig channel
-                && !activeChannels.ContainsKey(channel),
+                && !activeChannels.ContainsKey(channel)
+                && IsImpedanceEligibleForStart(channel),
             onError: HandleStartFailure);
         StartChannelCommand = startChannelCommand;
         stopChannelCommand = new AsyncRelayCommand(
@@ -327,6 +330,12 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             return;
         }
 
+        if (!userDialogService.ConfirmDirectCurrentSynchronizedStart(
+                new DirectCurrentSynchronizedStartConfirmationRequest(Channels.Count)))
+        {
+            return;
+        }
+
         await EnsureFreshImpedanceAsync(cancellationToken);
         var impedanceAssessment = StimulationImpedanceStartPolicy.Evaluate(Channels);
         if (impedanceAssessment.EligibleChannels.Count == 0)
@@ -335,26 +344,14 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             return;
         }
 
-        var synchronizedChannels = impedanceAssessment.EligibleChannels.ToArray();
-
-        var snapshots = new Dictionary<ChannelConfig, DirectCurrentWaveformParameters>();
-        foreach (var channel in synchronizedChannels)
+        var confirmedAssessment = ConfirmSynchronizedImpedanceState(impedanceAssessment);
+        if (confirmedAssessment is null)
         {
-            if (!DirectCurrentWaveformParameters.TryCreate(channel, out var snapshot, out var error))
-            {
-                toastService.ShowError("参数校验失败", error);
-                return;
-            }
-
-            snapshots[channel] = snapshot!;
+            return;
         }
 
-        if (impedanceAssessment.RequiresConfirmation
-            && !userDialogService.ConfirmWarning(
-                "阻抗状态确认",
-                StimulationImpedanceStartPolicy.BuildConfirmationMessage(impedanceAssessment),
-                "确认并继续",
-                "取消"))
+        var synchronizedChannels = confirmedAssessment.EligibleChannels.ToArray();
+        if (!TryCreateParameterSnapshots(synchronizedChannels, out var snapshots))
         {
             return;
         }
@@ -408,19 +405,42 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             return;
         }
 
-        if (impedanceAssessment.WarningChannels.Count > 0
-            && !userDialogService.ConfirmWarning(
-                "阻抗状态确认",
-                StimulationImpedanceStartPolicy.BuildSingleWarningConfirmationMessage(channel),
-                "确认并继续",
-                "取消"))
+        if (!DirectCurrentWaveformParameters.TryCreate(channel, out var snapshot, out var error))
+        {
+            toastService.ShowError("参数校验失败", error);
+            return;
+        }
+
+        var confirmedStatus = channel.ImpedanceStatus;
+        if (!userDialogService.ConfirmDirectCurrentChannelStart(
+                CreateChannelStartConfirmationRequest(channel, snapshot!)))
         {
             return;
         }
 
-        if (!DirectCurrentWaveformParameters.TryCreate(channel, out var snapshot, out var error))
+        var latestAssessment = StimulationImpedanceStartPolicy.Evaluate([channel]);
+        if (latestAssessment.EligibleChannels.Count == 0)
         {
-            toastService.ShowError("参数校验失败", error);
+            toastService.ShowError(
+                "无法开始刺激",
+                StimulationImpedanceStartPolicy.BuildSingleChannelBlockedMessage(channel));
+            return;
+        }
+
+        if (confirmedStatus == StimulationImpedanceStatus.Normal
+            && channel.ImpedanceStatus == StimulationImpedanceStatus.Warning
+            && !userDialogService.ConfirmDirectCurrentChannelStart(
+                CreateChannelStartConfirmationRequest(channel, snapshot!)))
+        {
+            return;
+        }
+
+        latestAssessment = StimulationImpedanceStartPolicy.Evaluate([channel]);
+        if (latestAssessment.EligibleChannels.Count == 0)
+        {
+            toastService.ShowError(
+                "无法开始刺激",
+                StimulationImpedanceStartPolicy.BuildSingleChannelBlockedMessage(channel));
             return;
         }
 
@@ -613,6 +633,10 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     private bool CanStartStimulation =>
         CanControlHardware && !startOperationInProgress;
 
+    private static bool IsImpedanceEligibleForStart(ChannelConfig channel) =>
+        channel.ImpedanceStatus is
+            StimulationImpedanceStatus.Normal or StimulationImpedanceStatus.Warning;
+
     private bool CanControlHardware =>
         hardwareConnectionState.IsConnected || debugHardwareSimulation.IsConnected;
 
@@ -678,6 +702,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
                 previousImpedanceStatuses[channel] = channel.ImpedanceStatus;
             }
 
+            RefreshCommandStates();
             return;
         }
 
@@ -739,7 +764,111 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
                 .ToArray();
             _ = StopUnsafeChannelGroupsAsync(boardGroups);
         }
+
+        RefreshCommandStates();
     }
+
+    private StimulationImpedanceStartAssessment<ChannelConfig>? ConfirmSynchronizedImpedanceState(
+        StimulationImpedanceStartAssessment<ChannelConfig> assessment)
+    {
+        var confirmedSignature = BuildImpedanceStatusSignature(Channels);
+        if (assessment.RequiresConfirmation
+            && !userDialogService.ConfirmWarning(
+                "阻抗状态确认",
+                StimulationImpedanceStartPolicy.BuildConfirmationMessage(assessment),
+                "确认并继续",
+                "取消"))
+        {
+            return null;
+        }
+
+        var latestAssessment = StimulationImpedanceStartPolicy.Evaluate(Channels);
+        if (latestAssessment.EligibleChannels.Count == 0)
+        {
+            toastService.ShowError("同步开始失败", "没有阻抗状态允许启动的通道。");
+            return null;
+        }
+
+        var latestSignature = BuildImpedanceStatusSignature(Channels);
+        if (string.Equals(latestSignature, confirmedSignature, StringComparison.Ordinal))
+        {
+            return latestAssessment;
+        }
+
+        if (latestAssessment.RequiresConfirmation
+            && !userDialogService.ConfirmWarning(
+                "阻抗状态已变化",
+                StimulationImpedanceStartPolicy.BuildConfirmationMessage(latestAssessment),
+                "确认并继续",
+                "取消"))
+        {
+            return null;
+        }
+
+        var finalAssessment = StimulationImpedanceStartPolicy.Evaluate(Channels);
+        if (!string.Equals(
+                BuildImpedanceStatusSignature(Channels),
+                latestSignature,
+                StringComparison.Ordinal))
+        {
+            toastService.Show(
+                ToastKind.Warning,
+                "同步开始已取消",
+                "确认期间阻抗状态持续变化，请检查电极接触后重新点击同步开始。");
+            return null;
+        }
+
+        if (finalAssessment.EligibleChannels.Count == 0)
+        {
+            toastService.ShowError("同步开始失败", "没有阻抗状态允许启动的通道。");
+            return null;
+        }
+
+        return finalAssessment;
+    }
+
+    private bool TryCreateParameterSnapshots(
+        IEnumerable<ChannelConfig> channels,
+        out Dictionary<ChannelConfig, DirectCurrentWaveformParameters> snapshots)
+    {
+        snapshots = [];
+        foreach (var channel in channels)
+        {
+            if (!DirectCurrentWaveformParameters.TryCreate(channel, out var snapshot, out var error))
+            {
+                toastService.ShowError("参数校验失败", error);
+                snapshots.Clear();
+                return false;
+            }
+
+            snapshots[channel] = snapshot!;
+        }
+
+        return true;
+    }
+
+    private static DirectCurrentChannelStartConfirmationRequest CreateChannelStartConfirmationRequest(
+        ChannelConfig channel,
+        DirectCurrentWaveformParameters parameters) =>
+        new(
+            channel.Name,
+            parameters.CurrentMilliamp,
+            parameters.IsContinuous,
+            parameters.ReversePolarity,
+            parameters.RampUpSeconds,
+            parameters.RampDownSeconds,
+            parameters.TotalDurationSeconds,
+            parameters.IsContinuous
+                ? parameters.TotalDurationSeconds
+                : parameters.RampUpSeconds + parameters.PlateauSeconds + parameters.RampDownSeconds,
+            parameters.IntervalSeconds,
+            channel.ImpedanceOhms!.Value,
+            channel.ImpedanceStatus);
+
+    private static string BuildImpedanceStatusSignature(IEnumerable<ChannelConfig> channels) =>
+        string.Join(
+            ";",
+            channels.Select(channel => $"{channel.Name}:{(int)channel.ImpedanceStatus}"));
 
     private async Task StopUnsafeChannelGroupsAsync(
         IReadOnlyList<IReadOnlyList<ChannelConfig>> boardGroups)

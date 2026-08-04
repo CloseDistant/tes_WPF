@@ -26,6 +26,26 @@ public sealed class UserDialogService : IUserDialogService
         return dialog.ShowDialog() == true;
     }
 
+    public bool ConfirmDirectCurrentChannelStart(DirectCurrentChannelStartConfirmationRequest request)
+    {
+        var dialog = new DirectCurrentChannelStartConfirmationDialog(request)
+        {
+            Owner = Application.Current?.MainWindow
+        };
+
+        return dialog.ShowDialog() == true;
+    }
+
+    public bool ConfirmDirectCurrentSynchronizedStart(DirectCurrentSynchronizedStartConfirmationRequest request)
+    {
+        var dialog = new DirectCurrentSynchronizedStartConfirmationDialog(request)
+        {
+            Owner = Application.Current?.MainWindow
+        };
+
+        return dialog.ShowDialog() == true;
+    }
+
     public void ShowInformation(string title, string message)
     {
         ShowMessageDialog(title, message, ThemedMessageKind.Information);

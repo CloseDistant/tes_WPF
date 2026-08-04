@@ -54,8 +54,9 @@ public sealed class DirectCurrentChannelSelectionTests
     [Fact]
     public void SynchronizedStart_StartsAllSixteenChannelsAfterEveryChannelPassesValidation()
     {
+        var dialog = new TestUserDialogService();
         var engine = new NoopStimulationEngine();
-        var viewModel = CreateViewModel(engine);
+        var viewModel = CreateViewModel(engine, userDialogService: dialog);
         foreach (var channel in viewModel.Channels)
         {
             channel.CurrentMA = "1";
@@ -67,6 +68,8 @@ public sealed class DirectCurrentChannelSelectionTests
         Assert.Equal(16, engine.LastStartedDirectCurrentGroup.Channels.Count);
         Assert.All(viewModel.Channels, channel => Assert.True(channel.DirectCurrentWaveform.IsRunning));
         Assert.All(viewModel.Channels, channel => Assert.True(channel.IsStimulating));
+        Assert.Equal(1, dialog.SynchronizedStartConfirmationCount);
+        Assert.Equal(16, dialog.LastSynchronizedStartRequest?.TotalChannelCount);
 
         viewModel.EmergencyStopCommand.Execute(null);
         Assert.All(viewModel.Channels, channel => Assert.False(channel.IsStimulating));
@@ -94,8 +97,9 @@ public sealed class DirectCurrentChannelSelectionTests
     [Fact]
     public void StartChannel_ChangesOnlyTargetIndicatorToRunning()
     {
+        var dialog = new TestUserDialogService();
         var engine = new NoopStimulationEngine();
-        var viewModel = CreateViewModel(engine);
+        var viewModel = CreateViewModel(engine, userDialogService: dialog);
         var target = viewModel.Channels[0];
         target.CurrentMA = "1";
 
@@ -103,6 +107,9 @@ public sealed class DirectCurrentChannelSelectionTests
 
         Assert.True(target.IsStimulating);
         Assert.All(viewModel.Channels.Skip(1), channel => Assert.False(channel.IsStimulating));
+        Assert.Equal(1, dialog.ChannelStartConfirmationCount);
+        Assert.Equal("CH 1", dialog.LastChannelStartRequest?.ChannelName);
+        Assert.Equal(1d, dialog.LastChannelStartRequest?.CurrentMilliampere);
 
         viewModel.EmergencyStopCommand.Execute(null);
         Assert.False(target.IsStimulating);
@@ -119,6 +126,7 @@ public sealed class DirectCurrentChannelSelectionTests
         target.CurrentMA = "1";
         target.UpdateImpedance(impedanceOhms);
 
+        Assert.False(viewModel.StartChannelCommand.CanExecute(target));
         viewModel.StartChannelCommand.Execute(target);
 
         Assert.False(target.IsStimulating);
@@ -128,7 +136,7 @@ public sealed class DirectCurrentChannelSelectionTests
     [Fact]
     public void StartChannel_WhenImpedanceIsWarningAndUserCancels_DoesNotStart()
     {
-        var dialog = new TestUserDialogService { ConfirmationResult = false };
+        var dialog = new TestUserDialogService { ChannelStartConfirmationResult = false };
         var engine = new NoopStimulationEngine();
         var viewModel = CreateViewModel(engine, userDialogService: dialog);
         var target = viewModel.Channels[1];
@@ -139,7 +147,100 @@ public sealed class DirectCurrentChannelSelectionTests
 
         Assert.False(target.IsStimulating);
         Assert.Null(engine.LastStartedDirectCurrentGroup);
-        Assert.Contains("CH2：12.40kΩ", dialog.LastConfirmationMessage);
+        Assert.Equal(StimulationImpedanceStatus.Warning, dialog.LastChannelStartRequest?.ImpedanceStatus);
+        Assert.Equal(12_400m, dialog.LastChannelStartRequest?.ImpedanceOhms);
+    }
+
+    [Fact]
+    public void StartChannel_WhenNormalConfirmationIsCancelled_DoesNotStart()
+    {
+        var dialog = new TestUserDialogService { ChannelStartConfirmationResult = false };
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine, userDialogService: dialog);
+        var target = viewModel.Channels[0];
+        target.CurrentMA = "1";
+
+        viewModel.StartChannelCommand.Execute(target);
+
+        Assert.Equal(1, dialog.ChannelStartConfirmationCount);
+        Assert.False(target.IsStimulating);
+        Assert.Null(engine.LastStartedDirectCurrentGroup);
+    }
+
+    [Fact]
+    public void StartChannel_WhenImpedanceTurnsCriticalDuringConfirmation_BlocksStart()
+    {
+        var dialog = new TestUserDialogService();
+        var engine = new NoopStimulationEngine();
+        var toast = new CapturingToastService();
+        var viewModel = CreateViewModel(engine, toastService: toast, userDialogService: dialog);
+        var target = viewModel.Channels[0];
+        target.CurrentMA = "1";
+        dialog.ChannelStartConfirmationHandler = _ =>
+        {
+            target.UpdateImpedance(20_001m);
+            return true;
+        };
+
+        viewModel.StartChannelCommand.Execute(target);
+
+        Assert.False(target.IsStimulating);
+        Assert.Null(engine.LastStartedDirectCurrentGroup);
+        Assert.Equal("无法开始刺激", toast.Title);
+    }
+
+    [Fact]
+    public void StartChannel_WhenImpedanceTurnsWarningDuringNormalConfirmation_RequiresSecondConfirmation()
+    {
+        var dialog = new TestUserDialogService();
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine, userDialogService: dialog);
+        var target = viewModel.Channels[0];
+        target.CurrentMA = "1";
+        dialog.ChannelStartConfirmationHandler = _ =>
+        {
+            if (dialog.ChannelStartConfirmationCount == 1)
+            {
+                target.UpdateImpedance(12_400m);
+            }
+
+            return true;
+        };
+
+        viewModel.StartChannelCommand.Execute(target);
+
+        Assert.True(target.IsStimulating);
+        Assert.Equal(2, dialog.ChannelStartConfirmationCount);
+        Assert.Equal(StimulationImpedanceStatus.Warning, dialog.LastChannelStartRequest?.ImpedanceStatus);
+    }
+
+    [Fact]
+    public void SynchronizedStart_WhenGeneralConfirmationIsCancelled_DoesNotStart()
+    {
+        var dialog = new TestUserDialogService { SynchronizedStartConfirmationResult = false };
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine, userDialogService: dialog);
+        foreach (var channel in viewModel.Channels)
+        {
+            channel.CurrentMA = "1";
+        }
+
+        viewModel.SynchronizedStartCommand.Execute(null);
+
+        Assert.Equal(1, dialog.SynchronizedStartConfirmationCount);
+        Assert.Null(engine.LastStartedDirectCurrentGroup);
+        Assert.All(viewModel.Channels, channel => Assert.False(channel.IsStimulating));
+    }
+
+    [Fact]
+    public void StartCommands_WhenNoChannelHasUsableImpedance_AreDisabled()
+    {
+        var viewModel = CreateViewModel(initializeImpedance: false);
+
+        Assert.All(
+            viewModel.Channels,
+            channel => Assert.False(viewModel.StartChannelCommand.CanExecute(channel)));
+        Assert.False(viewModel.SynchronizedStartCommand.CanExecute(null));
     }
 
     [Fact]

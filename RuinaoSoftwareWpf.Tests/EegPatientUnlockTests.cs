@@ -191,6 +191,14 @@ public sealed class EegPatientUnlockTests
             string cancelText) =>
             false;
 
+        public bool ConfirmDirectCurrentChannelStart(
+            DirectCurrentChannelStartConfirmationRequest request) =>
+            false;
+
+        public bool ConfirmDirectCurrentSynchronizedStart(
+            DirectCurrentSynchronizedStartConfirmationRequest request) =>
+            false;
+
         public void ShowInformation(string title, string message)
         {
         }
