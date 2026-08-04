@@ -1,0 +1,183 @@
+{
+  "schema_version": 2,
+  "subject_id": "83Y04",
+  "status": "PASS",
+  "coordinate_system": "NIfTI RAS millimetres",
+  "source_result": {
+    "name": "L2 independent exact final coordinates v5",
+    "solution": "F:\\TI工作\\同行测试\\L2联合拓扑硬约束优化_126426_20260804\\results_independent_exact_finalcoords_20260804_v5\\best_continuous_quantized\\solution.npz",
+    "solution_sha256": "b1c25a22faa3c8132849c7d73cb44292e0f13005b2afade76a288bdbf2850b31",
+    "metrics": "F:\\TI工作\\同行测试\\L2联合拓扑硬约束优化_126426_20260804\\results_independent_exact_finalcoords_20260804_v5\\best_continuous_quantized\\metrics.json",
+    "metrics_sha256": "0613568ae7fc98217808f48fdcae36aa711f0588d218ab3069806b835639fe6b",
+    "geometry": "F:\\TI工作\\同行测试\\T22_server_package_T20局部位置电流精搜_126426_20260729\\data\\voxel_geometry.npz",
+    "geometry_sha256": "e6c67028696d778115611164999519bcb1a08ce00a6d203d84ffac324b446f72",
+    "display": {
+      "mode": "hybrid_independent_2d_and_3d",
+      "two_dimensional_subject": "126426",
+      "two_dimensional_result": "L2 independent exact final coordinates v5",
+      "three_dimensional_subject": "83Y04",
+      "three_dimensional_package": "F:\\TI工作\\tes_WPF\\RuinaoSoftwareWpf\\Assets\\FemViewer\\data\\83Y04\\wpf_package_E_palette_cropped_spinal_tail",
+      "consistency_note": "The user requested the validated legacy 3D presentation to remain unchanged while only the 2D FEM data is replaced."
+    }
+  },
+  "files": {
+    "t1": {
+      "path": "T1.nii.gz",
+      "sha256": "0a47288ebd9ff072dc78c4f3c4f3cde8ecb742d69733982865c6ef8aab1fc0dc"
+    },
+    "field_2d": {
+      "path": "field-2d.fem2d.gz",
+      "sha256": "6a62a5c8fae6da53c7d71e9df8b182319dfefb37b9452163b18fd8c65f49fc69"
+    },
+    "field_3d": {
+      "path": "fem-3d-data.json.gz",
+      "sha256": "2ced323a96b0e1e6193e98927a011e5a4b5a7052c1c40bcfd1d84e30b2fcbf25"
+    },
+    "metrics": {
+      "path": "metrics.json",
+      "sha256": "1342a6f5b39fa37c4ad3ec57413c4342bbcb135ffa5373901eaa124b5993c554"
+    },
+    "mesh_summary": {
+      "path": "mesh-summary.json",
+      "sha256": "cf1c2b56a1622df01b8034da6a3bdb202fe4335a3094b1cb2834493789f400e8"
+    }
+  },
+  "field_2d": {
+    "path": "field-2d.fem2d.gz",
+    "field_grid_shape": [
+      59,
+      76,
+      66
+    ],
+    "spacing_mm": 2.1,
+    "display_maximum_v_m": 0.24884569644927979,
+    "display_minimum_v_m": 0.028580617159605026,
+    "coverage_threshold_v_m": 0.2306610494852066,
+    "target": "right_amygdala",
+    "target_voxels": 1452,
+    "t1_spacing_mm": 1.0,
+    "source_t1_spacing_mm": 0.7,
+    "anatomical_resampling": "cubic world-coordinate resampling from the actual 126426 T1"
+  },
+  "compatibility_gate": {
+    "checks": {
+      "full_fem_mesh_present": true,
+      "brain_surface_present": true,
+      "scalp_surface_present": true,
+      "white_matter_surface_present": true,
+      "six_target_anatomy_meshes_present": true,
+      "p90_p95_field_shells_present": true,
+      "target_coverage_present": true,
+      "subvoxel_target_surface_present": true,
+      "subvoxel_closed_clip_cap_sources_present": true,
+      "p90_p95_metric_thresholds_present": true,
+      "four_montage_electrodes_present": true
+    },
+    "passed": true
+  },
+  "computational_mesh": {
+    "path": "E:\\TI工作\\FEM对比修复测试\\charm_replacement_pipeline\\test_outputs\\complete_components_83Y04\\self_mesh_v3_official_profile\\optimized_head_mesh.msh",
+    "sha256": "b9be7ef3c3dc557ed909552e3789bc0233fc21ec6c113d59259287ad8ca7775a",
+    "nodes": 390368,
+    "elements": 2715007,
+    "element_type_counts": {
+      "2": 577177,
+      "4": 2137830
+    },
+    "tag_counts": {
+      "1001": 125326,
+      "1002": 156263,
+      "1003": 51786,
+      "1005": 64498,
+      "1006": 1518,
+      "1007": 73798,
+      "1008": 63284,
+      "1009": 13579,
+      "1010": 2033,
+      "1099": 25092,
+      "1": 245293,
+      "2": 612935,
+      "3": 362934,
+      "5": 334942,
+      "6": 2692,
+      "7": 443378,
+      "8": 106880,
+      "9": 25043,
+      "10": 3733
+    },
+    "tetrahedra": 2137830,
+    "surface_triangles": 577177,
+    "full_computational_mesh_preserved": true
+  },
+  "field_shells": [
+    {
+      "key": "ti-outer",
+      "threshold_v_m": 0.07449152095675247,
+      "vertex_count": 11888,
+      "triangle_count": 23284
+    },
+    {
+      "key": "ti-core",
+      "threshold_v_m": 0.08431033539193077,
+      "vertex_count": 6430,
+      "triangle_count": 12328
+    }
+  ],
+  "electrodes": [
+    {
+      "name": "F7",
+      "xyzMm": [
+        -64.684947509,
+        60.668779206,
+        -7.772958642
+      ],
+      "radiusMm": 5.0,
+      "polarity": "anode",
+      "drive": "pair1",
+      "currentA": 0.000724
+    },
+    {
+      "name": "T7",
+      "xyzMm": [
+        -75.237442188,
+        6.820419565,
+        -7.774579234
+      ],
+      "radiusMm": 5.0,
+      "polarity": "cathode",
+      "drive": "pair1",
+      "currentA": -0.000724
+    },
+    {
+      "name": "T8",
+      "xyzMm": [
+        75.791206798,
+        15.646845873,
+        -9.682605622
+      ],
+      "radiusMm": 5.0,
+      "polarity": "anode",
+      "drive": "pair2",
+      "currentA": 0.001277
+    },
+    {
+      "name": "P8",
+      "xyzMm": [
+        70.156425836,
+        -40.038153406,
+        -5.75445977
+      ],
+      "radiusMm": 5.0,
+      "polarity": "cathode",
+      "drive": "pair2",
+      "currentA": -0.001277
+    }
+  ],
+  "field_3d_sampling": {
+    "source_point_count": 858228,
+    "display_point_count": 20000,
+    "purpose": "display_only_not_used_by_fem_or_metrics",
+    "method": "value_stratified_with_high_field_retention"
+  },
+  "wpf_contract": "Schema v2 hybrid display: actual 126426 L2 v5 data is used for 2D; the validated legacy 83Y04 package is retained unchanged for 3D."
+}

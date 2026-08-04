@@ -12,8 +12,8 @@ public sealed class BundledFemSampleResultLocator : IFemSampleResultLocator
                 "Assets",
                 "FemViewer",
                 "data",
-                "83Y04",
-                "wpf_package_E_palette_cropped_spinal_tail",
+                "126426",
+                "l2_v5_2d_legacy_3d",
                 "result-manifest.json"));
 
         return File.Exists(manifestPath) ? manifestPath : null;
