@@ -1,4 +1,4 @@
-using RuinaoTesHardware;
+﻿using RuinaoTesHardware;
 using RuinaoTesProtocol.V14;
 using Xunit;
 
@@ -162,6 +162,83 @@ public sealed class ProductDirectCurrentPlanFactoryTests
             waveformRegisters.Single(value => value.Address == 0x3028).Value);
     }
 
+    [Fact]
+    public async Task StartChannelAsync_ChannelThree_WritesSingleBitMaskToStartRegister()
+    {
+        var transport = new RecordingStatusTransport();
+        await using var backplaneClient = new BackplaneClient(new EmptyDiscovery(), transport);
+        var client = new DirectCurrentStimulationClient(backplaneClient);
+
+        await client.StartChannelAsync(
+            0x01,
+            3,
+            new BackplaneConnectionOptions(0x01, TimeSpan.FromSeconds(1)),
+            TestContext.Current.CancellationToken);
+
+        var register = Assert.Single(DecodeRegisters(Assert.Single(transport.Requests)));
+        Assert.Equal(0x0002, register.Address);
+        Assert.Equal(0x00000004U, register.Value);
+    }
+
+    [Fact]
+    public async Task StopChannelsAsync_MultipleChannels_WritesMaskToStopRegister()
+    {
+        var transport = new RecordingStatusTransport();
+        await using var backplaneClient = new BackplaneClient(new EmptyDiscovery(), transport);
+        var client = new DirectCurrentStimulationClient(backplaneClient);
+
+        await client.StopChannelsAsync(
+            0x01,
+            0x85,
+            new BackplaneConnectionOptions(0x01, TimeSpan.FromSeconds(1)),
+            TestContext.Current.CancellationToken);
+
+        var register = Assert.Single(DecodeRegisters(Assert.Single(transport.Requests)));
+        Assert.Equal(0x0003, register.Address);
+        Assert.Equal(0x00000085U, register.Value);
+    }
+
+    [Fact]
+    public async Task EmergencyStopBackplaneAsync_WritesZeroToBackplaneStopRegister()
+    {
+        var transport = new RecordingStatusTransport();
+        await using var backplaneClient = new BackplaneClient(new EmptyDiscovery(), transport);
+        var client = new DirectCurrentStimulationClient(backplaneClient);
+
+        await client.EmergencyStopBackplaneAsync(
+            new BackplaneConnectionOptions(0x01, TimeSpan.FromSeconds(1)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, transport.ExchangeCount);
+        Assert.Equal(1, transport.SendCount);
+        var request = Assert.Single(transport.Requests);
+        Assert.True(TesV14ProtocolCodec.TryParseFrame(request, out var frame, out var error), error);
+        Assert.NotNull(frame);
+        Assert.Equal(TesV14ProtocolConstants.BackplaneAddress, frame.DestinationAddress);
+        var register = Assert.Single(DecodeRegisters(request));
+        Assert.Equal(0x0003, register.Address);
+        Assert.Equal(0U, register.Value);
+    }
+
+    [Theory]
+    [InlineData(0U)]
+    [InlineData(0x100U)]
+    public async Task StartChannelsAsync_InvalidMask_RejectsBeforeSending(uint channelMask)
+    {
+        var transport = new RecordingStatusTransport();
+        await using var backplaneClient = new BackplaneClient(new EmptyDiscovery(), transport);
+        var client = new DirectCurrentStimulationClient(backplaneClient);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => client.StartChannelsAsync(
+                0x01,
+                channelMask,
+                new BackplaneConnectionOptions(0x01, TimeSpan.FromSeconds(1)),
+                TestContext.Current.CancellationToken));
+
+        Assert.Empty(transport.Requests);
+    }
+
     private static DirectCurrentStimulationParameters CreateParameters(
         DirectCurrentDeliveryMode deliveryMode,
         DirectCurrentPolarity polarity) =>
@@ -194,10 +271,12 @@ public sealed class ProductDirectCurrentPlanFactoryTests
             Task.FromResult<UsbBackplaneDevice?>(null);
     }
 
-    private sealed class RecordingStatusTransport : IBackplaneTransport
+    private sealed class RecordingStatusTransport : IBackplaneTransport, IBackplaneOneWayTransport
     {
         public bool IsOpen => true;
         public List<byte[]> Requests { get; } = [];
+        public int ExchangeCount { get; private set; }
+        public int SendCount { get; private set; }
 
         public Task OpenAsync(
             UsbBackplaneDevice device,
@@ -209,6 +288,7 @@ public sealed class ProductDirectCurrentPlanFactoryTests
             ReadOnlyMemory<byte> request,
             CancellationToken cancellationToken = default)
         {
+            ExchangeCount++;
             Requests.Add(request.ToArray());
             Assert.True(TesV14ProtocolCodec.TryParseFrame(request.Span, out var frame, out var error), error);
             Assert.NotNull(frame);
@@ -221,6 +301,15 @@ public sealed class ProductDirectCurrentPlanFactoryTests
                 frame.SendSequence,
                 [0, 0, 0, 0]);
             return Task.FromResult(response);
+        }
+
+        public Task SendAsync(
+            ReadOnlyMemory<byte> request,
+            CancellationToken cancellationToken = default)
+        {
+            SendCount++;
+            Requests.Add(request.ToArray());
+            return Task.CompletedTask;
         }
 
         public Task CloseAsync(CancellationToken cancellationToken = default) =>

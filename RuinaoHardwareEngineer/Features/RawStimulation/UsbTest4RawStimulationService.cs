@@ -1,4 +1,4 @@
-using RuinaoTesHardware;
+﻿using RuinaoTesHardware;
 using RuinaoTesProtocol.V14;
 
 namespace RuinaoHardwareEngineer.Features.RawStimulation;
@@ -58,6 +58,37 @@ public sealed class UsbTest4RawStimulationService
         CancellationToken cancellationToken = default) =>
         WriteCommandAsync(boardAddress, UsbTest4RawStimulationLayout.StopRegister, 0, options, cancellationToken);
 
+    /// <summary>
+    /// 仅向指定物理通道发送开始命令。低8位按V1.6协议表示通道掩码；
+    /// 当前固件即使尚未处理该掩码，工程师工具仍按最终协议格式下发。
+    /// </summary>
+    public Task<BackplaneRegisterOperationResult> StartChannelAsync(
+        byte boardAddress,
+        int channel,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default) =>
+        WriteCommandAsync(
+            boardAddress,
+            UsbTest4RawStimulationLayout.StartRegister,
+            GetSingleChannelMask(channel),
+            options,
+            cancellationToken);
+
+    /// <summary>
+    /// 仅向指定物理通道发送停止命令，不追加全通道拉低或其他硬件操作。
+    /// </summary>
+    public Task<BackplaneRegisterOperationResult> StopChannelAsync(
+        byte boardAddress,
+        int channel,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default) =>
+        WriteCommandAsync(
+            boardAddress,
+            UsbTest4RawStimulationLayout.StopRegister,
+            GetSingleChannelMask(channel),
+            options,
+            cancellationToken);
+
     public Task<BackplaneRegisterOperationResult> SetAllChannelsHighAsync(
         byte boardAddress,
         BackplaneConnectionOptions options,
@@ -69,6 +100,18 @@ public sealed class UsbTest4RawStimulationService
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default) =>
         WriteCommandAsync(boardAddress, UsbTest4RawStimulationLayout.PowerSetLowRegister, 0xFF, options, cancellationToken);
+
+    internal static uint GetSingleChannelMask(int channel)
+    {
+        if (channel is < 1 or > 8)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(channel),
+                "刺激通道必须在1到8之间。");
+        }
+
+        return 1U << (channel - 1);
+    }
 
     private Task<BackplaneRegisterOperationResult> WriteCommandAsync(
         byte boardAddress,

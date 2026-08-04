@@ -8,10 +8,18 @@ internal sealed class TestUserDialogService : IUserDialogService
 
     public string? LastConfirmationMessage { get; private set; }
 
+    public DirectCurrentStartConfirmationRequest? LastDirectCurrentStartConfirmation { get; private set; }
+
     public bool ConfirmWarning(string title, string message, string confirmText, string cancelText)
     {
         LastConfirmationTitle = title;
         LastConfirmationMessage = message;
+        return ConfirmationResult;
+    }
+
+    public bool ConfirmDirectCurrentStart(DirectCurrentStartConfirmationRequest request)
+    {
+        LastDirectCurrentStartConfirmation = request;
         return ConfirmationResult;
     }
 

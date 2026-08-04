@@ -70,8 +70,7 @@
                             CommandParameter="{Binding}"
                             Style="{StaticResource PrescriptionUseButton}"
                             Margin="0,0,10,0" />
-                    <Button Content="{Binding Localization.StartButtonText, ElementName=Root}"
-                            Command="{Binding StartCommand, ElementName=Root}"
+                    <Button Command="{Binding StartCommand, ElementName=Root}"
                             CommandParameter="{Binding}"
                             Background="#27B65A"
                             Height="32"
@@ -80,7 +79,11 @@
                             Margin="0,0,12,0">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource TopButton}">
+                                <Setter Property="Content" Value="{Binding Localization.StartButtonText, ElementName=Root}" />
                                 <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsStarting}" Value="True">
+                                        <Setter Property="Content" Value="启动中" />
+                                    </DataTrigger>
                                     <DataTrigger Binding="{Binding IsStimulating}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed" />
                                     </DataTrigger>

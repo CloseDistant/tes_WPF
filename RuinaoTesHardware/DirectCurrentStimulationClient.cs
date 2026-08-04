@@ -1,4 +1,4 @@
-using RuinaoTesProtocol.V14;
+﻿using RuinaoTesProtocol.V14;
 
 namespace RuinaoTesHardware;
 
@@ -57,7 +57,7 @@ public sealed class DirectCurrentStimulationClient
     {
         var result = await ExecuteHardwareOperationAsync(
             "开始直流电刺激",
-            () => WriteCommandAsync(boardAddress, StartRegister, options, cancellationToken));
+            () => WriteCommandAsync(boardAddress, StartRegister, 0, options, cancellationToken));
         return ToProductResult(result, "开始刺激命令已被硬件接受，实际输出需由测量设备确认。");
     }
 
@@ -68,8 +68,95 @@ public sealed class DirectCurrentStimulationClient
     {
         var result = await ExecuteHardwareOperationAsync(
             "停止直流电刺激",
-            () => WriteCommandAsync(boardAddress, StopRegister, options, cancellationToken));
+            () => WriteCommandAsync(boardAddress, StopRegister, 0, options, cancellationToken));
         return ToProductResult(result, "停止刺激命令已被硬件接受，硬件停止状态尚未回读验证。");
+    }
+
+    /// <summary>
+    /// 启动一块业务板上的单个物理刺激通道。
+    /// 写入值低8位为通道掩码；当前固件即使尚未处理该掩码，API仍按V1.6最终格式下发。
+    /// </summary>
+    public Task<DirectCurrentCommandResult> StartChannelAsync(
+        byte boardAddress,
+        int channel,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default) =>
+        StartChannelsAsync(
+            boardAddress,
+            CreateSingleChannelMask(channel),
+            options,
+            cancellationToken);
+
+    /// <summary>停止一块业务板上的单个物理刺激通道。</summary>
+    public Task<DirectCurrentCommandResult> StopChannelAsync(
+        byte boardAddress,
+        int channel,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default) =>
+        StopChannelsAsync(
+            boardAddress,
+            CreateSingleChannelMask(channel),
+            options,
+            cancellationToken);
+
+    /// <summary>按低8位通道掩码启动一块业务板上的一个或多个刺激通道。</summary>
+    public async Task<DirectCurrentCommandResult> StartChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateChannelMask(channelMask);
+        var result = await ExecuteHardwareOperationAsync(
+            $"开始直流电刺激通道0x{channelMask:X2}",
+            () => WriteCommandAsync(
+                boardAddress,
+                StartRegister,
+                channelMask,
+                options,
+                cancellationToken));
+        return ToProductResult(
+            result,
+            $"指定通道开始命令已被硬件接受：0x0002=0x{channelMask:X8}；实际输出需由测量设备确认。");
+    }
+
+    /// <summary>按低8位通道掩码停止一块业务板上的一个或多个刺激通道。</summary>
+    public async Task<DirectCurrentCommandResult> StopChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateChannelMask(channelMask);
+        var result = await ExecuteHardwareOperationAsync(
+            $"停止直流电刺激通道0x{channelMask:X2}",
+            () => WriteCommandAsync(
+                boardAddress,
+                StopRegister,
+                channelMask,
+                options,
+                cancellationToken));
+        return ToProductResult(
+            result,
+            $"指定通道停止命令已被硬件接受：0x0003=0x{channelMask:X8}；硬件停止状态尚未回读验证。");
+    }
+
+    /// <summary>
+    /// 向背板发送全机紧急停止命令。该命令只写背板0x0003=0，
+    /// 不遍历业务板，也不附加任何通道拉低操作。当前固件不回复此命令，
+    /// 因此只确认USB完整写入，不等待ACK或Response。
+    /// </summary>
+    public async Task EmergencyStopBackplaneAsync(
+        BackplaneConnectionOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        await ExecuteHardwareOperationAsync(
+            "背板紧急停止",
+            () => client.SendWriteRegistersAsync(
+                TesV14ProtocolConstants.BackplaneAddress,
+                [new TesV14RegisterValue(StopRegister, 0)],
+                options,
+                cancellationToken));
     }
 
     public static DirectCurrentStimulationPlan CreatePlan(
@@ -140,6 +227,7 @@ public sealed class DirectCurrentStimulationClient
     private async Task<BackplaneRegisterOperationResult> WriteCommandAsync(
         byte boardAddress,
         ushort registerAddress,
+        uint value,
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken)
     {
@@ -150,9 +238,31 @@ public sealed class DirectCurrentStimulationClient
 
         return await client.WriteRegistersAsync(
             boardAddress,
-            [new TesV14RegisterValue(registerAddress, 0)],
+            [new TesV14RegisterValue(registerAddress, value)],
             options,
             cancellationToken);
+    }
+
+    private static uint CreateSingleChannelMask(int channel)
+    {
+        if (channel is < 1 or > 8)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(channel),
+                "刺激通道必须在1到8之间。");
+        }
+
+        return 1U << (channel - 1);
+    }
+
+    private static void ValidateChannelMask(uint channelMask)
+    {
+        if (channelMask == 0 || (channelMask & 0xFFFFFF00U) != 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(channelMask),
+                "通道掩码必须只使用低8位，并且至少选择一个通道。");
+        }
     }
 
     private static async Task<BackplaneRegisterOperationResult> ExecuteHardwareOperationAsync(
@@ -173,6 +283,36 @@ public sealed class DirectCurrentStimulationClient
                 DirectCurrentDiagnosticCode.ResponseTimeout,
                 operation,
                 $"{operation}未在规定时间内收到匹配回复。",
+                exception);
+        }
+        catch (BackplaneConnectionException exception)
+        {
+            throw new DirectCurrentStimulationException(
+                DirectCurrentDiagnosticCode.CommunicationFailure,
+                operation,
+                $"{operation}失败：{exception.Message}",
+                exception);
+        }
+    }
+
+    private static async Task ExecuteHardwareOperationAsync(
+        string operation,
+        Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (TimeoutException exception)
+        {
+            throw new DirectCurrentStimulationException(
+                DirectCurrentDiagnosticCode.ResponseTimeout,
+                operation,
+                $"{operation}未在规定时间内完成USB写入。",
                 exception);
         }
         catch (BackplaneConnectionException exception)

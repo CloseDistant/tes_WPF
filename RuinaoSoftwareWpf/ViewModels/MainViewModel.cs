@@ -29,6 +29,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private readonly IStimulationStateMachine stimulationStateMachine;
     private readonly ISessionLifecycleCoordinator sessionLifecycleCoordinator;
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
+    private readonly IDebugStimulationImpedanceProvider? debugImpedanceProvider;
     private readonly IToastService toastService;
     private readonly IDeviceTopologyDialogService deviceTopologyDialogService;
     private readonly IStimulationImpedanceDiagnosticDialogService stimulationImpedanceDiagnosticDialogService;
@@ -82,7 +83,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         DeviceViewModel device,
         ConfigViewModel config,
         ReportViewModel report,
-        PlaceholderPageViewModel placeholderPage)
+        PlaceholderPageViewModel placeholderPage,
+        IDebugStimulationImpedanceProvider? debugImpedanceProvider = null)
     {
         this.hardwareService = hardwareService;
         this.logger = logger;
@@ -95,6 +97,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         this.stimulationStateMachine = stimulationStateMachine;
         this.sessionLifecycleCoordinator = sessionLifecycleCoordinator;
         this.debugHardwareSimulation = debugHardwareSimulation;
+        this.debugImpedanceProvider = debugImpedanceProvider;
         this.toastService = toastService;
         this.deviceTopologyDialogService = deviceTopologyDialogService;
         this.stimulationImpedanceDiagnosticDialogService = stimulationImpedanceDiagnosticDialogService;
@@ -655,6 +658,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         if (debugHardwareSimulation.IsConnected)
         {
             ShellState.FooterStatus = "设备：DEBUG 模拟联机 | 不向真实仪器发送命令";
+            ApplyStimulationImpedanceSnapshot(debugImpedanceProvider?.GetSnapshot());
         }
 
         connectCommand.RaiseCanExecuteChanged();
@@ -693,19 +697,10 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         object? sender,
         StimulationImpedanceChangedEventArgs entry)
     {
-        void ApplySnapshot()
-        {
-            var values = entry.Snapshot?.Channels.ToDictionary(
-                channel => channel.LogicalChannelNumber,
-                channel => channel.ImpedanceOhms)
-                ?? new Dictionary<int, decimal?>();
-            for (var index = 0; index < 16; index++)
-            {
-                var value = values.GetValueOrDefault(index + 1);
-                DirectCurrentControl.Channels[index].UpdateImpedance(value);
-                PulseCurrentControl.Channels[index].UpdateImpedance(value);
-            }
-        }
+        void ApplySnapshot() => ApplyStimulationImpedanceSnapshot(
+            debugHardwareSimulation.IsConnected
+                ? debugImpedanceProvider?.GetSnapshot()
+                : entry.Snapshot);
 
         var dispatcher = Application.Current?.Dispatcher;
         if (dispatcher is null || dispatcher.CheckAccess())
@@ -715,6 +710,20 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         else
         {
             _ = dispatcher.InvokeAsync(ApplySnapshot);
+        }
+    }
+
+    private void ApplyStimulationImpedanceSnapshot(StimulationImpedanceSnapshot? snapshot)
+    {
+        var values = snapshot?.Channels.ToDictionary(
+            channel => channel.LogicalChannelNumber,
+            channel => channel.ImpedanceOhms)
+            ?? new Dictionary<int, decimal?>();
+        for (var index = 0; index < 16; index++)
+        {
+            var value = values.GetValueOrDefault(index + 1);
+            DirectCurrentControl.Channels[index].UpdateImpedance(value);
+            PulseCurrentControl.Channels[index].UpdateImpedance(value);
         }
     }
 

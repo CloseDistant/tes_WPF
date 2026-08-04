@@ -27,10 +27,12 @@ public sealed class TesHardwareDeviceClient
         HandshakeAckRequired: false);
 
     private readonly BackplaneClient backplaneClient;
+    private readonly DirectCurrentStimulationClient directCurrentClient;
 
     public TesHardwareDeviceClient(BackplaneClient backplaneClient)
     {
         this.backplaneClient = backplaneClient;
+        directCurrentClient = new DirectCurrentStimulationClient(backplaneClient);
     }
 
     public BackplaneConnectionState State => backplaneClient.State;
@@ -100,6 +102,39 @@ public sealed class TesHardwareDeviceClient
 
     public Task<uint> ReadImpedanceAsync(CancellationToken cancellationToken = default) =>
         backplaneClient.ReadImpedanceAsync(DefaultOptions, cancellationToken);
+
+    /// <summary>下发一个物理通道的tDCS类型8配置。</summary>
+    public Task<DirectCurrentConfigurationResult> ConfigureDirectCurrentAsync(
+        DirectCurrentStimulationParameters parameters,
+        CancellationToken cancellationToken = default) =>
+        directCurrentClient.ConfigureAsync(parameters, DefaultOptions, cancellationToken);
+
+    /// <summary>按低8位掩码启动指定业务板的刺激通道。</summary>
+    public Task<DirectCurrentCommandResult> StartDirectCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default) =>
+        directCurrentClient.StartChannelsAsync(
+            boardAddress,
+            channelMask,
+            DefaultOptions,
+            cancellationToken);
+
+    /// <summary>按低8位掩码停止指定业务板的刺激通道。</summary>
+    public Task<DirectCurrentCommandResult> StopDirectCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default) =>
+        directCurrentClient.StopChannelsAsync(
+            boardAddress,
+            channelMask,
+            DefaultOptions,
+            cancellationToken);
+
+    /// <summary>只向背板发送0x0003=0的全机紧急停止命令。</summary>
+    public Task EmergencyStopBackplaneAsync(
+        CancellationToken cancellationToken = default) =>
+        directCurrentClient.EmergencyStopBackplaneAsync(DefaultOptions, cancellationToken);
 
     /// <summary>
     /// 一次读取指定电刺激业务板的8个通道阻抗寄存器（0x1001～0x1008）。
