@@ -105,6 +105,7 @@ if (!wpfViewModel.includes('Is3D = false;') || !wpfViewModel.includes('CurrentSt
 if (!niftiVolume.includes('Build an isotropic, axis-aligned world grid') || !niftiVolume.includes('WorldToSourceVoxel') || !niftiVolume.includes('SampleSource')) throw new Error('MRI slices are no longer resampled to an orthogonal world grid.');
 if (!niftiVolume.includes('BitConverter.ToInt16(header, 252) > 0') || !niftiVolume.includes('InvertAffine')) throw new Error('NIfTI qform/sform affine handling is incomplete.');
 if (!sliceOverlay.includes('volume.SourceWidth == mriWidth') || !sliceOverlay.includes('GetDefaultSlices(NiftiVolume volume)') || !sliceOverlay.includes('volume.WorldToSourceVoxel')) throw new Error('ROI overlay is not mapped from the source grid to orthogonal slices.');
+if (!sliceOverlay.includes('DrawTargetContour') || !sliceOverlay.includes('255, 255, 255, 0, 1.0f') || !sliceOverlay.includes('0, 0.72f') || /pixels\[offset\]\s*=\s*blue/.test(sliceOverlay)) throw new Error('2D FEM markers must use a thin white ROI and a thin translucent threshold.');
 if (!wpfViewModel.includes('sliceOverlay.GetDefaultSlices(volume)')) throw new Error('Default ROI slices still use oblique source voxel indices.');
 if (!wpfViewXaml.includes('Binding HasCompatible3DResult')) throw new Error('WPF 3D view is not bound to the compatible-result state.');
 if (atlas.regions.filter(region => region.role === 'anatomy').some(region => region.color !== '#7893a6')) throw new Error('Anatomical region palette is not unified.');

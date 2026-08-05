@@ -138,8 +138,10 @@ public sealed class FemSliceOverlay
             highField[pixelIndex] = value >= HighFieldThreshold;
         }
 
-        DrawContour(pixels, roi, width, height, 36, 255, 80, 2);
-        DrawContour(pixels, highField, width, height, 255, 45, 28, 1);
+        // A one-pixel white ROI outline stays distinct from the field palette.
+        // The threshold remains a thin translucent red line.
+        DrawTargetContour(pixels, roi, width, height);
+        DrawContour(pixels, highField, width, height, 255, 45, 28, 0, 0.72f);
 
         var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
         bitmap.Freeze();
@@ -173,15 +175,18 @@ public sealed class FemSliceOverlay
         return (roiBits[index >> 3] & (1 << (index & 7))) != 0;
     }
 
-    private static void DrawContour(byte[] pixels, bool[] mask, int width, int height, byte red, byte green, byte blue, int radius)
+    private static void DrawContour(
+        byte[] pixels,
+        bool[] mask,
+        int width,
+        int height,
+        byte red,
+        byte green,
+        byte blue,
+        int radius,
+        float opacity)
     {
-        var edges = new bool[mask.Length];
-        for (var y = 1; y < height - 1; y++)
-        for (var x = 1; x < width - 1; x++)
-        {
-            var index = x + y * width;
-            if (mask[index] && (!mask[index - 1] || !mask[index + 1] || !mask[index - width] || !mask[index + width])) edges[index] = true;
-        }
+        var edges = BuildContourEdges(mask, width, height);
 
         for (var y = 0; y < height; y++)
         for (var x = 0; x < width; x++)
@@ -195,9 +200,42 @@ public sealed class FemSliceOverlay
             }
             if (!draw) continue;
             var offset = (x + y * width) * 4;
-            pixels[offset] = blue; pixels[offset + 1] = green; pixels[offset + 2] = red; pixels[offset + 3] = 255;
+            BlendPixel(pixels, offset, red, green, blue, opacity);
         }
     }
+
+    private static void DrawTargetContour(byte[] pixels, bool[] mask, int width, int height)
+    {
+        // Pure white is outside the heat-map palette and maximizes luminance contrast at one-pixel width.
+        DrawContour(pixels, mask, width, height, 255, 255, 255, 0, 1.0f);
+    }
+
+    private static bool[] BuildContourEdges(bool[] mask, int width, int height)
+    {
+        var edges = new bool[mask.Length];
+        for (var y = 1; y < height - 1; y++)
+        for (var x = 1; x < width - 1; x++)
+        {
+            var index = x + y * width;
+            edges[index] = mask[index]
+                && (!mask[index - 1] || !mask[index + 1] || !mask[index - width] || !mask[index + width]);
+        }
+
+        return edges;
+    }
+
+    private static void BlendPixel(byte[] pixels, int offset, byte red, byte green, byte blue, float opacity)
+    {
+        pixels[offset] = BlendChannel(pixels[offset], blue, opacity);
+        pixels[offset + 1] = BlendChannel(pixels[offset + 1], green, opacity);
+        pixels[offset + 2] = BlendChannel(pixels[offset + 2], red, opacity);
+    }
+
+    private static byte BlendChannel(byte background, byte marker, float opacity) =>
+        (byte)Math.Clamp(
+            MathF.Round(background * (1 - opacity) + marker * opacity),
+            byte.MinValue,
+            byte.MaxValue);
 
     private static Color MapColor(float value)
     {
