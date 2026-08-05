@@ -13,6 +13,12 @@ public sealed class ProductDirectCurrentPlanFactoryTests
     }
 
     [Fact]
+    public void ConvertCurrentToDa_FifteenMilliampere_UsesFullPositiveScale()
+    {
+        Assert.Equal(short.MaxValue, DirectCurrentStimulationClient.ConvertCurrentToDa(15.00m));
+    }
+
+    [Fact]
     public void Create_ContinuousNormal_GeneratesSinglePositiveTypeEightWaveform()
     {
         var parameters = CreateParameters(

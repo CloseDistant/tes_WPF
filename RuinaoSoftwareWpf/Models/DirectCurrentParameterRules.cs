@@ -9,7 +9,7 @@ using System.Globalization;
 public static class DirectCurrentParameterRules
 {
     public const decimal MinimumCurrentMilliamp = 0.01m;
-    public const decimal MaximumCurrentMilliamp = 2.00m;
+    public const decimal MaximumCurrentMilliamp = 15.00m;
     public const decimal MaximumTimeSeconds = 3600.0m;
 
     public const string DefaultCurrentMilliamp = "0.01";
@@ -91,8 +91,8 @@ public static class DirectCurrentParameterRules
                 MaximumCurrentMilliamp,
                 true,
                 2,
-                "幅值最小设置步进为 0.01 mA，请输入 0.01～2.00 mA。",
-                "幅值允许范围为 0.01～2.00 mA，已调整为 2.00 mA。"),
+                "幅值最小设置步进为 0.01 mA，请输入 0.01～15.00 mA。",
+                "幅值允许范围为 0.01～15.00 mA，已调整为 15.00 mA。"),
             DirectCurrentParameterKind.RampUpSeconds => CreateNonNegativeTimeSpecification("渐升时间"),
             DirectCurrentParameterKind.RampDownSeconds => CreateNonNegativeTimeSpecification("渐降时间"),
             DirectCurrentParameterKind.TotalDurationSeconds => CreatePositiveTimeSpecification("刺激时间"),

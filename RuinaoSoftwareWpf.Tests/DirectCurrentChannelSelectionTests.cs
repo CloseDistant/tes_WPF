@@ -76,6 +76,27 @@ public sealed class DirectCurrentChannelSelectionTests
     }
 
     [Fact]
+    public void SynchronizedStart_WithFifteenMilliampere_StartsAllSixteenChannels()
+    {
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine);
+        foreach (var channel in viewModel.Channels)
+        {
+            channel.CurrentMA = "15.00";
+        }
+
+        Assert.True(viewModel.SynchronizedStartCommand.CanExecute(null));
+
+        viewModel.SynchronizedStartCommand.Execute(null);
+
+        Assert.Equal(16, engine.LastStartedDirectCurrentGroup?.Channels.Count);
+        Assert.All(
+            engine.LastStartedDirectCurrentGroup!.Channels,
+            channel => Assert.Equal("15.00", channel.CurrentMA));
+        Assert.All(viewModel.Channels, channel => Assert.True(channel.IsStimulating));
+    }
+
+    [Fact]
     public void SynchronizedStart_WhenAnyChannelIsInvalid_StartsNoChannels()
     {
         var engine = new NoopStimulationEngine();
@@ -113,6 +134,25 @@ public sealed class DirectCurrentChannelSelectionTests
 
         viewModel.EmergencyStopCommand.Execute(null);
         Assert.False(target.IsStimulating);
+    }
+
+    [Fact]
+    public void StartChannel_WithFifteenMilliampere_StartsTargetChannel()
+    {
+        var dialog = new TestUserDialogService();
+        var engine = new NoopStimulationEngine();
+        var viewModel = CreateViewModel(engine, userDialogService: dialog);
+        var target = viewModel.Channels[0];
+        target.CurrentMA = "15.00";
+
+        Assert.True(viewModel.StartChannelCommand.CanExecute(target));
+
+        viewModel.StartChannelCommand.Execute(target);
+
+        Assert.Single(engine.LastStartedDirectCurrentGroup!.Channels);
+        Assert.Equal("15.00", engine.LastStartedDirectCurrentGroup.Channels[0].CurrentMA);
+        Assert.Equal(15d, dialog.LastChannelStartRequest?.CurrentMilliampere);
+        Assert.True(target.IsStimulating);
     }
 
     [Theory]

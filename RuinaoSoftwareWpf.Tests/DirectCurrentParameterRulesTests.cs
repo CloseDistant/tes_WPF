@@ -7,6 +7,7 @@ public sealed class DirectCurrentParameterRulesTests
     [Theory]
     [InlineData("1.235", "1.24")]
     [InlineData("0.014", "0.01")]
+    [InlineData("15", "15.00")]
     public void NormalizeCurrent_RoundsToTwoDecimalsWithoutWarning(string input, string expected)
     {
         var result = DirectCurrentParameterRules.Normalize(
@@ -23,11 +24,11 @@ public sealed class DirectCurrentParameterRulesTests
     {
         var result = DirectCurrentParameterRules.Normalize(
             DirectCurrentParameterKind.CurrentMilliamp,
-            "2.345",
+            "15.345",
             DirectCurrentParameterRules.DefaultCurrentMilliamp);
 
         Assert.False(result.IsValid);
-        Assert.Equal("2.00", result.Value);
+        Assert.Equal("15.00", result.Value);
         Assert.Contains("已调整", result.ErrorMessage);
     }
 
@@ -44,7 +45,7 @@ public sealed class DirectCurrentParameterRulesTests
 
         Assert.False(result.IsValid);
         Assert.Equal("1.25", result.Value);
-        Assert.Contains("0.01～2.00", result.ErrorMessage);
+        Assert.Contains("0.01～15.00", result.ErrorMessage);
     }
 
     [Theory]
@@ -78,12 +79,12 @@ public sealed class DirectCurrentParameterRulesTests
     public void TryCreate_RejectsCurrentAboveMaximumEvenWhenUiNormalizationIsBypassed()
     {
         var channel = CreateValidChannel();
-        channel.CurrentMA = "2.01";
+        channel.CurrentMA = "15.01";
 
         var created = DirectCurrentWaveformParameters.TryCreate(channel, out _, out var error);
 
         Assert.False(created);
-        Assert.Contains("2.00 mA", error);
+        Assert.Contains("15.00 mA", error);
     }
 
     [Fact]
