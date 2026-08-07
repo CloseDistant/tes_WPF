@@ -548,6 +548,190 @@
                 </ScrollViewer>
             </TabItem>
 
+            <TabItem Header="产品 M-tPCS">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="18">
+                        <TextBlock Text="产品参数经颅单相脉冲电流刺激（M-tPCS）"
+                                   FontSize="17"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Margin="0,6,0,16"
+                                   Foreground="#B36200"
+                                   TextWrapping="Wrap"
+                                   Text="固定正向单相对称三角脉冲，无模式、极性、平台和单次时长输入。参数转换、完整脉冲计划、类型8寄存器布局、发送顺序及回复判断全部由RuinaoTesHardware.dll完成；仅允许连接测试负载。" />
+
+                        <WrapPanel>
+                            <StackPanel Width="150" Margin="0,0,12,12">
+                                <TextBlock Text="在线电刺激板槽位" Foreground="{StaticResource MutedBrush}" />
+                                <ComboBox x:Name="ProductMtpcsBoardAddressComboBox"
+                                          ItemsSource="{Binding OnlineStimulationBoardOptions}"
+                                          DisplayMemberPath="Display"
+                                          SelectedIndex="0"
+                                          SelectionChanged="ProductMtpcsInput_Changed" />
+                            </StackPanel>
+                            <StackPanel Width="120" Margin="0,0,12,12">
+                                <TextBlock Text="刺激通道" Foreground="{StaticResource MutedBrush}" />
+                                <ComboBox x:Name="ProductMtpcsChannelComboBox"
+                                          ItemsSource="{Binding StimulationChannels}"
+                                          SelectedIndex="0"
+                                          SelectionChanged="ProductMtpcsInput_Changed" />
+                            </StackPanel>
+                            <StackPanel Width="150" Margin="0,0,12,12">
+                                <TextBlock Text="幅值 mA" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox x:Name="ProductMtpcsCurrentTextBox"
+                                         Text="0.01"
+                                         FontFamily="Consolas"
+                                         TextChanged="ProductMtpcsInput_Changed" />
+                            </StackPanel>
+                            <StackPanel Width="170" Margin="0,0,12,12">
+                                <TextBlock Text="渐升/渐降时间 s" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox x:Name="ProductMtpcsRampTextBox"
+                                         Text="0.5"
+                                         FontFamily="Consolas"
+                                         TextChanged="ProductMtpcsInput_Changed" />
+                            </StackPanel>
+                            <StackPanel Width="150" Margin="0,0,12,12">
+                                <TextBlock Text="间隔时间 s" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox x:Name="ProductMtpcsIntervalTextBox"
+                                         Text="0.0"
+                                         FontFamily="Consolas"
+                                         TextChanged="ProductMtpcsInput_Changed" />
+                            </StackPanel>
+                            <StackPanel Width="170" Margin="0,0,12,12">
+                                <TextBlock Text="刺激时间（总时间）s" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox x:Name="ProductMtpcsDurationTextBox"
+                                         Text="120.0"
+                                         FontFamily="Consolas"
+                                         TextChanged="ProductMtpcsInput_Changed" />
+                            </StackPanel>
+                            <StackPanel Width="150" Margin="0,0,12,12">
+                                <TextBlock Text="计划完整脉冲数" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox x:Name="ProductMtpcsPlannedCountText"
+                                         Text="—"
+                                         IsReadOnly="True"
+                                         FontFamily="Consolas" />
+                            </StackPanel>
+                        </WrapPanel>
+
+                        <Border Margin="0,4,0,14"
+                                Padding="14"
+                                Background="#F6F8FC"
+                                BorderBrush="#DDE3EC"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                            <StackPanel>
+                                <TextBlock Text="DLL硬件转换预览"
+                                           FontWeight="SemiBold" />
+                                <TextBlock x:Name="ProductMtpcsPreviewText"
+                                           Margin="0,8,0,0"
+                                           FontFamily="Consolas"
+                                           TextWrapping="Wrap"
+                                           Text="参数尚未形成有效的M-tPCS硬件配置。" />
+                            </StackPanel>
+                        </Border>
+
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="14" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="14" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Padding="16"
+                                    Background="#151B28"
+                                    CornerRadius="8">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="预计电流（软件计算，非实测）"
+                                               Foreground="#AAB4C8" />
+                                    <TextBlock x:Name="ProductMtpcsExpectedCurrentText"
+                                               Text="0.000 mA"
+                                               Margin="0,6,0,0"
+                                               Foreground="#FFD04A"
+                                               FontFamily="Consolas"
+                                               FontSize="28"
+                                               FontWeight="Bold" />
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="2"
+                                    Padding="16"
+                                    Background="#151B28"
+                                    CornerRadius="8">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="预计剩余时间"
+                                               Foreground="#AAB4C8" />
+                                    <TextBlock x:Name="ProductMtpcsRemainingTimeText"
+                                               Text="00:00:00.0"
+                                               Margin="0,6,0,0"
+                                               Foreground="White"
+                                               FontFamily="Consolas"
+                                               FontSize="28"
+                                               FontWeight="Bold" />
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="4"
+                                    Padding="16"
+                                    Background="#151B28"
+                                    CornerRadius="8">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="预计完成脉冲"
+                                               Foreground="#AAB4C8" />
+                                    <TextBlock x:Name="ProductMtpcsCompletedCountText"
+                                               Text="0 / —"
+                                               Margin="0,6,0,0"
+                                               Foreground="White"
+                                               FontFamily="Consolas"
+                                               FontSize="28"
+                                               FontWeight="Bold" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <CheckBox x:Name="ProductMtpcsTestLoadCheckBox"
+                                  Content="已确认连接测试负载，不连接人体"
+                                  Foreground="#9A3A00"
+                                  FontWeight="SemiBold"
+                                  Checked="ProductMtpcsTestLoad_Changed"
+                                  Unchecked="ProductMtpcsTestLoad_Changed" />
+
+                        <WrapPanel Margin="0,12,0,0">
+                            <Button x:Name="ProductMtpcsPreviewButton"
+                                    Content="生成转换预览"
+                                    Click="ProductMtpcsPreviewButton_Click" />
+                            <Button x:Name="ProductMtpcsConfigureButton"
+                                    Content="1. 下发配置"
+                                    Click="ProductMtpcsConfigureButton_Click"
+                                    Background="#FFF1DD" />
+                            <Button x:Name="ProductMtpcsStartButton"
+                                    Content="业务板开始（值0）"
+                                    Click="ProductMtpcsStartButton_Click"
+                                    Background="#DDF6EA" />
+                            <Button x:Name="ProductMtpcsStartChannelButton"
+                                    Content="2. 指定通道开始"
+                                    Click="ProductMtpcsStartChannelButton_Click"
+                                    Background="#DDF6EA" />
+                            <Button x:Name="ProductMtpcsStopChannelButton"
+                                    Content="指定通道停止"
+                                    Click="ProductMtpcsStopChannelButton_Click"
+                                    Background="#FFE3E3" />
+                            <Button x:Name="ProductMtpcsStopButton"
+                                    Content="业务板手动停止（值0）"
+                                    Click="ProductMtpcsStopButton_Click"
+                                    Background="#FFE3E3" />
+                        </WrapPanel>
+
+                        <TextBlock x:Name="ProductMtpcsStatusText"
+                                   Margin="0,12,0,0"
+                                   Text="参数尚未下发。"
+                                   FontFamily="Consolas"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   TextWrapping="Wrap"
+                                   Text="工程师软件不在总时间结束后追加停止或全通道拉低；类型8波形只运行完整三角脉冲，剩余时间保持零输出。可使用“手动停止”单独发送0x0003。" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem Header="产品 tPCS">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="18">

@@ -14,13 +14,11 @@ public sealed class DirectCurrentStimulationClient
     public const uint ConfigurationVersion = 0x16;
     public const uint TrapezoidWaveformType = 8;
 
-    private const ushort StartRegister = 0x0002;
-    private const ushort StopRegister = 0x0003;
-    private readonly BackplaneClient client;
+    private readonly TypeEightStimulationHardwareWriter writer;
 
     public DirectCurrentStimulationClient(BackplaneClient client)
     {
-        this.client = client;
+        writer = new TypeEightStimulationHardwareWriter(client);
     }
 
     public async Task<DirectCurrentConfigurationResult> ConfigureAsync(
@@ -31,18 +29,10 @@ public sealed class DirectCurrentStimulationClient
         var plan = CreatePlan(parameters);
         var waveformWrite = await ExecuteHardwareOperationAsync(
             "下发类型8梯形配置",
-            () => client.WriteRegistersAsync(
-                parameters.BoardAddress,
-                BuildWaveformRegisters(plan),
-                options,
-                cancellationToken));
+            () => writer.WriteWaveformAsync(ToHardwarePlan(plan), options, cancellationToken));
         var controlWrite = await ExecuteHardwareOperationAsync(
             "下发通道总控制配置",
-            () => client.WriteRegistersAsync(
-                parameters.BoardAddress,
-                BuildControlRegisters(plan),
-                options,
-                cancellationToken));
+            () => writer.WriteControlAsync(ToHardwarePlan(plan), options, cancellationToken));
 
         return new DirectCurrentConfigurationResult(
             plan,
@@ -57,7 +47,7 @@ public sealed class DirectCurrentStimulationClient
     {
         var result = await ExecuteHardwareOperationAsync(
             "开始直流电刺激",
-            () => WriteCommandAsync(boardAddress, StartRegister, 0, options, cancellationToken));
+            () => writer.StartAsync(boardAddress, 0, options, cancellationToken));
         return ToProductResult(result, "开始刺激命令已被硬件接受，实际输出需由测量设备确认。");
     }
 
@@ -68,7 +58,7 @@ public sealed class DirectCurrentStimulationClient
     {
         var result = await ExecuteHardwareOperationAsync(
             "停止直流电刺激",
-            () => WriteCommandAsync(boardAddress, StopRegister, 0, options, cancellationToken));
+            () => writer.StopAsync(boardAddress, 0, options, cancellationToken));
         return ToProductResult(result, "停止刺激命令已被硬件接受，硬件停止状态尚未回读验证。");
     }
 
@@ -83,7 +73,7 @@ public sealed class DirectCurrentStimulationClient
         CancellationToken cancellationToken = default) =>
         StartChannelsAsync(
             boardAddress,
-            CreateSingleChannelMask(channel),
+            TypeEightStimulationHardwareWriter.CreateSingleChannelMask(channel),
             options,
             cancellationToken);
 
@@ -95,7 +85,7 @@ public sealed class DirectCurrentStimulationClient
         CancellationToken cancellationToken = default) =>
         StopChannelsAsync(
             boardAddress,
-            CreateSingleChannelMask(channel),
+            TypeEightStimulationHardwareWriter.CreateSingleChannelMask(channel),
             options,
             cancellationToken);
 
@@ -106,15 +96,10 @@ public sealed class DirectCurrentStimulationClient
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)
     {
-        ValidateChannelMask(channelMask);
+        TypeEightStimulationHardwareWriter.ValidateChannelMask(channelMask);
         var result = await ExecuteHardwareOperationAsync(
             $"开始直流电刺激通道0x{channelMask:X2}",
-            () => WriteCommandAsync(
-                boardAddress,
-                StartRegister,
-                channelMask,
-                options,
-                cancellationToken));
+            () => writer.StartAsync(boardAddress, channelMask, options, cancellationToken));
         return ToProductResult(
             result,
             $"指定通道开始命令已被硬件接受：0x0002=0x{channelMask:X8}；实际输出需由测量设备确认。");
@@ -127,15 +112,10 @@ public sealed class DirectCurrentStimulationClient
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)
     {
-        ValidateChannelMask(channelMask);
+        TypeEightStimulationHardwareWriter.ValidateChannelMask(channelMask);
         var result = await ExecuteHardwareOperationAsync(
             $"停止直流电刺激通道0x{channelMask:X2}",
-            () => WriteCommandAsync(
-                boardAddress,
-                StopRegister,
-                channelMask,
-                options,
-                cancellationToken));
+            () => writer.StopAsync(boardAddress, channelMask, options, cancellationToken));
         return ToProductResult(
             result,
             $"指定通道停止命令已被硬件接受：0x0003=0x{channelMask:X8}；硬件停止状态尚未回读验证。");
@@ -151,11 +131,7 @@ public sealed class DirectCurrentStimulationClient
     {
         var result = await ExecuteHardwareOperationAsync(
             "背板紧急停止",
-            () => client.WriteRegistersAsync(
-                TesV14ProtocolConstants.BackplaneAddress,
-                [new TesV14RegisterValue(StopRegister, 0)],
-                options,
-                cancellationToken));
+            () => writer.EmergencyStopBackplaneAsync(options, cancellationToken));
         return ToProductResult(
             result,
             "背板紧急停止命令已被硬件接受；硬件停止状态尚未回读验证。");
@@ -226,47 +202,6 @@ public sealed class DirectCurrentStimulationClient
             MidpointRounding.AwayFromZero));
     }
 
-    private async Task<BackplaneRegisterOperationResult> WriteCommandAsync(
-        byte boardAddress,
-        ushort registerAddress,
-        uint value,
-        BackplaneConnectionOptions options,
-        CancellationToken cancellationToken)
-    {
-        if (boardAddress > 0x07)
-        {
-            throw new ArgumentOutOfRangeException(nameof(boardAddress), "业务板地址必须在0x00～0x07之间。");
-        }
-
-        return await client.WriteRegistersAsync(
-            boardAddress,
-            [new TesV14RegisterValue(registerAddress, value)],
-            options,
-            cancellationToken);
-    }
-
-    private static uint CreateSingleChannelMask(int channel)
-    {
-        if (channel is < 1 or > 8)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(channel),
-                "刺激通道必须在1到8之间。");
-        }
-
-        return 1U << (channel - 1);
-    }
-
-    private static void ValidateChannelMask(uint channelMask)
-    {
-        if (channelMask == 0 || (channelMask & 0xFFFFFF00U) != 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(channelMask),
-                "通道掩码必须只使用低8位，并且至少选择一个通道。");
-        }
-    }
-
     private static async Task<BackplaneRegisterOperationResult> ExecuteHardwareOperationAsync(
         string operation,
         Func<Task<BackplaneRegisterOperationResult>> action)
@@ -297,48 +232,6 @@ public sealed class DirectCurrentStimulationClient
         }
     }
 
-    private static IReadOnlyList<TesV14RegisterValue> BuildWaveformRegisters(
-        DirectCurrentStimulationPlan plan)
-    {
-        var waveBase = checked((ushort)(GetChannelBase(plan.Parameters.Channel) + 0x20));
-        return
-        [
-            new(waveBase, plan.WaveformType),
-            new((ushort)(waveBase + 0x01), plan.DurationMicroseconds),
-            new((ushort)(waveBase + 0x02), 0),
-            new((ushort)(waveBase + 0x03), 0),
-            new((ushort)(waveBase + 0x04), 0),
-            new((ushort)(waveBase + 0x05), 0),
-            new((ushort)(waveBase + 0x06), 0),
-            new((ushort)(waveBase + 0x07), unchecked((uint)plan.LowDa)),
-            new((ushort)(waveBase + 0x08), unchecked((uint)plan.HighDa)),
-            new((ushort)(waveBase + 0x09), plan.RiseMicroseconds),
-            new((ushort)(waveBase + 0x0A), plan.HighHoldMicroseconds),
-            new((ushort)(waveBase + 0x0B), plan.FallMicroseconds),
-            new((ushort)(waveBase + 0x0C), plan.LowHoldMicroseconds),
-            new((ushort)(waveBase + 0x0D), 0),
-            new((ushort)(waveBase + 0x0E), 1),
-            new((ushort)(waveBase + 0x0F), 0),
-        ];
-    }
-
-    private static IReadOnlyList<TesV14RegisterValue> BuildControlRegisters(
-        DirectCurrentStimulationPlan plan)
-    {
-        var channelBase = GetChannelBase(plan.Parameters.Channel);
-        return
-        [
-            new(0x2E00, plan.EnableMask),
-            new(0x2E01, plan.ConfigurationVersion),
-            new(channelBase, (uint)(plan.Parameters.Channel - 1)),
-            new((ushort)(channelBase + 0x01), 0),
-            new((ushort)(channelBase + 0x02), 0),
-            new((ushort)(channelBase + 0x03), plan.TotalTimeMilliseconds),
-            new((ushort)(channelBase + 0x04), 1),
-            new((ushort)(channelBase + 0x05), 0),
-        ];
-    }
-
     private static DirectCurrentCommandResult ToProductResult(
         BackplaneRegisterOperationResult result,
         string message)
@@ -351,20 +244,27 @@ public sealed class DirectCurrentStimulationClient
             message);
     }
 
-    private static ushort GetChannelBase(int channel) =>
-        checked((ushort)(0x3000 + (channel - 1) * 0x0200));
+    private static TypeEightStimulationHardwarePlan ToHardwarePlan(
+        DirectCurrentStimulationPlan plan) =>
+        new(
+            plan.Parameters.BoardAddress,
+            plan.Parameters.Channel,
+            plan.EnableMask,
+            plan.ConfigurationVersion,
+            plan.WaveformType,
+            plan.DurationMicroseconds,
+            plan.LowDa,
+            plan.HighDa,
+            plan.RiseMicroseconds,
+            plan.HighHoldMicroseconds,
+            plan.FallMicroseconds,
+            plan.LowHoldMicroseconds,
+            plan.TotalTimeMilliseconds);
 
     private static void Validate(DirectCurrentStimulationParameters parameters)
     {
-        if (parameters.BoardAddress > 0x07)
-        {
-            throw new ArgumentOutOfRangeException(nameof(parameters), "业务板地址必须在0x00～0x07之间。");
-        }
-
-        if (parameters.Channel is < 1 or > 8)
-        {
-            throw new ArgumentOutOfRangeException(nameof(parameters), "刺激通道必须在1～8之间。");
-        }
+        TypeEightStimulationHardwareWriter.ValidateBoardAddress(parameters.BoardAddress);
+        TypeEightStimulationHardwareWriter.ValidateChannel(parameters.Channel);
 
         _ = ConvertCurrentToDa(parameters.CurrentMilliampere);
         ValidateTime(parameters.RampUpSeconds, "渐升时间", allowZero: true);

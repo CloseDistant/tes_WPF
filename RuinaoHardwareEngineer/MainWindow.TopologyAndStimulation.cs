@@ -51,6 +51,7 @@ public partial class MainWindow
         rawStimulationService = new UsbTest4RawStimulationService(client);
         InitializeStimulationImpedance();
         InitializeProductDirectCurrent();
+        InitializeProductMonophasicPulseCurrent();
         InitializeProductPulseCurrent();
         ResetTopologyRows();
         BoardAddressComboBox.SelectedIndex = 0;
@@ -766,6 +767,7 @@ public partial class MainWindow
         EmergencyStopAllBoardsButton.IsEnabled = safetyCommandsAvailable;
         UpdateStimulationImpedanceButtons(canUseHardware);
         UpdateProductDirectCurrentButtons(canUseHardware);
+        UpdateProductMtpcsButtons(canUseHardware);
     }
 
     public sealed class BoardSlotItem

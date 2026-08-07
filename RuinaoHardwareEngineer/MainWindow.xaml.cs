@@ -687,6 +687,7 @@ public partial class MainWindow : Window
                 StopStimulationImpedanceMonitoring("硬件连接已断开，阻抗自动读取已停止。");
                 UpdateImpedanceBoardOptions(Array.Empty<Features.DeviceTopology.EngineerBoardSlot>());
                 InvalidateProductDirectCurrentConfiguration("硬件连接已断开，产品tDCS配置状态已失效。");
+                InvalidateProductMtpcsConfiguration("硬件连接已断开，产品M-tPCS配置状态已失效。");
             }
 
             UpdateConnectionStateBadge();

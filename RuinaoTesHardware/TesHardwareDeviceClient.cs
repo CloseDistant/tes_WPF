@@ -28,11 +28,13 @@ public sealed class TesHardwareDeviceClient
 
     private readonly BackplaneClient backplaneClient;
     private readonly DirectCurrentStimulationClient directCurrentClient;
+    private readonly MonophasicPulseCurrentStimulationClient monophasicPulseCurrentClient;
 
     public TesHardwareDeviceClient(BackplaneClient backplaneClient)
     {
         this.backplaneClient = backplaneClient;
         directCurrentClient = new DirectCurrentStimulationClient(backplaneClient);
+        monophasicPulseCurrentClient = new MonophasicPulseCurrentStimulationClient(backplaneClient);
     }
 
     public BackplaneConnectionState State => backplaneClient.State;
@@ -135,6 +137,40 @@ public sealed class TesHardwareDeviceClient
     public Task<DirectCurrentCommandResult> EmergencyStopBackplaneAsync(
         CancellationToken cancellationToken = default) =>
         directCurrentClient.EmergencyStopBackplaneAsync(DefaultOptions, cancellationToken);
+
+    /// <summary>下发一个物理通道的M-tPCS正向单相三角脉冲配置。</summary>
+    public Task<StimulationHardwareConfigurationResult<MonophasicPulseCurrentStimulationPlan>>
+        ConfigureMonophasicPulseCurrentAsync(
+            MonophasicPulseCurrentStimulationParameters parameters,
+            CancellationToken cancellationToken = default) =>
+        monophasicPulseCurrentClient.ConfigureAsync(parameters, DefaultOptions, cancellationToken);
+
+    /// <summary>按低8位掩码启动指定业务板的M-tPCS刺激通道。</summary>
+    public Task<StimulationHardwareCommandResult> StartMonophasicPulseCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default) =>
+        monophasicPulseCurrentClient.StartChannelsAsync(
+            boardAddress,
+            channelMask,
+            DefaultOptions,
+            cancellationToken);
+
+    /// <summary>按低8位掩码停止指定业务板的M-tPCS刺激通道。</summary>
+    public Task<StimulationHardwareCommandResult> StopMonophasicPulseCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default) =>
+        monophasicPulseCurrentClient.StopChannelsAsync(
+            boardAddress,
+            channelMask,
+            DefaultOptions,
+            cancellationToken);
+
+    /// <summary>通过M-tPCS产品API发送背板级全机紧急停止。</summary>
+    public Task<StimulationHardwareCommandResult> EmergencyStopMonophasicPulseCurrentBackplaneAsync(
+        CancellationToken cancellationToken = default) =>
+        monophasicPulseCurrentClient.EmergencyStopBackplaneAsync(DefaultOptions, cancellationToken);
 
     /// <summary>
     /// 一次读取指定电刺激业务板的8个通道阻抗寄存器（0x1001～0x1008）。
