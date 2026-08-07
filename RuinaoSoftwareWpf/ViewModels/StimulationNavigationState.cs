@@ -1,27 +1,28 @@
 namespace RuinaoSoftwareWpf;
 
-public enum StimulationSubpage
-{
-    TypeSelection,
-    TemporalInterference,
-    DirectCurrent,
-    PulseCurrent
-}
-
 /// <summary>
-/// 记录当前登录期间最后停留的电刺激子页面，不写入数据库或配置文件。
+/// Remembers the stimulation page used during the current login session.
+/// The mode code is not persisted to the database or configuration files.
 /// </summary>
 public sealed class StimulationNavigationState
 {
-    public StimulationSubpage CurrentSubpage { get; private set; } = StimulationSubpage.TypeSelection;
+    public string? CurrentModeCode { get; private set; }
 
-    public void Remember(StimulationSubpage subpage)
+    public bool IsTypeSelection => CurrentModeCode is null;
+
+    public void RememberMode(string modeCode)
     {
-        CurrentSubpage = subpage;
+        ArgumentException.ThrowIfNullOrWhiteSpace(modeCode);
+        CurrentModeCode = modeCode;
+    }
+
+    public void RememberTypeSelection()
+    {
+        CurrentModeCode = null;
     }
 
     public void Reset()
     {
-        CurrentSubpage = StimulationSubpage.TypeSelection;
+        RememberTypeSelection();
     }
 }

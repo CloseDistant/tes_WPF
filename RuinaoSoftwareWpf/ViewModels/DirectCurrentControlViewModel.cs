@@ -270,7 +270,10 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     {
         PrescriptionRequested?.Invoke(
             this,
-            new StimulationPrescriptionRequestEventArgs("tDCS", scope, targetChannel));
+            new StimulationPrescriptionRequestEventArgs(
+                StimulationModeCodes.DirectCurrent,
+                scope,
+                targetChannel));
     }
 
     private static ChannelConfig CreateChannel(string name, Brush accent)
@@ -514,7 +517,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         var result = await stimulationEngine.StopGroupAsync(
             group,
             channel.Name,
-            "tDCS",
+            StimulationModeCodes.DirectCurrent,
             cancellationToken);
         var elapsed = Stopwatch.GetElapsedTime(runtime.StartTimestamp, Stopwatch.GetTimestamp()).TotalSeconds;
         FinalizeStoppedChannel(channel, elapsed, completed: false);
@@ -888,7 +891,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             var result = await stimulationEngine.StopGroupAsync(
                 group,
                 string.Join(" + ", channels.Select(channel => channel.Name)),
-                "tDCS");
+                StimulationModeCodes.DirectCurrent);
             var stoppedAt = Stopwatch.GetTimestamp();
             foreach (var channel in channels)
             {
@@ -959,7 +962,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             var result = await stimulationEngine.CompleteGroupAsync(
                 group,
                 string.Join(" + ", validChannels.Select(channel => channel.Name)),
-                "tDCS");
+                StimulationModeCodes.DirectCurrent);
             foreach (var channel in validChannels)
             {
                 FinalizeStoppedChannel(
@@ -1043,7 +1046,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
             _ = await stimulationEngine.StopGroupAsync(
                 group,
                 channelName,
-                "tDCS",
+                StimulationModeCodes.DirectCurrent,
                 CancellationToken.None);
         }
         catch (Exception stopException)

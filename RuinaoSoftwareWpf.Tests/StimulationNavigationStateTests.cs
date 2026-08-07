@@ -9,31 +9,46 @@ public sealed class StimulationNavigationStateTests
     {
         var state = new StimulationNavigationState();
 
-        Assert.Equal(StimulationSubpage.TypeSelection, state.CurrentSubpage);
+        Assert.True(state.IsTypeSelection);
+        Assert.Null(state.CurrentModeCode);
     }
 
     [Theory]
-    [InlineData(StimulationSubpage.TemporalInterference)]
-    [InlineData(StimulationSubpage.DirectCurrent)]
-    [InlineData(StimulationSubpage.PulseCurrent)]
-    [InlineData(StimulationSubpage.TypeSelection)]
-    public void Remember_PreservesLastStimulationSubpage(StimulationSubpage subpage)
+    [InlineData(StimulationModeCodes.TemporalInterference)]
+    [InlineData(StimulationModeCodes.DirectCurrent)]
+    [InlineData(StimulationModeCodes.PulseCurrent)]
+    [InlineData("future-mode")]
+    public void RememberMode_PreservesAnyRegisteredOrFutureModeCode(string modeCode)
     {
         var state = new StimulationNavigationState();
 
-        state.Remember(subpage);
+        state.RememberMode(modeCode);
 
-        Assert.Equal(subpage, state.CurrentSubpage);
+        Assert.False(state.IsTypeSelection);
+        Assert.Equal(modeCode, state.CurrentModeCode);
+    }
+
+    [Fact]
+    public void RememberTypeSelection_ReturnsToSelectionWithoutAddingAnEnumValue()
+    {
+        var state = new StimulationNavigationState();
+        state.RememberMode(StimulationModeCodes.DirectCurrent);
+
+        state.RememberTypeSelection();
+
+        Assert.True(state.IsTypeSelection);
+        Assert.Null(state.CurrentModeCode);
     }
 
     [Fact]
     public void Reset_ReturnsToTypeSelectionForNextLogin()
     {
         var state = new StimulationNavigationState();
-        state.Remember(StimulationSubpage.DirectCurrent);
+        state.RememberMode(StimulationModeCodes.DirectCurrent);
 
         state.Reset();
 
-        Assert.Equal(StimulationSubpage.TypeSelection, state.CurrentSubpage);
+        Assert.True(state.IsTypeSelection);
+        Assert.Null(state.CurrentModeCode);
     }
 }

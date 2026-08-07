@@ -17,17 +17,44 @@ public static class FeatureKeys
     public const string StimulationPulseCurrent = "stimulation.tpcs";
 }
 
+/// <summary>
+/// Stable stimulation mode identifiers shared by navigation, prescriptions and mode modules.
+/// These values are persisted, so changing one requires an explicit data migration.
+/// </summary>
+public static class StimulationModeCodes
+{
+    public const string TemporalInterference = "TI";
+    public const string DirectCurrent = "tDCS";
+    public const string PulseCurrent = "tPCS";
+}
+
 public sealed record NavigationFeatureDefinition(
     string Key,
     AppPage Page,
     string LocalizationKey,
     bool DefaultVisible = true);
 
+public enum StimulationModeExecutionAvailability
+{
+    Hardware,
+    HardwareIntegrationPending
+}
+
 public sealed record StimulationTypeFeatureDefinition(
     string Key,
     string LocalizationKey,
-    string ShortName,
-    bool DefaultVisible = true);
+    string ModeCode,
+    string DisplayName,
+    string IconGlyph,
+    string FooterStatus,
+    bool RequiresImpedanceMonitoring = false,
+    StimulationModeExecutionAvailability ExecutionAvailability =
+        StimulationModeExecutionAvailability.Hardware,
+    bool DefaultVisible = true)
+{
+    // Compatibility alias for existing display bindings. New routing code must use ModeCode.
+    public string ShortName => ModeCode;
+}
 
 public static class FeatureCatalog
 {
@@ -46,10 +73,41 @@ public static class FeatureCatalog
 
     public static IReadOnlyList<StimulationTypeFeatureDefinition> StimulationTypes { get; } =
     [
-        new(FeatureKeys.StimulationTemporalInterference, "TemporalInterference", "TI"),
-        new(FeatureKeys.StimulationDirectCurrent, "TranscranialDirectCurrent", "tDCS"),
-        new(FeatureKeys.StimulationPulseCurrent, "TranscranialPulseCurrent", "tPCS")
+        new(
+            FeatureKeys.StimulationTemporalInterference,
+            "TemporalInterference",
+            StimulationModeCodes.TemporalInterference,
+            "时间相干电刺激",
+            "≈",
+            "时间相干电刺激参数设置"),
+        new(
+            FeatureKeys.StimulationDirectCurrent,
+            "TranscranialDirectCurrent",
+            StimulationModeCodes.DirectCurrent,
+            "经颅直流电刺激",
+            "━",
+            "经颅直流电刺激参数设置",
+            RequiresImpedanceMonitoring: true),
+        new(
+            FeatureKeys.StimulationPulseCurrent,
+            "TranscranialPulseCurrent",
+            StimulationModeCodes.PulseCurrent,
+            "经颅脉冲电流刺激",
+            "⌁",
+            "经颅脉冲电流刺激参数设置",
+            RequiresImpedanceMonitoring: true,
+            ExecutionAvailability: StimulationModeExecutionAvailability.HardwareIntegrationPending)
     ];
+
+    public static StimulationTypeFeatureDefinition GetStimulationType(string modeCode)
+    {
+        return StimulationTypes.FirstOrDefault(
+                item => string.Equals(item.ModeCode, modeCode, StringComparison.Ordinal))
+            ?? throw new ArgumentOutOfRangeException(
+                nameof(modeCode),
+                modeCode,
+                "Unknown stimulation mode code.");
+    }
 
     public static IReadOnlySet<string> AllKeys { get; } = Navigation
         .Select(item => item.Key)

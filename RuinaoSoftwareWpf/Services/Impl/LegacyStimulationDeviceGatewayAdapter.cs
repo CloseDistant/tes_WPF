@@ -92,7 +92,7 @@ public sealed class LegacyStimulationDeviceGatewayAdapter : IStimulationDeviceGa
         return Map(await hardwareService.StopGroupAsync(
             configuredGroup,
             configuredChannelNames,
-            configuredPrescription?.StimulationType ?? "TI",
+            configuredPrescription?.StimulationType ?? StimulationModeCodes.TemporalInterference,
             cancellationToken));
     }
 
@@ -108,7 +108,7 @@ public sealed class LegacyStimulationDeviceGatewayAdapter : IStimulationDeviceGa
         return Map(await hardwareService.EmergencyStopGroupAsync(
             configuredGroup,
             configuredChannelNames,
-            configuredPrescription?.StimulationType ?? "TI",
+            configuredPrescription?.StimulationType ?? StimulationModeCodes.TemporalInterference,
             cancellationToken));
     }
 

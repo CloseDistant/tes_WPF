@@ -365,7 +365,7 @@ public sealed class HardwareService : IHardwareService
     public async Task<HardwareOperationResult> EmergencyStopGroupAsync(
         TiGroup group,
         string selectedChannelNames,
-        string stimulationType = "TI",
+        string stimulationType = StimulationModeCodes.TemporalInterference,
         CancellationToken cancellationToken = default)
     {
         var useDebugMock = ShouldUseDebugStimulationMock();
@@ -681,7 +681,10 @@ public sealed class HardwareService : IHardwareService
     }
 
     private static bool IsDirectCurrent(string stimulationType) =>
-        string.Equals(stimulationType, "tDCS", StringComparison.OrdinalIgnoreCase);
+        string.Equals(
+            stimulationType,
+            StimulationModeCodes.DirectCurrent,
+            StringComparison.OrdinalIgnoreCase);
 
     private sealed record DirectCurrentChannelBinding(
         byte BoardAddress,

@@ -1,10 +1,11 @@
 namespace RuinaoSoftwareWpf;
 
-using System.Windows;
+using System.Collections.ObjectModel;
 using System.Windows.Input;
 
 /// <summary>
-/// 电刺激入口页，只负责展示当前启用的刺激类型并转发选择事件。
+/// Catalog-driven stimulation entry page. Adding a mode no longer requires a new command,
+/// visibility property or shell event; the mode card is generated from FeatureCatalog.
 /// </summary>
 public sealed class StimulationTypeSelectionViewModel : ObservableObject
 {
@@ -16,84 +17,53 @@ public sealed class StimulationTypeSelectionViewModel : ObservableObject
     {
         Localization = localization;
         this.featureVisibilityService = featureVisibilityService;
-
-        OpenTemporalInterferenceCommand = new RelayCommand(
-            _ => TemporalInterferenceRequested?.Invoke(this, EventArgs.Empty));
-        OpenDirectCurrentCommand = new RelayCommand(
-            _ => DirectCurrentRequested?.Invoke(this, EventArgs.Empty));
-        OpenPulseCurrentCommand = new RelayCommand(
-            _ => PulseCurrentRequested?.Invoke(this, EventArgs.Empty));
+        OpenModeCommand = new RelayCommand(OpenMode);
 
         featureVisibilityService.VisibilityChanged += (_, _) => RefreshVisibility();
+        localization.PropertyChanged += (_, _) => RefreshVisibility();
+        RefreshVisibility();
     }
 
     public LocalizationViewModel Localization { get; }
 
-    public ICommand OpenTemporalInterferenceCommand { get; }
+    public ObservableCollection<StimulationTypeCardViewModel> VisibleModes { get; } = [];
 
-    public ICommand OpenDirectCurrentCommand { get; }
+    public ICommand OpenModeCommand { get; }
 
-    public ICommand OpenPulseCurrentCommand { get; }
-
-    public Visibility TemporalInterferenceVisibility => IsTemporalInterferenceVisible
-        ? Visibility.Visible
-        : Visibility.Collapsed;
-
-    public Visibility DirectCurrentVisibility => IsDirectCurrentVisible
-        ? Visibility.Visible
-        : Visibility.Collapsed;
-
-    public int DirectCurrentCardColumn => IsTemporalInterferenceVisible ? 2 : 0;
-
-    public int DirectCurrentCardRow => 0;
-
-    public int PulseCurrentCardColumn
-    {
-        get
-        {
-            var precedingVisibleCount = (IsTemporalInterferenceVisible ? 1 : 0)
-                + (IsDirectCurrentVisible ? 1 : 0);
-            return precedingVisibleCount % 2 == 0 ? 0 : 2;
-        }
-    }
-
-    public int PulseCurrentCardRow
-    {
-        get
-        {
-            var precedingVisibleCount = (IsTemporalInterferenceVisible ? 1 : 0)
-                + (IsDirectCurrentVisible ? 1 : 0);
-            return precedingVisibleCount / 2 * 2;
-        }
-    }
-
-    public Visibility PulseCurrentVisibility => IsPulseCurrentVisible
-        ? Visibility.Visible
-        : Visibility.Collapsed;
-
-    public event EventHandler? TemporalInterferenceRequested;
-
-    public event EventHandler? DirectCurrentRequested;
-
-    public event EventHandler? PulseCurrentRequested;
+    public event EventHandler<StimulationModeRequestedEventArgs>? ModeRequested;
 
     public void RefreshVisibility()
     {
-        OnPropertyChanged(nameof(TemporalInterferenceVisibility));
-        OnPropertyChanged(nameof(DirectCurrentVisibility));
-        OnPropertyChanged(nameof(DirectCurrentCardColumn));
-        OnPropertyChanged(nameof(DirectCurrentCardRow));
-        OnPropertyChanged(nameof(PulseCurrentVisibility));
-        OnPropertyChanged(nameof(PulseCurrentCardColumn));
-        OnPropertyChanged(nameof(PulseCurrentCardRow));
+        var cards = FeatureCatalog.StimulationTypes
+            .Where(definition => featureVisibilityService.IsVisible(definition.Key))
+            .Select(definition => new StimulationTypeCardViewModel(
+                definition.ModeCode,
+                Localization.FeatureText(definition.LocalizationKey),
+                definition.IconGlyph))
+            .ToArray();
+
+        VisibleModes.Clear();
+        foreach (var card in cards)
+        {
+            VisibleModes.Add(card);
+        }
     }
 
-    private bool IsTemporalInterferenceVisible =>
-        featureVisibilityService.IsVisible(FeatureKeys.StimulationTemporalInterference);
+    private void OpenMode(object? parameter)
+    {
+        if (parameter is StimulationTypeCardViewModel card)
+        {
+            ModeRequested?.Invoke(this, new StimulationModeRequestedEventArgs(card.ModeCode));
+        }
+    }
+}
 
-    private bool IsDirectCurrentVisible =>
-        featureVisibilityService.IsVisible(FeatureKeys.StimulationDirectCurrent);
+public sealed record StimulationTypeCardViewModel(
+    string ModeCode,
+    string DisplayName,
+    string IconGlyph);
 
-    private bool IsPulseCurrentVisible =>
-        featureVisibilityService.IsVisible(FeatureKeys.StimulationPulseCurrent);
+public sealed class StimulationModeRequestedEventArgs(string modeCode) : EventArgs
+{
+    public string ModeCode { get; } = modeCode;
 }

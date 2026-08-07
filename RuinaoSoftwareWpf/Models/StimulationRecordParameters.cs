@@ -167,12 +167,15 @@ public static class StimulationRecordParameters
 
     public static PrescriptionDefinition CreateTiPrescription(TiGroup group, string prescriptionName)
     {
-        return CreatePrescription(group, prescriptionName, "TI");
+        return CreatePrescription(
+            group,
+            prescriptionName,
+            StimulationModeCodes.TemporalInterference);
     }
 
     public static PrescriptionDefinition CreateDirectCurrentPrescription(TiGroup group, string prescriptionName)
     {
-        return CreatePrescription(group, prescriptionName, "tDCS");
+        return CreatePrescription(group, prescriptionName, StimulationModeCodes.DirectCurrent);
     }
 
     private static PrescriptionDefinition CreatePrescription(
@@ -265,7 +268,9 @@ public static class StimulationRecordParameters
             $"REC_{recordId}",
             string.IsNullOrWhiteSpace(prescriptionName) ? groupTitle : prescriptionName,
             "电刺激实验实际参数",
-            string.IsNullOrWhiteSpace(stimulationType) ? "TI" : stimulationType,
+            string.IsNullOrWhiteSpace(stimulationType)
+                ? StimulationModeCodes.TemporalInterference
+                : stimulationType,
             0,
             PrescriptionDeliveryModes.Continuous,
             0,

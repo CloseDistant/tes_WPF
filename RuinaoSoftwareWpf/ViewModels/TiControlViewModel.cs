@@ -235,7 +235,10 @@ public sealed class TiControlViewModel : ObservableObject
     {
         PrescriptionRequested?.Invoke(
             this,
-            new StimulationPrescriptionRequestEventArgs("TI", scope, targetChannel));
+            new StimulationPrescriptionRequestEventArgs(
+                StimulationModeCodes.TemporalInterference,
+                scope,
+                targetChannel));
     }
 
     private ICommand CreateHardwareCommand(Func<object?, Task> execute, Action<Exception>? onError = null)
@@ -392,7 +395,7 @@ public sealed class TiControlViewModel : ObservableObject
         var result = await stimulationEngine.StopGroupAsync(
             group,
             channel.Name,
-            "TI",
+            StimulationModeCodes.TemporalInterference,
             cancellationToken);
         countdown.Cancel(channel, reset: true);
         channel.IsParameterEditingEnabled = true;
@@ -454,7 +457,7 @@ public sealed class TiControlViewModel : ObservableObject
             var result = await stimulationEngine.CompleteGroupAsync(
                 singleChannelGroup,
                 channel.Name,
-                "TI");
+                StimulationModeCodes.TemporalInterference);
             channel.IsParameterEditingEnabled = true;
             channel.IsStimulating = false;
             RefreshStartCommandStatesOnUiThread();

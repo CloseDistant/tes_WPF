@@ -496,7 +496,7 @@ public sealed class ConfigViewModel : ObservableObject
         return CreateOption(
             definition.Key,
             definition.LocalizationKey,
-            definition.ShortName,
+            definition.ModeCode,
             index,
             definition.DefaultVisible);
     }

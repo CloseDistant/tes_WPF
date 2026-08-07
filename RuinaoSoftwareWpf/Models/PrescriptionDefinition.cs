@@ -30,7 +30,7 @@ public sealed record PrescriptionDefinition(
     double? DirectCurrentRampDownSecondsValue = null,
     double? PulseTreatmentDurationSecondsValue = null)
 {
-    public const string PulseCurrentStimulationType = "tPCS";
+    public const string PulseCurrentStimulationType = StimulationModeCodes.PulseCurrent;
 
     public bool IsContinuous => DeliveryMode == PrescriptionDeliveryModes.Continuous;
     public bool IsPulseCurrent => string.Equals(StimulationType, PulseCurrentStimulationType, StringComparison.Ordinal);

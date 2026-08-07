@@ -173,6 +173,10 @@ public static class AppComposition
         services.AddSingleton<TiControlViewModel>();       // TI 控制面板
         services.AddSingleton<DirectCurrentControlViewModel>(); // tDCS 独立页面
         services.AddSingleton<PulseCurrentControlViewModel>(); // tPCS 参数页面
+        services.AddSingleton<IStimulationModeModule, TemporalInterferenceStimulationModeModule>();
+        services.AddSingleton<IStimulationModeModule, DirectCurrentStimulationModeModule>();
+        services.AddSingleton<IStimulationModeModule, PulseCurrentStimulationModeModule>();
+        services.AddSingleton<StimulationModeRegistry>(); // 刺激模式统一注册、页面路由与处方应用边界
         services.AddSingleton<PrescriptionViewModel>(); // 公用处方管理页面
         services.AddSingleton<EegSignalCaptureViewModel>(); // EEG 采集面板
         services.AddSingleton<AssessmentCaptureViewModel>(); // 采集工作台：导航切换时保留模块进度

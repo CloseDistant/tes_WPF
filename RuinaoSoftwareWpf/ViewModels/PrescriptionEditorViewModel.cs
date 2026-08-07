@@ -135,7 +135,7 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
     }
 
     public bool IsPulseCurrent => StimulationType == PrescriptionDefinition.PulseCurrentStimulationType;
-    public bool IsDirectCurrent => StimulationType == "tDCS";
+    public bool IsDirectCurrent => StimulationType == StimulationModeCodes.DirectCurrent;
     public bool IsDeliveryModeEnabled => !IsPulseCurrent;
     public bool IsIntervalMode => IsPulseCurrent || DeliveryMode == PrescriptionDeliveryModes.Interval;
     public bool IsContinuousMode => !IsPulseCurrent && DeliveryMode == PrescriptionDeliveryModes.Continuous;
@@ -543,7 +543,10 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         return prescription.IsPulseCurrent
             ? PulseCurrentParameterRules.FormatTreatmentDuration(
                 prescription.PulseTreatmentDurationSecondsResolved)
-            : string.Equals(prescription.StimulationType, "tDCS", StringComparison.Ordinal)
+            : string.Equals(
+                prescription.StimulationType,
+                StimulationModeCodes.DirectCurrent,
+                StringComparison.Ordinal)
                 ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentTotalDurationSeconds)
                 : prescription.TotalDurationMinutes.ToString(CultureInfo.InvariantCulture);
     }
@@ -557,7 +560,10 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
 
         return prescription.IsPulseCurrent
             ? prescription.PulseIntervalWidthMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? string.Empty
-            : string.Equals(prescription.StimulationType, "tDCS", StringComparison.Ordinal)
+            : string.Equals(
+                prescription.StimulationType,
+                StimulationModeCodes.DirectCurrent,
+                StringComparison.Ordinal)
                 ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentIntervalDurationSeconds)
                 : prescription.IntervalMinutes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     }
@@ -571,7 +577,10 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
 
         return prescription.IsPulseCurrent
             ? prescription.PulseWidthMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? string.Empty
-            : string.Equals(prescription.StimulationType, "tDCS", StringComparison.Ordinal)
+            : string.Equals(
+                prescription.StimulationType,
+                StimulationModeCodes.DirectCurrent,
+                StringComparison.Ordinal)
                 ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentSingleDurationSeconds)
                 : prescription.SessionDurationMinutes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     }
@@ -585,7 +594,10 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
 
         return prescription.IsPulseCurrent
             ? prescription.PulseRiseWidthMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? string.Empty
-            : string.Equals(prescription.StimulationType, "tDCS", StringComparison.Ordinal)
+            : string.Equals(
+                prescription.StimulationType,
+                StimulationModeCodes.DirectCurrent,
+                StringComparison.Ordinal)
                 ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentRampUpDurationSeconds)
                 : prescription.RampUpSeconds.ToString(CultureInfo.InvariantCulture);
     }
@@ -597,7 +609,10 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
             return string.Empty;
         }
 
-        return string.Equals(prescription.StimulationType, "tDCS", StringComparison.Ordinal)
+        return string.Equals(
+                prescription.StimulationType,
+                StimulationModeCodes.DirectCurrent,
+                StringComparison.Ordinal)
             ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentRampDownDurationSeconds)
             : prescription.RampDownSeconds.ToString(CultureInfo.InvariantCulture);
     }
@@ -694,13 +709,10 @@ public sealed record PrescriptionStimulationModeChoice(
 {
     public static PrescriptionStimulationModeChoice Create(string shortName)
     {
-        return shortName switch
-        {
-            "TI" => new(shortName, "时间相干电刺激", "≈"),
-            "tDCS" => new(shortName, "经颅直流电刺激", "━"),
-            PrescriptionDefinition.PulseCurrentStimulationType =>
-                new(shortName, "经颅脉冲电刺激", "⌁"),
-            _ => new(shortName, shortName, "—")
-        };
+        var definition = FeatureCatalog.StimulationTypes.FirstOrDefault(
+            item => string.Equals(item.ModeCode, shortName, StringComparison.Ordinal));
+        return definition is null
+            ? new(shortName, shortName, "—")
+            : new(shortName, definition.DisplayName, definition.IconGlyph);
     }
 }

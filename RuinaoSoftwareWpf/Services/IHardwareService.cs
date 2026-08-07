@@ -113,7 +113,7 @@ public interface IHardwareService : IHardwareConnectionState
     Task<HardwareOperationResult> EmergencyStopGroupAsync(
         TiGroup group,
         string selectedChannelNames,
-        string stimulationType = "TI",
+        string stimulationType = StimulationModeCodes.TemporalInterference,
         CancellationToken cancellationToken = default);
 
     /// <summary>停止已完成通道并写入自然完成记录。</summary>

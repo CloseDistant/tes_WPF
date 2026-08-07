@@ -131,7 +131,7 @@ public sealed class PrescriptionViewModel : ObservableObject
     {
         var availableTypes = FeatureCatalog.StimulationTypes
             .Where(item => featureVisibilityService.IsVisible(item.Key))
-            .Select(item => item.ShortName)
+            .Select(item => item.ModeCode)
             .ToArray();
         var editor = new PrescriptionEditorDialog(prescription, isNew, availableTypes, toastService)
         {
@@ -147,7 +147,7 @@ public sealed class PrescriptionViewModel : ObservableObject
         authorizationService.RequireSignedIn();
         if (SelectedPrescription is not { } prescription) return;
         var featureKey = FeatureCatalog.StimulationTypes
-            .FirstOrDefault(item => item.ShortName == prescription.StimulationType)?.Key;
+            .FirstOrDefault(item => item.ModeCode == prescription.StimulationType)?.Key;
         if (featureKey is null || !featureVisibilityService.IsVisible(featureKey))
         {
             dialogService.ShowInformation("使用处方", $"{prescription.StimulationType} 刺激功能当前已隐藏，无法使用该处方。");
@@ -243,7 +243,7 @@ public sealed class PrescriptionViewModel : ObservableObject
     private IReadOnlySet<string> GetVisibleStimulationTypes() =>
         FeatureCatalog.StimulationTypes
             .Where(item => featureVisibilityService.IsVisible(item.Key))
-            .Select(item => item.ShortName)
+            .Select(item => item.ModeCode)
             .ToHashSet(StringComparer.Ordinal);
 
     internal static string BuildCsv(PrescriptionDefinition prescription)

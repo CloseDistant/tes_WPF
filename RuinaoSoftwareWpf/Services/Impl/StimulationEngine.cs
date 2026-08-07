@@ -134,7 +134,11 @@ public sealed class StimulationEngine : IStimulationEngine
             $"EmergencyStopTiRequested:{reason}",
             () => ClearActiveChannels(StimulationExecutionState.EmergencyStopped),
             $"EmergencyStopTiConfirmed:{reason}",
-            token => hardwareService.EmergencyStopGroupAsync(executionGroup, reason, "TI", token),
+            token => hardwareService.EmergencyStopGroupAsync(
+                executionGroup,
+                reason,
+                StimulationModeCodes.TemporalInterference,
+                token),
             cancellationToken);
         activeConfiguration = null;
         configurationSnapshots.Clear(SessionModuleCodes.Stimulation);
@@ -154,7 +158,11 @@ public sealed class StimulationEngine : IStimulationEngine
             $"EmergencyStopDirectCurrentRequested:{reason}",
             () => ClearActiveChannels(StimulationExecutionState.EmergencyStopped),
             $"EmergencyStopDirectCurrentConfirmed:{reason}",
-            token => hardwareService.EmergencyStopGroupAsync(executionGroup, reason, "tDCS", token),
+            token => hardwareService.EmergencyStopGroupAsync(
+                executionGroup,
+                reason,
+                StimulationModeCodes.DirectCurrent,
+                token),
             cancellationToken);
         activeConfiguration = null;
         configurationSnapshots.Clear(SessionModuleCodes.Stimulation);

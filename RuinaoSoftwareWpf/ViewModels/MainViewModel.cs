@@ -33,6 +33,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private readonly IToastService toastService;
     private readonly IDeviceTopologyDialogService deviceTopologyDialogService;
     private readonly IStimulationImpedanceDiagnosticDialogService stimulationImpedanceDiagnosticDialogService;
+    private readonly StimulationModeRegistry stimulationModes;
     private readonly StimulationNavigationState stimulationNavigation = new();
     private readonly AsyncRelayCommand connectCommand;
     private readonly AsyncRelayCommand checkImpedanceCommand;
@@ -73,9 +74,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         ShellStateViewModel shellState,
         MonitorViewModel monitor,
         StimulationTypeSelectionViewModel stimulationTypeSelection,
-        TiControlViewModel tiControl,
-        DirectCurrentControlViewModel directCurrentControl,
-        PulseCurrentControlViewModel pulseCurrentControl,
+        StimulationModeRegistry stimulationModes,
         PrescriptionViewModel prescription,
         EegSignalCaptureViewModel eegSignalCapture,
         AssessmentCaptureViewModel assessmentCapture,
@@ -101,6 +100,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         this.toastService = toastService;
         this.deviceTopologyDialogService = deviceTopologyDialogService;
         this.stimulationImpedanceDiagnosticDialogService = stimulationImpedanceDiagnosticDialogService;
+        this.stimulationModes = stimulationModes;
         AuditTrail = auditTrail;
 
         Navigation = navigation;
@@ -109,9 +109,6 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         ShellState = shellState;
         Monitor = monitor;
         StimulationTypeSelection = stimulationTypeSelection;
-        TiControl = tiControl;
-        DirectCurrentControl = directCurrentControl;
-        PulseCurrentControl = pulseCurrentControl;
         Prescription = prescription;
         EegSignalCapture = eegSignalCapture;
         AssessmentCapture = assessmentCapture;
@@ -199,19 +196,16 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
             ShellState.FooterStatus = $"页面切换失败：{ex.Message}";
         });
 
-        TiControl.HardwareOperationCompleted += (_, result) => ApplyHardwareResult(result);
-        DirectCurrentControl.HardwareOperationCompleted += (_, result) => ApplyHardwareResult(result);
-        TiControl.BackRequested += (_, _) => ShowStimulationTypeSelection();
-        DirectCurrentControl.BackRequested += (_, _) => ShowStimulationTypeSelection();
-        PulseCurrentControl.BackRequested += (_, _) => ShowStimulationTypeSelection();
-        TiControl.PrescriptionRequested += OnStimulationPrescriptionRequested;
-        DirectCurrentControl.PrescriptionRequested += OnStimulationPrescriptionRequested;
-        PulseCurrentControl.PrescriptionRequested += OnStimulationPrescriptionRequested;
+        foreach (var stimulationMode in stimulationModes.Modules)
+        {
+            stimulationMode.HardwareOperationCompleted += (_, result) => ApplyHardwareResult(result);
+            stimulationMode.BackRequested += (_, _) => ShowStimulationTypeSelection();
+            stimulationMode.PrescriptionRequested += OnStimulationPrescriptionRequested;
+        }
         Prescription.UseRequested += (_, item) => ApplyPrescription(item);
         Report.ReuseRequested += (_, item) => ApplyPrescription(item);
-        StimulationTypeSelection.TemporalInterferenceRequested += (_, _) => ShowTemporalInterference();
-        StimulationTypeSelection.DirectCurrentRequested += (_, _) => ShowDirectCurrent();
-        StimulationTypeSelection.PulseCurrentRequested += (_, _) => ShowPulseCurrent();
+        StimulationTypeSelection.ModeRequested += (_, eventArgs) =>
+            ShowStimulationMode(eventArgs.ModeCode);
         featureVisibilityService.VisibilityChanged += (_, _) => ApplyFeatureVisibility();
         accountService.CurrentUserChanged += (_, _) => NotifyAccountChanged();
         sessionLifecycleCoordinator.CurrentSessionChanged += (_, _) => NotifyUnifiedSessionChanged();
@@ -262,15 +256,6 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
     /// <summary>电刺激类型选择页面 ViewModel。</summary>
     public StimulationTypeSelectionViewModel StimulationTypeSelection { get; }
-
-    /// <summary>TI 控制页面 ViewModel。</summary>
-    public TiControlViewModel TiControl { get; }
-
-    /// <summary>tDCS 独立页面 ViewModel。</summary>
-    public DirectCurrentControlViewModel DirectCurrentControl { get; }
-
-    /// <summary>tPCS 参数页面 ViewModel。</summary>
-    public PulseCurrentControlViewModel PulseCurrentControl { get; }
 
     /// <summary>公用处方管理页面 ViewModel。</summary>
     public PrescriptionViewModel Prescription { get; }
@@ -543,7 +528,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
             AppPage.ProtocolManager => Prescription,
             AppPage.TreatmentHistory => Report,
             AppPage.Help => ConfigurePlaceholder(page),
-            _ => TiControl
+            _ => StimulationTypeSelection
         };
     }
 
@@ -719,11 +704,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
             channel => channel.LogicalChannelNumber,
             channel => channel.ImpedanceOhms)
             ?? new Dictionary<int, decimal?>();
-        for (var index = 0; index < 16; index++)
+        foreach (var mode in stimulationModes.Modules)
         {
-            var value = values.GetValueOrDefault(index + 1);
-            DirectCurrentControl.Channels[index].UpdateImpedance(value);
-            PulseCurrentControl.Channels[index].UpdateImpedance(value);
+            mode.ApplyImpedanceSnapshot(values);
         }
     }
 
@@ -820,50 +803,30 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         AppendLog($"NAVIGATE {page} -> {nextPageViewModel.GetType().Name}");
     }
 
-    private void ShowTemporalInterference()
-    {
-        stimulationNavigation.Remember(StimulationSubpage.TemporalInterference);
-        TiControl.RestoreLastSelection();
-        CurrentPageViewModel = TiControl;
-        Navigation.Select(AppPage.Control);
-        AppendLog("STIMULATION TYPE TI selected");
-    }
-
     private void ShowStimulationTypeSelection()
     {
-        stimulationNavigation.Remember(StimulationSubpage.TypeSelection);
+        stimulationNavigation.RememberTypeSelection();
         RestoreStimulationPage();
         Navigation.Select(AppPage.Control);
         AppendLog("STIMULATION TYPE selection");
     }
 
-    private void ShowDirectCurrent()
+    private void ShowStimulationMode(string modeCode)
     {
-        stimulationNavigation.Remember(StimulationSubpage.DirectCurrent);
-        CurrentPageViewModel = DirectCurrentControl;
+        var mode = stimulationModes.GetRequired(modeCode);
+        stimulationNavigation.RememberMode(mode.Definition.ModeCode);
+        mode.PrepareForActivation();
+        CurrentPageViewModel = mode.PageViewModel;
         Navigation.Select(AppPage.Control);
-        ShellState.FooterStatus = "经颅直流电刺激参数设置";
-        AppendLog("STIMULATION TYPE tDCS selected");
-    }
-
-    private void ShowPulseCurrent()
-    {
-        stimulationNavigation.Remember(StimulationSubpage.PulseCurrent);
-        CurrentPageViewModel = PulseCurrentControl;
-        Navigation.Select(AppPage.Control);
-        ShellState.FooterStatus = "经颅脉冲电流刺激参数设置";
-        AppendLog("STIMULATION TYPE tPCS selected");
+        ShellState.FooterStatus = mode.Definition.FooterStatus;
+        AppendLog($"STIMULATION TYPE {mode.Definition.ModeCode} selected");
     }
 
     private ObservableObject ResolveStimulationPageViewModel()
     {
-        return stimulationNavigation.CurrentSubpage switch
-        {
-            StimulationSubpage.TemporalInterference => TiControl,
-            StimulationSubpage.DirectCurrent => DirectCurrentControl,
-            StimulationSubpage.PulseCurrent => PulseCurrentControl,
-            _ => StimulationTypeSelection
-        };
+        return stimulationModes.TryGet(stimulationNavigation.CurrentModeCode, out var mode)
+            ? mode!.PageViewModel
+            : StimulationTypeSelection;
     }
 
     private void RestoreStimulationPage()
@@ -874,24 +837,28 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private void UpdateStimulationImpedanceMonitoring()
     {
         var shouldMonitor = currentPage == AppPage.Control
-            && (currentPageViewModel == DirectCurrentControl
-                || currentPageViewModel == PulseCurrentControl);
+            && stimulationModes.TryFindByPage(currentPageViewModel, out var mode)
+            && mode!.Definition.RequiresImpedanceMonitoring;
         hardwareService.SetStimulationImpedanceMonitoringEnabled(shouldMonitor);
     }
 
     private ObservableObject PrepareStimulationPageViewModel()
     {
-        switch (stimulationNavigation.CurrentSubpage)
+        if (stimulationNavigation.IsTypeSelection)
         {
-            case StimulationSubpage.TemporalInterference:
-                TiControl.RestoreLastSelection();
-                break;
-            case StimulationSubpage.TypeSelection:
-                StimulationTypeSelection.RefreshVisibility();
-                break;
+            StimulationTypeSelection.RefreshVisibility();
+            return StimulationTypeSelection;
         }
 
-        return ResolveStimulationPageViewModel();
+        if (!stimulationModes.TryGet(stimulationNavigation.CurrentModeCode, out var mode))
+        {
+            stimulationNavigation.RememberTypeSelection();
+            StimulationTypeSelection.RefreshVisibility();
+            return StimulationTypeSelection;
+        }
+
+        mode!.PrepareForActivation();
+        return mode.PageViewModel;
     }
 
     private void ResetStimulationNavigation()
@@ -911,31 +878,23 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
             ChangeCurrentPage(AppPage.Control);
         }
 
-        if (prescription.StimulationType == "TI")
-        {
-            TiControl.ApplyPrescription(prescription);
-            ShowTemporalInterference();
-        }
-        else if (prescription.StimulationType == "tDCS")
-        {
-            DirectCurrentControl.ApplyPrescription(prescription);
-            ShowDirectCurrent();
-        }
-        else if (prescription.IsPulseCurrent)
-        {
-            if (!PulseCurrentControl.TryApplyPrescription(prescription, out var error))
-            {
-                toastService.ShowError("处方应用失败", error);
-                return;
-            }
-
-            ShowPulseCurrent();
-        }
-        else
+        if (!stimulationModes.TryGet(prescription.StimulationType, out var mode))
         {
             toastService.ShowError("处方类型不受支持", $"无法识别刺激类型：{prescription.StimulationType}");
             return;
         }
+
+        if (!mode!.TryApplyPrescription(
+                prescription,
+                StimulationPrescriptionApplyScope.AllChannels,
+                targetChannel: null,
+                out var error))
+        {
+            toastService.ShowError("处方应用失败", error);
+            return;
+        }
+
+        ShowStimulationMode(mode.Definition.ModeCode);
         ShellState.FooterStatus = $"已应用处方：{prescription.Name}";
         AppendLog($"PRESCRIPTION applied {prescription.Id}");
     }
@@ -946,55 +905,29 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     {
         try
         {
-            var targetName = eventArgs.TargetChannel switch
+            if (sender is not IStimulationModeModule mode)
             {
-                ChannelConfig channel => channel.Name,
-                PulseCurrentChannelConfig channel => channel.Name,
-                _ => string.Empty
-            };
+                throw new InvalidOperationException("刺激处方请求未关联到已注册模式。");
+            }
+
+            var targetName = mode.GetTargetChannelName(eventArgs.TargetChannel);
             var applyScopeText = eventArgs.AppliesToAllChannels ? "全部通道" : targetName;
             var prescription = await userDialogService.SelectStimulationPrescriptionAsync(
-                eventArgs.StimulationType,
+                mode.Definition.ModeCode,
                 applyScopeText);
             if (prescription is null)
             {
                 return;
             }
 
-            if (sender is TiControlViewModel)
+            if (!mode.TryApplyPrescription(
+                    prescription,
+                    eventArgs.Scope,
+                    eventArgs.TargetChannel,
+                    out var error))
             {
-                if (eventArgs.AppliesToAllChannels)
-                {
-                    TiControl.ApplyPrescription(prescription);
-                }
-                else if (eventArgs.TargetChannel is ChannelConfig channel)
-                {
-                    TiControl.ApplyPrescription(prescription, channel);
-                }
-            }
-            else if (sender is DirectCurrentControlViewModel)
-            {
-                if (eventArgs.AppliesToAllChannels)
-                {
-                    DirectCurrentControl.ApplyPrescription(prescription);
-                }
-                else if (eventArgs.TargetChannel is ChannelConfig channel)
-                {
-                    DirectCurrentControl.ApplyPrescription(prescription, channel);
-                }
-            }
-            else if (sender is PulseCurrentControlViewModel)
-            {
-                var error = "未找到目标通道。";
-                var applied = eventArgs.AppliesToAllChannels
-                    ? PulseCurrentControl.TryApplyPrescription(prescription, out error)
-                    : eventArgs.TargetChannel is PulseCurrentChannelConfig channel
-                        && PulseCurrentControl.TryApplyPrescription(prescription, channel, out error);
-                if (!applied)
-                {
-                    toastService.ShowError("处方应用失败", error);
-                    return;
-                }
+                toastService.ShowError("处方应用失败", error);
+                return;
             }
 
             ShellState.FooterStatus = $"已应用处方：{prescription.Name}";
