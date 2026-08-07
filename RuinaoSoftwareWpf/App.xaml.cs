@@ -17,7 +17,7 @@ namespace RuinaoSoftwareWpf;
 /// </summary>
 public partial class App : Application
 {
-    private bool systemSleepInhibitionActive;
+    private bool systemAwakeInhibitionActive;
     private ILoggingService? logger;
 
     private ILoggingService Logger =>
@@ -48,7 +48,15 @@ public partial class App : Application
             $"Runtime={RuntimeInformation.FrameworkDescription}; OS={RuntimeInformation.OSDescription}; " +
             $"ProcessPath={Environment.ProcessPath ?? "未知"}");
 
-        systemSleepInhibitionActive = SystemSleepInhibitor.TryEnable();
+        systemAwakeInhibitionActive = SystemSleepInhibitor.TryEnable();
+        if (systemAwakeInhibitionActive)
+        {
+            Logger.Info("已启用软件运行期间的系统防休眠和屏幕常亮请求");
+        }
+        else
+        {
+            Logger.Warning("系统防休眠和屏幕常亮请求启用失败，将继续使用Windows当前电源设置");
+        }
 
         // 捕获 UI 线程未处理异常（比如按钮点击里抛出的异常没 try-catch）。
         DispatcherUnhandledException += (_, args) =>
@@ -109,10 +117,14 @@ public partial class App : Application
     /// </summary>
     protected override void OnExit(ExitEventArgs e)
     {
-        if (systemSleepInhibitionActive)
+        if (systemAwakeInhibitionActive)
         {
-            SystemSleepInhibitor.Disable();
-            systemSleepInhibitionActive = false;
+            if (!SystemSleepInhibitor.Disable())
+            {
+                logger?.Warning("系统防休眠和屏幕常亮请求未能正常解除");
+            }
+
+            systemAwakeInhibitionActive = false;
         }
 
         logger?.Info($"软件退出，ExitCode={e.ApplicationExitCode}");

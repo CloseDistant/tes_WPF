@@ -4,24 +4,31 @@ using System.Runtime.InteropServices;
 
 internal static class SystemSleepInhibitor
 {
+    internal static ExecutionState ActiveExecutionState =>
+        ExecutionState.Continuous |
+        ExecutionState.SystemRequired |
+        ExecutionState.DisplayRequired;
+
+    internal static ExecutionState ResetExecutionState => ExecutionState.Continuous;
+
     public static bool TryEnable()
     {
-        return SetThreadExecutionState(
-            ExecutionState.Continuous | ExecutionState.SystemRequired) != 0;
+        return SetThreadExecutionState(ActiveExecutionState) != 0;
     }
 
-    public static void Disable()
+    public static bool Disable()
     {
-        _ = SetThreadExecutionState(ExecutionState.Continuous);
+        return SetThreadExecutionState(ResetExecutionState) != 0;
     }
 
     [DllImport("kernel32.dll")]
     private static extern ExecutionState SetThreadExecutionState(ExecutionState executionState);
 
     [Flags]
-    private enum ExecutionState : uint
+    internal enum ExecutionState : uint
     {
         SystemRequired = 0x00000001,
+        DisplayRequired = 0x00000002,
         Continuous = 0x80000000
     }
 }

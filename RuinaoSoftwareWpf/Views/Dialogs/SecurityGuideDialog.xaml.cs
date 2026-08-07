@@ -82,6 +82,7 @@ public partial class SecurityGuideDialog : Window
                 "自动锁定时间默认15分钟。",
                 "Admin可在5至30分钟范围内配置锁定时间。",
                 "锁定后只能使用当前登录账号的密码解锁。",
+                "软件运行期间会请求Windows保持显示器开启，并阻止系统因空闲自动睡眠。",
                 "自动锁定不拦截用户主动执行Windows睡眠、关机或重启。"),
             Section(
                 "安全审计",
