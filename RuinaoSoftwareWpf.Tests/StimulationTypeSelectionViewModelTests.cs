@@ -28,7 +28,10 @@ public sealed class StimulationTypeSelectionViewModelTests
         Assert.DoesNotContain(
             viewModel.VisibleModes,
             item => item.ModeCode == StimulationModeCodes.DirectCurrent);
-        Assert.Equal(2, viewModel.VisibleModes.Count);
+        Assert.Equal(FeatureCatalog.StimulationTypes.Count - 1, viewModel.VisibleModes.Count);
+        Assert.Contains(
+            viewModel.VisibleModes,
+            item => item.ModeCode == StimulationModeCodes.MonophasicPulseCurrent);
     }
 
     [Fact]

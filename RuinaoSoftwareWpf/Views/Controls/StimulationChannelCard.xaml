@@ -155,7 +155,7 @@
                 <StackPanel Grid.Column="0" Margin="0,0,18,0">
                     <Grid Height="40">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="66" />
+                            <ColumnDefinition Width="104" />
                             <ColumnDefinition Width="118" />
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
@@ -175,11 +175,24 @@
                     </Grid>
                     <Grid Height="40">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="66" />
+                            <ColumnDefinition Width="104" />
                             <ColumnDefinition Width="118" />
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding Localization.RampUpLabel, ElementName=Root}" Foreground="{StaticResource SubText}" VerticalAlignment="Center" />
+                        <TextBlock Foreground="{StaticResource SubText}"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="{Binding Localization.RampUpLabel, ElementName=Root}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsMonophasicPulseCurrent, ElementName=Root}" Value="True">
+                                            <Setter Property="Text" Value="渐升时间（渐降同值）" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <TextBox Grid.Column="1"
                                  Tag="RampUpSeconds"
                                  Style="{StaticResource StimulationFieldBox}"
@@ -192,9 +205,9 @@
                                  LostKeyboardFocus="NormalizeDirectCurrentValue" />
                         <TextBlock Grid.Column="2" Text="s" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource SubText}" />
                     </Grid>
-                    <Grid Height="40">
+                    <Grid Height="40" Visibility="{Binding ShowRampDown, ElementName=Root, Converter={StaticResource BoolToVisibilityConverter}}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="66" />
+                            <ColumnDefinition Width="104" />
                             <ColumnDefinition Width="118" />
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
@@ -214,7 +227,7 @@
                     <Grid Height="40"
                           Visibility="{Binding ShowPolarity, ElementName=Root, Converter={StaticResource BoolToVisibilityConverter}}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="66" />
+                            <ColumnDefinition Width="104" />
                             <ColumnDefinition Width="118" />
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
@@ -230,7 +243,7 @@
                     </Grid>
                     <Grid Height="40" Visibility="{Binding ShowCarrierFrequency, ElementName=Root, Converter={StaticResource BoolToVisibilityConverter}}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="66" />
+                            <ColumnDefinition Width="104" />
                             <ColumnDefinition Width="118" />
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
@@ -243,9 +256,9 @@
                 <Border Grid.Column="1" Background="#303645" />
 
                 <StackPanel Grid.Column="2" Margin="18,0,0,0">
-                    <Grid Height="40">
+                    <Grid Height="40" Visibility="{Binding ShowMode, ElementName=Root, Converter={StaticResource BoolToVisibilityConverter}}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="66" />
+                            <ColumnDefinition Width="104" />
                             <ColumnDefinition Width="118" />
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
@@ -261,7 +274,7 @@
                     </Grid>
                     <Grid Height="40">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="66" />
+                            <ColumnDefinition Width="104" />
                             <ColumnDefinition Width="118" />
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
@@ -280,7 +293,7 @@
                     </Grid>
                     <Grid Height="40">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="66" />
+                            <ColumnDefinition Width="104" />
                             <ColumnDefinition Width="118" />
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
@@ -302,9 +315,9 @@
                                    Foreground="{StaticResource SubText}"
                                    Visibility="{Binding AreIntervalFieldsEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
                     </Grid>
-                    <Grid Height="40">
+                    <Grid Height="40" Visibility="{Binding ShowSingleDuration, ElementName=Root, Converter={StaticResource BoolToVisibilityConverter}}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="66" />
+                            <ColumnDefinition Width="104" />
                             <ColumnDefinition Width="118" />
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
@@ -351,7 +364,7 @@
                                 Padding="2"
                                 Visibility="{Binding EnableSimulatedWaveform, ElementName=Root, Converter={StaticResource BoolToVisibilityConverter}}">
                             <StackPanel Orientation="Horizontal">
-                                <RadioButton Content="120 秒"
+                                <RadioButton Content="波形细节"
                                              GroupName="{Binding Name}"
                                              Style="{StaticResource WaveformModeOption}"
                                              IsChecked="{Binding DirectCurrentWaveform.IsWindowView, Mode=TwoWay}" />

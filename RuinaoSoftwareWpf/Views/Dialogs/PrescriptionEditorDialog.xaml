@@ -270,9 +270,9 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="142"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="39"/><RowDefinition Height="39"/><RowDefinition Height="39"/><RowDefinition Height="39"/>
-                        <RowDefinition Height="39"/><RowDefinition Height="39"/><RowDefinition Height="39"/><RowDefinition Height="39"/>
-                        <RowDefinition Height="39"/><RowDefinition Height="39"/><RowDefinition Height="39"/><RowDefinition Height="39"/>
-                        <RowDefinition Height="34"/>
+                        <RowDefinition Height="{Binding DeliveryModeRowHeight}"/><RowDefinition Height="39"/><RowDefinition Height="39"/>
+                        <RowDefinition Height="{Binding SingleDurationRowHeight}"/><RowDefinition Height="39"/><RowDefinition Height="39"/>
+                        <RowDefinition Height="{Binding RampDownRowHeight}"/><RowDefinition Height="39"/><RowDefinition Height="34"/>
                     </Grid.RowDefinitions>
                     <TextBlock Text="处方名称" Style="{StaticResource EditorLabel}"/>
                     <TextBox Grid.Column="1" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxLength="50" Style="{StaticResource EditorBox}"/>

@@ -250,7 +250,9 @@ public sealed class PrescriptionViewModel : ObservableObject
     {
         var rows = prescription.IsPulseCurrent
             ? BuildPulseCurrentCsvRows(prescription)
-            : BuildMinuteBasedCsvRows(prescription);
+            : prescription.IsMonophasicPulseCurrent
+                ? BuildMonophasicPulseCurrentCsvRows(prescription)
+                : BuildMinuteBasedCsvRows(prescription);
         var builder = new StringBuilder("参数,内容\r\n");
         foreach (var (label, value) in rows) builder.Append(Escape(label)).Append(',').Append(Escape(value)).Append("\r\n");
         return builder.ToString();
@@ -273,6 +275,16 @@ public sealed class PrescriptionViewModel : ObservableObject
         ("治疗时间", prescription.TotalDurationDisplay), ("脉冲宽度", prescription.SessionDurationDisplay),
         ("上升宽度", prescription.RampUpDisplay),
         ("间隔宽度", prescription.IntervalDisplay), ("渐降时间", prescription.RampDownDisplay),
+        ("疗程", prescription.Course), ("证据等级", prescription.EvidenceGrade)
+    ];
+
+    private static (string Label, string Value)[] BuildMonophasicPulseCurrentCsvRows(
+        PrescriptionDefinition prescription) =>
+    [
+        ("处方名称", prescription.Name), ("适应症", prescription.Indication),
+        ("刺激模式", prescription.StimulationType), ("幅值", prescription.CurrentDisplay),
+        ("刺激时间", prescription.TotalDurationDisplay), ("间隔时间", prescription.IntervalDisplay),
+        ("渐升时间（渐降同值）", prescription.RampUpDisplay),
         ("疗程", prescription.Course), ("证据等级", prescription.EvidenceGrade)
     ];
 

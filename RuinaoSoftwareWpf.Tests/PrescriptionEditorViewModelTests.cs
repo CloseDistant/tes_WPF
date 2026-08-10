@@ -98,6 +98,61 @@ public sealed class PrescriptionEditorViewModelTests
     }
 
     [Fact]
+    public void TryBuildMonophasicPulseCurrent_PersistsIndependentTypeAndDerivedFields()
+    {
+        var editor = new PrescriptionEditorViewModel(
+            CreateEmptyPrescription(),
+            true,
+            [StimulationModeCodes.MonophasicPulseCurrent]);
+        Assert.True(editor.ContinueToEditor());
+        editor.Name = "单相脉冲处方";
+        editor.Indication = "测试";
+        editor.CurrentMilliamp = "12.34";
+        editor.RampUpSeconds = "1.2";
+        editor.IntervalMinutesEntry = "0.0";
+        editor.TotalDurationMinutes = "120.0";
+
+        var built = editor.TryBuild(out var prescription);
+
+        Assert.True(built, editor.ErrorMessage);
+        Assert.Equal(StimulationModeCodes.MonophasicPulseCurrent, prescription.StimulationType);
+        Assert.Equal(PrescriptionDeliveryModes.Interval, prescription.DeliveryMode);
+        Assert.Equal(12.34, prescription.CurrentMilliamp);
+        Assert.Equal(1.2, prescription.DirectCurrentRampUpDurationSeconds);
+        Assert.Equal(1.2, prescription.DirectCurrentRampDownDurationSeconds);
+        Assert.Equal(2.4, prescription.DirectCurrentSingleDurationSeconds);
+        Assert.Equal(0, prescription.DirectCurrentIntervalDurationSeconds);
+        Assert.Null(prescription.ChannelPolarities);
+        Assert.False(editor.ShowDeliveryMode);
+        Assert.False(editor.ShowSingleDuration);
+        Assert.False(editor.IsRampDownEnabled);
+
+        var csv = PrescriptionViewModel.BuildCsv(prescription);
+        Assert.Contains("\"刺激时间\",\"120.0 s\"", csv);
+        Assert.Contains("\"渐升时间（渐降同值）\",\"1.2 s\"", csv);
+        Assert.DoesNotContain("\"模式\",", csv);
+        Assert.DoesNotContain("单次时长", csv);
+        Assert.DoesNotContain("渐降时间", csv);
+    }
+
+    [Fact]
+    public void TryBuildMonophasicPulseCurrent_RejectsIncompleteTriangle()
+    {
+        var editor = new PrescriptionEditorViewModel(
+            CreateEmptyPrescription(),
+            true,
+            [StimulationModeCodes.MonophasicPulseCurrent]);
+        Assert.True(editor.ContinueToEditor());
+        editor.Name = "单相脉冲处方";
+        editor.Indication = "测试";
+        editor.RampUpSeconds = "1.0";
+        editor.TotalDurationMinutes = "1.9";
+
+        Assert.False(editor.TryBuild(out _));
+        Assert.Contains("2×渐升时间", editor.ErrorMessage);
+    }
+
+    [Fact]
     public void TryBuildPulseCurrent_UsesSecondsAndIntegerMilliseconds()
     {
         var editor = new PrescriptionEditorViewModel(CreateEmptyPrescription(), true, ["tDCS", "tPCS"])

@@ -60,7 +60,7 @@
 
                 <ItemsControl ItemsSource="{Binding ChannelPairs}">
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type local:DirectCurrentChannelPair}">
+                        <DataTemplate DataType="{x:Type local:StimulationChannelPair}">
                             <Border Style="{StaticResource DirectCurrentPairCardStyle}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>

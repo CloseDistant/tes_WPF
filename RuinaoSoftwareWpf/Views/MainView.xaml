@@ -17,6 +17,9 @@
         <DataTemplate DataType="{x:Type local:PulseCurrentControlViewModel}">
             <views:PulseCurrentControlView />
         </DataTemplate>
+        <DataTemplate DataType="{x:Type local:MonophasicPulseCurrentControlViewModel}">
+            <views:MonophasicPulseCurrentControlView />
+        </DataTemplate>
         <DataTemplate DataType="{x:Type local:PrescriptionViewModel}">
             <views:PrescriptionView />
         </DataTemplate>

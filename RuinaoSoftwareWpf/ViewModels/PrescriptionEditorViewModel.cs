@@ -43,7 +43,7 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         name = prescription.Name;
         indication = prescription.Indication;
         currentMilliamp = isNew ? string.Empty : prescription.CurrentMilliamp.ToString("0.##", CultureInfo.InvariantCulture);
-        deliveryMode = IsPulseCurrent
+        deliveryMode = IsPulseCurrent || IsMonophasicPulseCurrent
             ? PrescriptionDeliveryModes.Interval
             : isNew ? string.Empty : prescription.DeliveryMode;
         totalDurationValue = LoadTotalDuration(prescription, isNew);
@@ -98,14 +98,15 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
             }
 
             var wasPulseCurrent = IsPulseCurrent;
+            var wasMonophasic = IsMonophasicPulseCurrent;
             SetProperty(ref stimulationType, value);
             var isPulseCurrent = IsPulseCurrent;
-            if (wasPulseCurrent != isPulseCurrent)
+            if (wasPulseCurrent != isPulseCurrent || wasMonophasic != IsMonophasicPulseCurrent)
             {
                 ClearModeSpecificTimingFields();
             }
 
-            if (isPulseCurrent)
+            if (isPulseCurrent || IsMonophasicPulseCurrent)
             {
                 DeliveryMode = PrescriptionDeliveryModes.Interval;
             }
@@ -121,7 +122,9 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         get => deliveryMode;
         set
         {
-            var next = IsPulseCurrent ? PrescriptionDeliveryModes.Interval : value;
+            var next = IsPulseCurrent || IsMonophasicPulseCurrent
+                ? PrescriptionDeliveryModes.Interval
+                : value;
             if (!SetProperty(ref deliveryMode, next))
             {
                 return;
@@ -136,21 +139,29 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
 
     public bool IsPulseCurrent => StimulationType == PrescriptionDefinition.PulseCurrentStimulationType;
     public bool IsDirectCurrent => StimulationType == StimulationModeCodes.DirectCurrent;
-    public bool IsDeliveryModeEnabled => !IsPulseCurrent;
-    public bool IsIntervalMode => IsPulseCurrent || DeliveryMode == PrescriptionDeliveryModes.Interval;
-    public bool IsContinuousMode => !IsPulseCurrent && DeliveryMode == PrescriptionDeliveryModes.Continuous;
-    public bool IsRampDownEnabled => !IsPulseCurrent;
+    public bool IsMonophasicPulseCurrent => StimulationType == StimulationModeCodes.MonophasicPulseCurrent;
+    public bool IsDeliveryModeEnabled => !IsPulseCurrent && !IsMonophasicPulseCurrent;
+    public bool IsIntervalMode => IsPulseCurrent || IsMonophasicPulseCurrent || DeliveryMode == PrescriptionDeliveryModes.Interval;
+    public bool IsContinuousMode => !IsPulseCurrent && !IsMonophasicPulseCurrent && DeliveryMode == PrescriptionDeliveryModes.Continuous;
+    public bool IsRampDownEnabled => !IsPulseCurrent && !IsMonophasicPulseCurrent;
+    public bool ShowDeliveryMode => !IsMonophasicPulseCurrent;
+    public bool ShowSingleDuration => !IsMonophasicPulseCurrent;
+    public string DeliveryModeRowHeight => ShowDeliveryMode ? "39" : "0";
+    public string SingleDurationRowHeight => ShowSingleDuration ? "39" : "0";
+    public string RampDownRowHeight => IsRampDownEnabled ? "39" : "0";
     public string CurrentLabel => "幅值 (mA)";
     public string TotalDurationLabel => IsPulseCurrent
         ? "治疗时间 (s)"
-        : IsDirectCurrent ? "刺激时间 (s)" : "总时长 (min)";
+        : IsDirectCurrent || IsMonophasicPulseCurrent ? "刺激时间 (s)" : "总时长 (min)";
     public string IntervalLabel => IsPulseCurrent
         ? "间隔宽度 (ms)"
-        : IsDirectCurrent ? "间隔时间 (s)" : "间隔时间 (min)";
+        : IsDirectCurrent || IsMonophasicPulseCurrent ? "间隔时间 (s)" : "间隔时间 (min)";
     public string SessionDurationLabel => IsPulseCurrent
         ? "脉冲宽度 (ms)"
         : IsDirectCurrent ? "单次时长 (s)" : "单次时长 (min)";
-    public string RampUpLabel => IsPulseCurrent ? "上升宽度 (ms)" : "渐升时间 (s)";
+    public string RampUpLabel => IsPulseCurrent
+        ? "上升宽度 (ms)"
+        : IsMonophasicPulseCurrent ? "渐升时间（渐降同值）(s)" : "渐升时间 (s)";
     public string RampDownLabel => IsPulseCurrent ? "渐降时间" : "渐降时间 (s)";
     public string TotalDurationMinutes { get => totalDurationValue; set => SetProperty(ref totalDurationValue, value); }
 
@@ -253,6 +264,11 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
             return TryBuildDirectCurrent(current, out prescription);
         }
 
+        if (IsMonophasicPulseCurrent)
+        {
+            return TryBuildMonophasicPulseCurrent(out prescription);
+        }
+
         return TryBuildMinuteBased(current, out prescription);
     }
 
@@ -267,6 +283,12 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         string text,
         string fallbackValue) =>
         PulseCurrentParameterRules.Normalize(kind, text, fallbackValue);
+
+    public MonophasicPulseCurrentParameterNormalization NormalizeMonophasicPulseCurrentEntry(
+        MonophasicPulseCurrentParameterKind kind,
+        string text,
+        string fallbackValue) =>
+        MonophasicPulseCurrentParameterRules.Normalize(kind, text, fallbackValue);
 
     public void ReportInputError(string message) => ErrorMessage = message;
 
@@ -502,6 +524,65 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         return true;
     }
 
+    private bool TryBuildMonophasicPulseCurrent(out PrescriptionDefinition prescription)
+    {
+        prescription = Original;
+        if (!TryMonophasicPulseCurrentParameter(
+                MonophasicPulseCurrentParameterKind.CurrentMilliamp,
+                CurrentMilliamp,
+                out var current)
+            || !TryMonophasicPulseCurrentParameter(
+                MonophasicPulseCurrentParameterKind.RampSeconds,
+                RampUpSeconds,
+                out var ramp)
+            || !TryMonophasicPulseCurrentParameter(
+                MonophasicPulseCurrentParameterKind.IntervalSeconds,
+                IntervalMinutesEntry,
+                out var interval)
+            || !TryMonophasicPulseCurrentParameter(
+                MonophasicPulseCurrentParameterKind.TotalDurationSeconds,
+                TotalDurationMinutes,
+                out var totalDuration))
+        {
+            return false;
+        }
+
+        if (totalDuration < ramp * 2d)
+        {
+            ErrorMessage = "刺激时间不能小于一个完整三角脉冲时长（2×渐升时间）。";
+            return false;
+        }
+
+        prescription = Original with
+        {
+            Name = Name.Trim(),
+            Indication = Indication.Trim(),
+            StimulationType = StimulationModeCodes.MonophasicPulseCurrent,
+            CurrentMilliamp = current,
+            DeliveryMode = PrescriptionDeliveryModes.Interval,
+            TotalDurationMinutes = Math.Max(1, (int)Math.Ceiling(totalDuration / 60d)),
+            IntervalMinutes = interval <= 0 ? null : Math.Max(1, (int)Math.Ceiling(interval / 60d)),
+            SessionDurationMinutes = null,
+            Course = Course.Trim(),
+            RampUpSeconds = (int)Math.Round(ramp, MidpointRounding.AwayFromZero),
+            RampDownSeconds = (int)Math.Round(ramp, MidpointRounding.AwayFromZero),
+            EvidenceGrade = EvidenceGrade.Trim(),
+            ChannelPolarities = null,
+            PulseTreatmentDurationSeconds = null,
+            PulseTreatmentDurationSecondsValue = null,
+            PulseWidthMilliseconds = null,
+            PulseRiseWidthMilliseconds = null,
+            PulseIntervalWidthMilliseconds = null,
+            DirectCurrentTotalDurationSecondsValue = totalDuration,
+            DirectCurrentIntervalSecondsValue = interval,
+            DirectCurrentSingleDurationSecondsValue = ramp * 2d,
+            DirectCurrentRampUpSecondsValue = ramp,
+            DirectCurrentRampDownSecondsValue = ramp
+        };
+        ErrorMessage = string.Empty;
+        return true;
+    }
+
     private void ClearModeSpecificTimingFields()
     {
         TotalDurationMinutes = string.Empty;
@@ -519,10 +600,16 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsPulseCurrent));
         OnPropertyChanged(nameof(IsDirectCurrent));
+        OnPropertyChanged(nameof(IsMonophasicPulseCurrent));
         OnPropertyChanged(nameof(IsDeliveryModeEnabled));
         OnPropertyChanged(nameof(IsIntervalMode));
         OnPropertyChanged(nameof(IsContinuousMode));
         OnPropertyChanged(nameof(IsRampDownEnabled));
+        OnPropertyChanged(nameof(ShowDeliveryMode));
+        OnPropertyChanged(nameof(ShowSingleDuration));
+        OnPropertyChanged(nameof(DeliveryModeRowHeight));
+        OnPropertyChanged(nameof(SingleDurationRowHeight));
+        OnPropertyChanged(nameof(RampDownRowHeight));
         OnPropertyChanged(nameof(TotalDurationLabel));
         OnPropertyChanged(nameof(IntervalLabel));
         OnPropertyChanged(nameof(SessionDurationLabel));
@@ -547,6 +634,7 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
                 prescription.StimulationType,
                 StimulationModeCodes.DirectCurrent,
                 StringComparison.Ordinal)
+                || prescription.IsMonophasicPulseCurrent
                 ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentTotalDurationSeconds)
                 : prescription.TotalDurationMinutes.ToString(CultureInfo.InvariantCulture);
     }
@@ -564,6 +652,7 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
                 prescription.StimulationType,
                 StimulationModeCodes.DirectCurrent,
                 StringComparison.Ordinal)
+                || prescription.IsMonophasicPulseCurrent
                 ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentIntervalDurationSeconds)
                 : prescription.IntervalMinutes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     }
@@ -581,6 +670,7 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
                 prescription.StimulationType,
                 StimulationModeCodes.DirectCurrent,
                 StringComparison.Ordinal)
+                || prescription.IsMonophasicPulseCurrent
                 ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentSingleDurationSeconds)
                 : prescription.SessionDurationMinutes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     }
@@ -598,13 +688,14 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
                 prescription.StimulationType,
                 StimulationModeCodes.DirectCurrent,
                 StringComparison.Ordinal)
+                || prescription.IsMonophasicPulseCurrent
                 ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentRampUpDurationSeconds)
                 : prescription.RampUpSeconds.ToString(CultureInfo.InvariantCulture);
     }
 
     private static string LoadRampDownValue(PrescriptionDefinition prescription, bool isNew)
     {
-        if (isNew || prescription.IsPulseCurrent)
+        if (isNew || prescription.IsPulseCurrent || prescription.IsMonophasicPulseCurrent)
         {
             return string.Empty;
         }
@@ -644,6 +735,16 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
             RampUpSeconds = PulseCurrentParameterRules.DefaultRiseWidthMilliseconds;
             rampDownValue = string.Empty;
         }
+        else if (IsMonophasicPulseCurrent)
+        {
+            CurrentMilliamp = MonophasicPulseCurrentParameterRules.DefaultCurrentMilliamp;
+            DeliveryMode = PrescriptionDeliveryModes.Interval;
+            TotalDurationMinutes = MonophasicPulseCurrentParameterRules.DefaultTotalDurationSeconds;
+            intervalValue = MonophasicPulseCurrentParameterRules.DefaultIntervalSeconds;
+            sessionDurationValue = string.Empty;
+            RampUpSeconds = MonophasicPulseCurrentParameterRules.DefaultRampSeconds;
+            rampDownValue = string.Empty;
+        }
 
         OnPropertyChanged(nameof(IntervalMinutesEntry));
         OnPropertyChanged(nameof(SessionDurationMinutesEntry));
@@ -670,6 +771,20 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         out double value)
     {
         if (PulseCurrentParameterRules.TryParseValidated(kind, text, out value, out var error))
+        {
+            return true;
+        }
+
+        ErrorMessage = error;
+        return false;
+    }
+
+    private bool TryMonophasicPulseCurrentParameter(
+        MonophasicPulseCurrentParameterKind kind,
+        string text,
+        out double value)
+    {
+        if (MonophasicPulseCurrentParameterRules.TryParseValidated(kind, text, out value, out var error))
         {
             return true;
         }

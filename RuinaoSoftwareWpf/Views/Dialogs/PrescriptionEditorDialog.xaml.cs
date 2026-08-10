@@ -62,6 +62,7 @@ public partial class PrescriptionEditorDialog : Window
         }
 
         var allowDecimal = viewModel.IsDirectCurrent
+            || viewModel.IsMonophasicPulseCurrent
             || viewModel.IsPulseCurrent
                 && textBox.Tag is nameof(DirectCurrentParameterKind.TotalDurationSeconds);
         e.Handled = !Regex.IsMatch(
@@ -81,6 +82,7 @@ public partial class PrescriptionEditorDialog : Window
         var pastedText = e.DataObject.GetData(DataFormats.Text) as string ?? string.Empty;
         var allowDecimal = sender is FrameworkElement { Tag: "CurrentMilliamp" }
             || viewModel.IsDirectCurrent
+            || viewModel.IsMonophasicPulseCurrent
             || viewModel.IsPulseCurrent
                 && sender is FrameworkElement { Tag: nameof(DirectCurrentParameterKind.TotalDurationSeconds) };
         if (sender is not TextBox textBox
@@ -101,7 +103,7 @@ public partial class PrescriptionEditorDialog : Window
 
     private void RememberDirectCurrentValue(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if ((viewModel.IsDirectCurrent || viewModel.IsPulseCurrent)
+        if ((viewModel.IsDirectCurrent || viewModel.IsPulseCurrent || viewModel.IsMonophasicPulseCurrent)
             && sender is TextBox textBox)
         {
             previousParameterValues[textBox] = textBox.Text;
@@ -110,7 +112,7 @@ public partial class PrescriptionEditorDialog : Window
 
     private void NormalizeDirectCurrentValue(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if ((!viewModel.IsDirectCurrent && !viewModel.IsPulseCurrent)
+        if ((!viewModel.IsDirectCurrent && !viewModel.IsPulseCurrent && !viewModel.IsMonophasicPulseCurrent)
             || sender is not TextBox textBox
             || textBox.Tag is not string kindName)
         {
@@ -163,6 +165,19 @@ public partial class PrescriptionEditorDialog : Window
                 GetDefaultValue(pulseCurrentKind));
             var result = viewModel.NormalizePulseCurrentEntry(
                 pulseCurrentKind,
+                textBox.Text,
+                fallback);
+            return new ParameterNormalizationView(result.IsValid, result.Value, result.ErrorMessage);
+        }
+
+        if (viewModel.IsMonophasicPulseCurrent
+            && TryMapMonophasicPulseCurrentKind(kindName, out var monophasicKind))
+        {
+            var fallback = previousParameterValues.GetValueOrDefault(
+                textBox,
+                MonophasicPulseCurrentParameterRules.GetDefault(monophasicKind));
+            var result = viewModel.NormalizeMonophasicPulseCurrentEntry(
+                monophasicKind,
                 textBox.Text,
                 fallback);
             return new ParameterNormalizationView(result.IsValid, result.Value, result.ErrorMessage);
@@ -255,6 +270,25 @@ public partial class PrescriptionEditorDialog : Window
             PulseCurrentParameterKind.TreatmentDurationSeconds => PulseCurrentParameterRules.DefaultTreatmentDurationSeconds,
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "未知 tPCS 参数。")
         };
+    }
+
+    private static bool TryMapMonophasicPulseCurrentKind(
+        string kindName,
+        out MonophasicPulseCurrentParameterKind kind)
+    {
+        kind = kindName switch
+        {
+            nameof(DirectCurrentParameterKind.CurrentMilliamp) =>
+                MonophasicPulseCurrentParameterKind.CurrentMilliamp,
+            nameof(DirectCurrentParameterKind.RampUpSeconds) =>
+                MonophasicPulseCurrentParameterKind.RampSeconds,
+            nameof(DirectCurrentParameterKind.IntervalSeconds) =>
+                MonophasicPulseCurrentParameterKind.IntervalSeconds,
+            nameof(DirectCurrentParameterKind.TotalDurationSeconds) =>
+                MonophasicPulseCurrentParameterKind.TotalDurationSeconds,
+            _ => (MonophasicPulseCurrentParameterKind)(-1)
+        };
+        return Enum.IsDefined(kind);
     }
 
     private sealed record ParameterNormalizationView(

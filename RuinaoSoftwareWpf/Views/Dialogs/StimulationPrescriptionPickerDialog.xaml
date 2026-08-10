@@ -66,6 +66,50 @@
             <Setter Property="Background" Value="#354053" />
             <Setter Property="VerticalAlignment" Value="Bottom" />
         </Style>
+
+        <Style x:Key="PickerDialogButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#E8EDF5" />
+            <Setter Property="Background" Value="#303B4D" />
+            <Setter Property="BorderBrush" Value="#48556C" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonSurface"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonSurface" Property="Background" Value="#39465A" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonSurface" Property="Background" Value="#252E3D" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonSurface" Property="Background" Value="#252D3A" />
+                                <Setter TargetName="ButtonSurface" Property="BorderBrush" Value="#364153" />
+                                <Setter Property="Foreground" Value="#68768A" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryPickerDialogButton"
+               TargetType="Button"
+               BasedOn="{StaticResource PickerDialogButton}">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="#D88F24" />
+            <Setter Property="BorderBrush" Value="#E5A341" />
+        </Style>
     </Window.Resources>
 
     <Border Background="#1E2735"
@@ -257,19 +301,13 @@
                             Width="88"
                             Height="40"
                             Margin="0,0,10,0"
-                            Foreground="#E8EDF5"
-                            Background="#303B4D"
-                            BorderBrush="#48556C"
-                            BorderThickness="1"
+                            Style="{StaticResource PickerDialogButton}"
                             Click="CancelClick" />
                     <Button x:Name="ApplyButton"
                             Content="应用处方"
                             Width="112"
                             Height="40"
-                            Foreground="White"
-                            Background="#D88F24"
-                            BorderBrush="#E5A341"
-                            BorderThickness="1"
+                            Style="{StaticResource PrimaryPickerDialogButton}"
                             IsEnabled="False"
                             Click="ApplyClick" />
                 </StackPanel>

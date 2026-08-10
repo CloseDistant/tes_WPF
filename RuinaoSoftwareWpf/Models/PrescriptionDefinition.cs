@@ -34,12 +34,20 @@ public sealed record PrescriptionDefinition(
 
     public bool IsContinuous => DeliveryMode == PrescriptionDeliveryModes.Continuous;
     public bool IsPulseCurrent => string.Equals(StimulationType, PulseCurrentStimulationType, StringComparison.Ordinal);
+    public bool IsMonophasicPulseCurrent => string.Equals(
+        StimulationType,
+        StimulationModeCodes.MonophasicPulseCurrent,
+        StringComparison.Ordinal);
     public string CurrentDisplay => $"{CurrentMilliamp:0.##} mA";
     public string CurrentLabel => "幅值";
-    public string TotalDurationLabel => IsPulseCurrent ? "治疗时间" : "总时长";
+    public string TotalDurationLabel => IsPulseCurrent
+        ? "治疗时间"
+        : IsMonophasicPulseCurrent ? "刺激时间" : "总时长";
     public string IntervalLabel => IsPulseCurrent ? "间隔宽度" : "间隔时间";
     public string SessionDurationLabel => IsPulseCurrent ? "脉冲宽度" : "单次时长";
-    public string RampUpLabel => IsPulseCurrent ? "上升宽度" : "渐升时间";
+    public string RampUpLabel => IsPulseCurrent
+        ? "上升宽度"
+        : IsMonophasicPulseCurrent ? "渐升时间（渐降同值）" : "渐升时间";
     public string RampDownLabel => "渐降时间";
     public double DirectCurrentTotalDurationSeconds =>
         DirectCurrentTotalDurationSecondsValue ?? TotalDurationMinutes * 60d;
@@ -64,11 +72,13 @@ public sealed record PrescriptionDefinition(
         : IsContinuous ? "/" : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentIntervalDurationSeconds)} s";
     public string SessionDurationDisplay => IsPulseCurrent
         ? FormatPulseValue(PulseWidthMilliseconds, "ms")
-        : IsContinuous ? "/" : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentSingleDurationSeconds)} s";
+        : IsMonophasicPulseCurrent || IsContinuous
+            ? "/"
+            : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentSingleDurationSeconds)} s";
     public string RampUpDisplay => IsPulseCurrent
         ? FormatPulseValue(PulseRiseWidthMilliseconds, "ms")
         : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentRampUpDurationSeconds)} s";
-    public string RampDownDisplay => IsPulseCurrent
+    public string RampDownDisplay => IsPulseCurrent || IsMonophasicPulseCurrent
         ? "/"
         : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentRampDownDurationSeconds)} s";
     public string DisplayName => string.IsNullOrWhiteSpace(StimulationType)
@@ -79,6 +89,9 @@ public sealed record PrescriptionDefinition(
         && PulseWidthMilliseconds.HasValue
         && PulseRiseWidthMilliseconds.HasValue
         && PulseIntervalWidthMilliseconds.HasValue;
+    public string DeliveryModeRowHeight => IsMonophasicPulseCurrent ? "0" : "42";
+    public string SingleDurationRowHeight => IsMonophasicPulseCurrent ? "0" : "42";
+    public string RampDownRowHeight => IsMonophasicPulseCurrent ? "0" : "42";
 
     public string GetChannelPolarity(int channelIndex)
     {

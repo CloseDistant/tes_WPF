@@ -32,7 +32,7 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
     private readonly RelayCommand usePrescriptionCommand;
     private readonly RelayCommand useChannelPrescriptionCommand;
     private string appliedPrescriptionName = "手动设置";
-    private DirectCurrentChannelPair? selectedChannelPair;
+    private StimulationChannelPair? selectedChannelPair;
     private ChannelConfig? selectedChannel;
     private bool startOperationInProgress;
 
@@ -65,9 +65,9 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
         {
             previousImpedanceStatuses[channel] = channel.ImpedanceStatus;
         }
-        ChannelPairs = new ObservableCollection<DirectCurrentChannelPair>(
+        ChannelPairs = new ObservableCollection<StimulationChannelPair>(
             Enumerable.Range(0, 8).Select(pairIndex =>
-                new DirectCurrentChannelPair(
+                new StimulationChannelPair(
                     pairIndex + 1,
                     Channels[pairIndex * 2],
                     Channels[pairIndex * 2 + 1])));
@@ -158,9 +158,9 @@ public sealed class DirectCurrentControlViewModel : ObservableObject
 
     public ObservableCollection<ChannelConfig> Channels { get; }
 
-    public ObservableCollection<DirectCurrentChannelPair> ChannelPairs { get; }
+    public ObservableCollection<StimulationChannelPair> ChannelPairs { get; }
 
-    public DirectCurrentChannelPair? SelectedChannelPair
+    public StimulationChannelPair? SelectedChannelPair
     {
         get => selectedChannelPair;
         private set

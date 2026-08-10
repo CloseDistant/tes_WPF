@@ -100,6 +100,51 @@ public sealed class RuinaoTesHardwareBridge
             cancellationToken);
     }
 
+    internal async Task ConfigureMonophasicPulseCurrentAsync(
+        MonophasicPulseCurrentHardwareParameters parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        _ = await hardwareClient.ConfigureMonophasicPulseCurrentAsync(
+            new MonophasicPulseCurrentStimulationParameters(
+                parameters.BoardAddress,
+                parameters.PhysicalChannelNumber,
+                parameters.CurrentMilliampere,
+                parameters.RampUpDownSeconds,
+                parameters.IntervalSeconds,
+                parameters.TotalDurationSeconds),
+            cancellationToken);
+    }
+
+    internal async Task StartMonophasicPulseCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await hardwareClient.StartMonophasicPulseCurrentChannelsAsync(
+            boardAddress,
+            channelMask,
+            cancellationToken);
+    }
+
+    internal async Task StopMonophasicPulseCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await hardwareClient.StopMonophasicPulseCurrentChannelsAsync(
+            boardAddress,
+            channelMask,
+            cancellationToken);
+    }
+
+    internal async Task EmergencyStopMonophasicPulseCurrentBackplaneAsync(
+        CancellationToken cancellationToken = default)
+    {
+        _ = await hardwareClient.EmergencyStopMonophasicPulseCurrentBackplaneAsync(
+            cancellationToken);
+    }
+
     /// <summary>只发送背板0x0003=0；不遍历业务板，不执行通道拉低。</summary>
     internal async Task EmergencyStopBackplaneAsync(
         CancellationToken cancellationToken = default)

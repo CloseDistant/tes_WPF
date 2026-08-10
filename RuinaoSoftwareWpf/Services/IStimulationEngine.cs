@@ -23,6 +23,14 @@ public interface IStimulationEngine
         string prescriptionName,
         CancellationToken cancellationToken = default);
 
+    /// <summary>启动 M-tPCS 通道组。</summary>
+    Task<HardwareOperationResult> StartMonophasicPulseCurrentGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string prescriptionName,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("当前刺激引擎尚未实现 M-tPCS 启动。");
+
     /// <summary>停止刺激组；停止后不可继续，只能重新开始。</summary>
     Task<HardwareOperationResult> StopGroupAsync(
         TiGroup group,
@@ -35,6 +43,13 @@ public interface IStimulationEngine
 
     /// <summary>急停 tDCS 通道组。</summary>
     Task<HardwareOperationResult> EmergencyStopDirectCurrentGroupAsync(TiGroup group, string reason, CancellationToken cancellationToken = default);
+
+    /// <summary>通过背板级全局急停停止 M-tPCS。</summary>
+    Task<HardwareOperationResult> EmergencyStopMonophasicPulseCurrentGroupAsync(
+        TiGroup group,
+        string reason,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("当前刺激引擎尚未实现 M-tPCS 急停。");
 
     /// <summary>通道倒计时自然结束并生成完成记录。</summary>
     Task<HardwareOperationResult> CompleteGroupAsync(

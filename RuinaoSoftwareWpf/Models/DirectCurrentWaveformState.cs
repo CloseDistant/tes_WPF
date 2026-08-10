@@ -198,7 +198,7 @@ public sealed class DirectCurrentWaveformState : ObservableObject
 
     public bool IsRunning => RunState == DirectCurrentWaveformRunState.Running;
 
-    public string ViewModeText => IsGlobalView ? "全程" : "120 s";
+    public string ViewModeText => IsGlobalView ? "全程" : "波形细节";
 
     public bool IsWindowView
     {

@@ -11,6 +11,7 @@ namespace RuinaoSoftwareWpf.Views.Renderers;
 public sealed class DirectCurrentWaveformSurface : FrameworkElement
 {
     private static readonly Brush GridBrush = Freeze(new SolidColorBrush(Color.FromRgb(34, 45, 61)));
+    private static readonly Brush SurfaceBackgroundBrush = Freeze(new SolidColorBrush(Color.FromRgb(14, 21, 32)));
     private static readonly Brush AxisTextBrush = Freeze(new SolidColorBrush(Color.FromRgb(119, 137, 164)));
     private static readonly Brush WaveBrush = Freeze(new SolidColorBrush(Color.FromRgb(77, 174, 255)));
     private static readonly Pen GridPen = Freeze(new Pen(GridBrush, 1));
@@ -39,6 +40,11 @@ public sealed class DirectCurrentWaveformSurface : FrameworkElement
         {
             return;
         }
+
+        // The surface is refreshed frequently while stimulation is running. Paint an opaque
+        // background first so anti-aliased pixels from the previous frame cannot accumulate
+        // into a dense spike block when the waveform grows from left to right.
+        drawingContext.DrawRectangle(SurfaceBackgroundBrush, null, new Rect(0, 0, width, height));
 
         const double left = 48;
         const double right = 14;
@@ -254,11 +260,26 @@ public sealed class DirectCurrentWaveformSurface : FrameworkElement
             return (0, Math.Max(1, elapsed));
         }
 
+        var detailWindowSeconds = GetDetailWindowSeconds(parameters);
         var page = elapsed >= parameters.TotalDurationSeconds
-            ? Math.Max(0, Math.Ceiling(parameters.TotalDurationSeconds / 120d) - 1)
-            : Math.Floor(elapsed / 120d);
-        var start = page * 120d;
-        return (start, start + 120d);
+            ? Math.Max(0, Math.Ceiling(parameters.TotalDurationSeconds / detailWindowSeconds) - 1)
+            : Math.Floor(elapsed / detailWindowSeconds);
+        var start = page * detailWindowSeconds;
+        return (start, start + detailWindowSeconds);
+    }
+
+    internal static double GetDetailWindowSeconds(DirectCurrentWaveformParameters parameters)
+    {
+        if (parameters.IsContinuous)
+        {
+            return Math.Min(120d, Math.Max(1d, parameters.TotalDurationSeconds));
+        }
+
+        var cycleSeconds = parameters.RampUpSeconds
+            + parameters.PlateauSeconds
+            + parameters.RampDownSeconds
+            + parameters.IntervalSeconds;
+        return Math.Clamp(cycleSeconds * 6d, 1d, 120d);
     }
 
     internal static WaveformYScale CreateYScale(DirectCurrentWaveformParameters parameters)
@@ -310,7 +331,7 @@ public sealed class DirectCurrentWaveformSurface : FrameworkElement
             value = 0;
         }
 
-        return value.ToString("0.0#", CultureInfo.InvariantCulture);
+        return value.ToString("0.0###", CultureInfo.InvariantCulture);
     }
 
     private static void DrawRightAlignedText(DrawingContext context, string text, double right, double y)

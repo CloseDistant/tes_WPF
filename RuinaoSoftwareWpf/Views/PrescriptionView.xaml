@@ -161,9 +161,9 @@
                     <Grid Margin="4,12,24,0" VerticalAlignment="Top" MaxWidth="820" HorizontalAlignment="Left">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="540"/></Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/>
-                            <RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="54"/>
-                            <RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="54"/>
+                            <RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="{Binding DeliveryModeRowHeight}"/>
+                            <RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="{Binding SingleDurationRowHeight}"/><RowDefinition Height="54"/>
+                            <RowDefinition Height="42"/><RowDefinition Height="{Binding RampDownRowHeight}"/><RowDefinition Height="54"/>
                         </Grid.RowDefinitions>
                         <Border Grid.ColumnSpan="2" Style="{StaticResource DetailRow}"/>
                         <Border Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource DetailRow}" Background="#1A1F29"/>

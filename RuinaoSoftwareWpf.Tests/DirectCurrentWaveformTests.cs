@@ -10,7 +10,9 @@ public sealed class DirectCurrentWaveformTests
     [InlineData(0.5, "0.5")]
     [InlineData(1.25, "1.25")]
     [InlineData(2, "2.0")]
-    public void CurrentAxis_UsesOneOrTwoDecimalPlaces(double value, string expected)
+    [InlineData(0.0025, "0.0025")]
+    [InlineData(0.0075, "0.0075")]
+    public void CurrentAxis_PreservesReadablePrecision(double value, string expected)
     {
         Assert.Equal(expected, DirectCurrentWaveformSurface.FormatAxisValue(value));
     }
@@ -172,6 +174,28 @@ public sealed class DirectCurrentWaveformTests
 
         Assert.Equal(0, window.Start);
         Assert.Equal(18.4, window.End, 6);
+    }
+
+    [Fact]
+    public void DetailView_UsesAboutSixCyclesForShortIntervalWaveforms()
+    {
+        var parameters = new DirectCurrentWaveformParameters(0.01, 2, 2, 120, 3, 0, false, false);
+        var state = new DirectCurrentWaveformState();
+        state.Start(parameters);
+        state.UpdateElapsed(10);
+
+        var window = DirectCurrentWaveformSurface.GetTimeWindow(state, parameters, state.ElapsedSeconds);
+
+        Assert.Equal(0, window.Start);
+        Assert.Equal(42, window.End);
+    }
+
+    [Fact]
+    public void DetailView_NeverCompressesMoreThanOneHundredTwentySeconds()
+    {
+        var parameters = new DirectCurrentWaveformParameters(2, 30, 30, 1200, 60, 60, false, false);
+
+        Assert.Equal(120, DirectCurrentWaveformSurface.GetDetailWindowSeconds(parameters));
     }
 
     [Theory]

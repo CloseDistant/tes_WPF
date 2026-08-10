@@ -276,6 +276,8 @@ public sealed class HardwareService : IHardwareService
             await RunDeviceOperationAsync(
                 token => IsDirectCurrent(parameterRecord.StimulationType)
                     ? StartDirectCurrentGroupOnHardwareBridgeAsync(group, token)
+                    : IsMonophasicPulseCurrent(parameterRecord.StimulationType)
+                        ? StartMonophasicPulseCurrentGroupOnHardwareBridgeAsync(group, token)
                     : StartGroupOnProtocolBridgeAsync(group, token),
                 cancellationToken);
         }
@@ -295,6 +297,8 @@ public sealed class HardwareService : IHardwareService
                     await RunDeviceOperationAsync(
                         token => IsDirectCurrent(parameterRecord.StimulationType)
                             ? StopDirectCurrentGroupOnHardwareBridgeAsync(group, token)
+                            : IsMonophasicPulseCurrent(parameterRecord.StimulationType)
+                                ? StopMonophasicPulseCurrentGroupOnHardwareBridgeAsync(group, token)
                             : StopGroupOnHardwareBridgeAsync(group, token),
                         CancellationToken.None);
                 }
@@ -336,6 +340,8 @@ public sealed class HardwareService : IHardwareService
             await RunDeviceOperationAsync(
                 token => IsDirectCurrent(stimulationType)
                     ? StopDirectCurrentGroupOnHardwareBridgeAsync(group, token)
+                    : IsMonophasicPulseCurrent(stimulationType)
+                        ? StopMonophasicPulseCurrentGroupOnHardwareBridgeAsync(group, token)
                     : StopGroupOnHardwareBridgeAsync(group, token),
                 cancellationToken);
         }
@@ -374,6 +380,8 @@ public sealed class HardwareService : IHardwareService
             await RunDeviceOperationAsync(
                 token => IsDirectCurrent(stimulationType)
                     ? hardwareBridge.EmergencyStopBackplaneAsync(token)
+                    : IsMonophasicPulseCurrent(stimulationType)
+                        ? hardwareBridge.EmergencyStopMonophasicPulseCurrentBackplaneAsync(token)
                     : EmergencyStopGroupOnProtocolBridgeAsync(group, token),
                 cancellationToken);
         }
@@ -413,6 +421,8 @@ public sealed class HardwareService : IHardwareService
             await RunDeviceOperationAsync(
                 token => IsDirectCurrent(stimulationType)
                     ? StopDirectCurrentGroupOnHardwareBridgeAsync(group, token)
+                    : IsMonophasicPulseCurrent(stimulationType)
+                        ? StopMonophasicPulseCurrentGroupOnHardwareBridgeAsync(group, token)
                     : StopGroupOnHardwareBridgeAsync(group, token),
                 cancellationToken);
         }
@@ -605,6 +615,134 @@ public sealed class HardwareService : IHardwareService
         }
     }
 
+    /// <summary>M-tPCS与tDCS使用相同板卡映射和掩码启停，但配置由独立产品API生成。</summary>
+    private async Task StartMonophasicPulseCurrentGroupOnHardwareBridgeAsync(
+        TiGroup group,
+        CancellationToken cancellationToken)
+    {
+        var bindings = CreateMonophasicPulseCurrentBindings(group);
+        foreach (var binding in bindings)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await hardwareBridge.ConfigureMonophasicPulseCurrentAsync(binding.Parameters, cancellationToken);
+        }
+
+        var startedBoardCount = 0;
+        try
+        {
+            foreach (var board in bindings.GroupBy(binding => binding.BoardAddress))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await hardwareBridge.StartMonophasicPulseCurrentChannelsAsync(
+                    board.Key,
+                    CombineMonophasicPulseCurrentChannelMask(board),
+                    cancellationToken);
+                startedBoardCount++;
+            }
+        }
+        catch (Exception startException)
+        {
+            var failedBoard = bindings.GroupBy(binding => binding.BoardAddress)
+                .Skip(startedBoardCount)
+                .FirstOrDefault();
+            try
+            {
+                if (startedBoardCount > 0)
+                {
+                    await hardwareBridge.EmergencyStopBackplaneAsync(CancellationToken.None);
+                }
+                else if (failedBoard is not null)
+                {
+                    await hardwareBridge.StopMonophasicPulseCurrentChannelsAsync(
+                        failedBoard.Key,
+                        CombineMonophasicPulseCurrentChannelMask(failedBoard),
+                        CancellationToken.None);
+                }
+            }
+            catch (Exception safetyStopException)
+            {
+                throw new InvalidOperationException(
+                    "M-tPCS启动未确认，随后安全停止命令也未确认。请立即人工检查设备并使用紧急停止。",
+                    new AggregateException(startException, safetyStopException));
+            }
+
+            if (startException is OperationCanceledException)
+            {
+                throw;
+            }
+
+            throw new InvalidOperationException(
+                startedBoardCount > 0
+                    ? "M-tPCS多板启动过程中发生失败，已向背板发送紧急停止。"
+                    : "M-tPCS启动回复未确认，已向对应业务板补发指定通道停止。",
+                startException);
+        }
+    }
+
+    private async Task StopMonophasicPulseCurrentGroupOnHardwareBridgeAsync(
+        TiGroup group,
+        CancellationToken cancellationToken)
+    {
+        var bindings = CreateMonophasicPulseCurrentBindings(group);
+        foreach (var board in bindings.GroupBy(binding => binding.BoardAddress))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await hardwareBridge.StopMonophasicPulseCurrentChannelsAsync(
+                board.Key,
+                CombineMonophasicPulseCurrentChannelMask(board),
+                cancellationToken);
+        }
+    }
+
+    private IReadOnlyList<MonophasicPulseCurrentChannelBinding> CreateMonophasicPulseCurrentBindings(
+        TiGroup group)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+        if (group.Channels.Count == 0)
+        {
+            throw new InvalidOperationException("M-tPCS操作至少需要一个通道。");
+        }
+
+        var boards = CurrentDeviceTopology?.Slots
+            .Where(slot => slot.IsInserted
+                && slot.IsOnline
+                && slot.BoardKind == DeviceBoardKind.Stimulation)
+            .OrderBy(slot => slot.SlotIndex)
+            .ThenBy(slot => slot.Address)
+            .Take(2)
+            .ToArray()
+            ?? [];
+        var bindings = new List<MonophasicPulseCurrentChannelBinding>(group.Channels.Count);
+        foreach (var channel in group.Channels)
+        {
+            var logicalChannel = ParseLogicalChannelNumber(channel.Name);
+            var boardIndex = (logicalChannel - 1) / 8;
+            if (boardIndex >= boards.Length)
+            {
+                throw new InvalidOperationException($"{channel.Name}没有映射到在线电刺激业务板。");
+            }
+
+            var physicalChannel = (logicalChannel - 1) % 8 + 1;
+            var boardAddress = boards[boardIndex].Address;
+            bindings.Add(new MonophasicPulseCurrentChannelBinding(
+                boardAddress,
+                physicalChannel,
+                new MonophasicPulseCurrentHardwareParameters(
+                    boardAddress,
+                    physicalChannel,
+                    ParseDecimal(channel.CurrentMA, channel.Name, "幅值"),
+                    ParseDecimal(channel.RampUpS, channel.Name, "渐升时间（渐降同值）"),
+                    ParseDecimal(channel.IntervalS, channel.Name, "间隔时间"),
+                    ParseDecimal(channel.DurationS, channel.Name, "刺激时间"))));
+        }
+
+        return bindings;
+    }
+
+    private static uint CombineMonophasicPulseCurrentChannelMask(
+        IEnumerable<MonophasicPulseCurrentChannelBinding> bindings) =>
+        bindings.Aggregate(0U, (mask, binding) => mask | (1U << (binding.PhysicalChannelNumber - 1)));
+
     private IReadOnlyList<DirectCurrentChannelBinding> CreateDirectCurrentBindings(TiGroup group)
     {
         ArgumentNullException.ThrowIfNull(group);
@@ -686,10 +824,21 @@ public sealed class HardwareService : IHardwareService
             StimulationModeCodes.DirectCurrent,
             StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsMonophasicPulseCurrent(string stimulationType) =>
+        string.Equals(
+            stimulationType,
+            StimulationModeCodes.MonophasicPulseCurrent,
+            StringComparison.OrdinalIgnoreCase);
+
     private sealed record DirectCurrentChannelBinding(
         byte BoardAddress,
         int PhysicalChannelNumber,
         DirectCurrentHardwareParameters Parameters);
+
+    private sealed record MonophasicPulseCurrentChannelBinding(
+        byte BoardAddress,
+        int PhysicalChannelNumber,
+        MonophasicPulseCurrentHardwareParameters Parameters);
 
     private bool ShouldUseDebugStimulationMock()
     {

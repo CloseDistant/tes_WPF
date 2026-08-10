@@ -178,6 +178,13 @@ public static class StimulationRecordParameters
         return CreatePrescription(group, prescriptionName, StimulationModeCodes.DirectCurrent);
     }
 
+    public static PrescriptionDefinition CreateMonophasicPulseCurrentPrescription(
+        TiGroup group,
+        string prescriptionName)
+    {
+        return CreatePrescription(group, prescriptionName, StimulationModeCodes.MonophasicPulseCurrent);
+    }
+
     private static PrescriptionDefinition CreatePrescription(
         TiGroup group,
         string prescriptionName,

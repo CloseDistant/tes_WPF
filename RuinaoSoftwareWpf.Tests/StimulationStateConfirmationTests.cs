@@ -44,6 +44,40 @@ public sealed class StimulationStateConfirmationTests
     }
 
     [Fact]
+    public async Task StartMonophasicPulseCurrent_UsesIndependentRecordTypeAndConfirmationState()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = new Fixture();
+        var group = new TiGroup { Title = "经颅单相脉冲电流刺激" };
+        group.Channels.Add(new ChannelConfig
+        {
+            Name = "CH 1",
+            CurrentMA = "1.00",
+            RampUpS = "0.5",
+            RampDownS = "0.5",
+            DurationS = "120.0",
+            IntervalS = "0.0",
+            SingleDurationS = "1.0",
+            StimulationMode = "间隔"
+        });
+
+        var operation = fixture.Engine.StartMonophasicPulseCurrentGroupAsync(
+            group,
+            "CH 1",
+            "M-tPCS测试处方",
+            cancellationToken);
+
+        await fixture.Hardware.StartInvoked.Task.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        Assert.Equal(StimulationExecutionState.Starting, fixture.StateMachine.CurrentState);
+        Assert.Equal(
+            StimulationModeCodes.MonophasicPulseCurrent,
+            fixture.Hardware.CapturedStartParameters?.StimulationType);
+        fixture.Hardware.StartCompletion.TrySetResult(new HardwareOperationResult(true, "confirmed"));
+        await operation;
+        Assert.Equal(StimulationExecutionState.Running, fixture.StateMachine.CurrentState);
+    }
+
+    [Fact]
     public async Task Stop_RemainsStoppingUntilHardwareConfirmsThenBecomesStopped()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -178,6 +212,7 @@ public sealed class StimulationStateConfirmationTests
         public TaskCompletionSource CompleteInvoked { get; } = NewSignal();
         public TaskCompletionSource<HardwareOperationResult> CompleteCompletion { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public PrescriptionDefinition? CapturedStartParameters { get; private set; }
         public event EventHandler<HardwareConnectionChangedEventArgs>? ConnectionChanged
         {
             add { }
@@ -204,6 +239,7 @@ public sealed class StimulationStateConfirmationTests
             PrescriptionDefinition parameterRecord,
             CancellationToken cancellationToken = default)
         {
+            CapturedStartParameters = parameterRecord;
             StartInvoked.TrySetResult();
             return StartCompletion.Task.WaitAsync(cancellationToken);
         }

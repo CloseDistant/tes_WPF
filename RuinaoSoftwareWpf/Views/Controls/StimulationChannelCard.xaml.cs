@@ -47,6 +47,30 @@ public partial class StimulationChannelCard : UserControl
         typeof(StimulationChannelCard),
         new PropertyMetadata(true));
 
+    public static readonly DependencyProperty IsMonophasicPulseCurrentProperty = DependencyProperty.Register(
+        nameof(IsMonophasicPulseCurrent),
+        typeof(bool),
+        typeof(StimulationChannelCard),
+        new PropertyMetadata(false));
+
+    public static readonly DependencyProperty ShowRampDownProperty = DependencyProperty.Register(
+        nameof(ShowRampDown),
+        typeof(bool),
+        typeof(StimulationChannelCard),
+        new PropertyMetadata(true));
+
+    public static readonly DependencyProperty ShowModeProperty = DependencyProperty.Register(
+        nameof(ShowMode),
+        typeof(bool),
+        typeof(StimulationChannelCard),
+        new PropertyMetadata(true));
+
+    public static readonly DependencyProperty ShowSingleDurationProperty = DependencyProperty.Register(
+        nameof(ShowSingleDuration),
+        typeof(bool),
+        typeof(StimulationChannelCard),
+        new PropertyMetadata(true));
+
     public static readonly DependencyProperty ShowElectrodeDescriptionProperty = DependencyProperty.Register(
         nameof(ShowElectrodeDescription),
         typeof(bool),
@@ -117,6 +141,30 @@ public partial class StimulationChannelCard : UserControl
         set => SetValue(ShowPolarityProperty, value);
     }
 
+    public bool IsMonophasicPulseCurrent
+    {
+        get => (bool)GetValue(IsMonophasicPulseCurrentProperty);
+        set => SetValue(IsMonophasicPulseCurrentProperty, value);
+    }
+
+    public bool ShowRampDown
+    {
+        get => (bool)GetValue(ShowRampDownProperty);
+        set => SetValue(ShowRampDownProperty, value);
+    }
+
+    public bool ShowMode
+    {
+        get => (bool)GetValue(ShowModeProperty);
+        set => SetValue(ShowModeProperty, value);
+    }
+
+    public bool ShowSingleDuration
+    {
+        get => (bool)GetValue(ShowSingleDurationProperty);
+        set => SetValue(ShowSingleDurationProperty, value);
+    }
+
     public bool ShowElectrodeDescription
     {
         get => (bool)GetValue(ShowElectrodeDescriptionProperty);
@@ -159,7 +207,7 @@ public partial class StimulationChannelCard : UserControl
 
     private void RememberDirectCurrentValue(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if (IsDirectCurrentCard && sender is TextBox textBox)
+        if ((IsDirectCurrentCard || IsMonophasicPulseCurrent) && sender is TextBox textBox)
         {
             previousDirectCurrentValues[textBox] = textBox.Text;
         }
@@ -167,10 +215,21 @@ public partial class StimulationChannelCard : UserControl
 
     private void NormalizeDirectCurrentValue(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if (!IsDirectCurrentCard
+        if ((!IsDirectCurrentCard && !IsMonophasicPulseCurrent)
             || sender is not TextBox textBox
-            || textBox.Tag is not string kindName
-            || !Enum.TryParse<DirectCurrentParameterKind>(kindName, out var kind))
+            || textBox.Tag is not string kindName)
+        {
+            return;
+        }
+
+
+        if (IsMonophasicPulseCurrent)
+        {
+            NormalizeMonophasicPulseCurrentValue(textBox, kindName);
+            return;
+        }
+
+        if (!Enum.TryParse<DirectCurrentParameterKind>(kindName, out var kind))
         {
             return;
         }
@@ -187,6 +246,50 @@ public partial class StimulationChannelCard : UserControl
         {
             Validation.ClearInvalid(expression);
         }
+        textBox.ToolTip = null;
+        previousDirectCurrentValues[textBox] = result.Value;
+        if (!result.IsValid
+            && ParameterValidationFailedCommand?.CanExecute(result.ErrorMessage) == true)
+        {
+            ParameterValidationFailedCommand.Execute(result.ErrorMessage);
+        }
+    }
+
+    private void NormalizeMonophasicPulseCurrentValue(TextBox textBox, string kindName)
+    {
+        var kind = kindName switch
+        {
+            nameof(DirectCurrentParameterKind.CurrentMilliamp) => MonophasicPulseCurrentParameterKind.CurrentMilliamp,
+            nameof(DirectCurrentParameterKind.RampUpSeconds) => MonophasicPulseCurrentParameterKind.RampSeconds,
+            nameof(DirectCurrentParameterKind.IntervalSeconds) => MonophasicPulseCurrentParameterKind.IntervalSeconds,
+            nameof(DirectCurrentParameterKind.TotalDurationSeconds) => MonophasicPulseCurrentParameterKind.TotalDurationSeconds,
+            _ => (MonophasicPulseCurrentParameterKind)(-1)
+        };
+        if ((int)kind < 0)
+        {
+            return;
+        }
+
+        var fallback = previousDirectCurrentValues.GetValueOrDefault(
+            textBox,
+            MonophasicPulseCurrentParameterRules.GetDefault(kind));
+        var result = MonophasicPulseCurrentParameterRules.Normalize(kind, textBox.Text, fallback);
+        textBox.Text = result.Value;
+        textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        if (kind == MonophasicPulseCurrentParameterKind.RampSeconds
+            && DataContext is ChannelConfig channel
+            && double.TryParse(result.Value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var ramp))
+        {
+            channel.RampDownS = result.Value;
+            channel.SingleDurationS = (ramp * 2d).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        var expression = BindingOperations.GetBindingExpression(textBox, TextBox.TextProperty);
+        if (expression is not null)
+        {
+            Validation.ClearInvalid(expression);
+        }
+
         textBox.ToolTip = null;
         previousDirectCurrentValues[textBox] = result.Value;
         if (!result.IsValid

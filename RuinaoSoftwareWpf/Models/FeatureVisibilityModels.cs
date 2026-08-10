@@ -15,6 +15,7 @@ public static class FeatureKeys
     public const string StimulationTemporalInterference = "stimulation.ti";
     public const string StimulationDirectCurrent = "stimulation.tdcs";
     public const string StimulationPulseCurrent = "stimulation.tpcs";
+    public const string StimulationMonophasicPulseCurrent = "stimulation.mtpcs";
 }
 
 /// <summary>
@@ -26,6 +27,7 @@ public static class StimulationModeCodes
     public const string TemporalInterference = "TI";
     public const string DirectCurrent = "tDCS";
     public const string PulseCurrent = "tPCS";
+    public const string MonophasicPulseCurrent = "M-tPCS";
 }
 
 public sealed record NavigationFeatureDefinition(
@@ -96,7 +98,15 @@ public static class FeatureCatalog
             "⌁",
             "经颅脉冲电流刺激参数设置",
             RequiresImpedanceMonitoring: true,
-            ExecutionAvailability: StimulationModeExecutionAvailability.HardwareIntegrationPending)
+            ExecutionAvailability: StimulationModeExecutionAvailability.HardwareIntegrationPending),
+        new(
+            FeatureKeys.StimulationMonophasicPulseCurrent,
+            "TranscranialMonophasicPulseCurrent",
+            StimulationModeCodes.MonophasicPulseCurrent,
+            "经颅单相脉冲电流刺激",
+            "△",
+            "经颅单相脉冲电流刺激参数设置",
+            RequiresImpedanceMonitoring: true)
     ];
 
     public static StimulationTypeFeatureDefinition GetStimulationType(string modeCode)
