@@ -1,9 +1,61 @@
-using Xunit;
+﻿using Xunit;
 
 namespace RuinaoSoftwareWpf.Tests;
 
 public sealed class MonophasicPulseCurrentParameterRulesTests
 {
+    [Theory]
+    [InlineData(MonophasicPulseCurrentParameterKind.CurrentMilliamp, "15.001", "15.00")]
+    [InlineData(MonophasicPulseCurrentParameterKind.RampSeconds, "100.1", "100.0")]
+    [InlineData(MonophasicPulseCurrentParameterKind.IntervalSeconds, "3600.1", "3600.0")]
+    [InlineData(MonophasicPulseCurrentParameterKind.TotalDurationSeconds, "3600.1", "3600.0")]
+    public void Normalize_AboveMaximumClampsAndRequestsToast(
+        MonophasicPulseCurrentParameterKind kind,
+        string input,
+        string expected)
+    {
+        var result = MonophasicPulseCurrentParameterRules.Normalize(kind, input, "1.0");
+
+        Assert.False(result.IsValid);
+        Assert.Equal(expected, result.Value);
+        Assert.Contains("已调整", result.ErrorMessage);
+    }
+
+    [Theory]
+    [InlineData(MonophasicPulseCurrentParameterKind.CurrentMilliamp, "1.235", "1.24")]
+    [InlineData(MonophasicPulseCurrentParameterKind.RampSeconds, "12.35", "12.4")]
+    [InlineData(MonophasicPulseCurrentParameterKind.IntervalSeconds, "3.04", "3.0")]
+    [InlineData(MonophasicPulseCurrentParameterKind.TotalDurationSeconds, "120.05", "120.1")]
+    public void Normalize_ExcessPrecisionRoundsWithoutToast(
+        MonophasicPulseCurrentParameterKind kind,
+        string input,
+        string expected)
+    {
+        var result = MonophasicPulseCurrentParameterRules.Normalize(kind, input, "1.0");
+
+        Assert.True(result.IsValid);
+        Assert.Equal(expected, result.Value);
+        Assert.Empty(result.ErrorMessage);
+    }
+
+    [Theory]
+    [InlineData(MonophasicPulseCurrentParameterKind.CurrentMilliamp, "abc")]
+    [InlineData(MonophasicPulseCurrentParameterKind.CurrentMilliamp, "0")]
+    [InlineData(MonophasicPulseCurrentParameterKind.RampSeconds, "0")]
+    [InlineData(MonophasicPulseCurrentParameterKind.TotalDurationSeconds, "0.1")]
+    public void Normalize_InvalidOrBelowMinimumRestoresPreviousValue(
+        MonophasicPulseCurrentParameterKind kind,
+        string input)
+    {
+        const string previousValue = "1.5";
+
+        var result = MonophasicPulseCurrentParameterRules.Normalize(kind, input, previousValue);
+
+        Assert.False(result.IsValid);
+        Assert.Equal(previousValue, result.Value);
+        Assert.NotEmpty(result.ErrorMessage);
+    }
+
     [Fact]
     public void TryCreateWaveform_UsesOneRampValueForBothTriangleSides()
     {

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 namespace RuinaoSoftwareWpf;
 
@@ -15,12 +15,26 @@ public static class MonophasicPulseCurrentParameterRules
         string text,
         string fallbackValue)
     {
-        if (!TryParseValidated(kind, text, out var value, out var error))
+        var (minimum, maximum, decimals) = GetSpecification(kind);
+        if (!TryParseFiniteNumber(text, out var value) || value < minimum)
         {
-            return new MonophasicPulseCurrentParameterNormalization(fallbackValue, false, error);
+            return new MonophasicPulseCurrentParameterNormalization(
+                fallbackValue,
+                false,
+                GetRangeError(kind, minimum, maximum, decimals));
         }
 
-        return new MonophasicPulseCurrentParameterNormalization(Format(kind, value), true, string.Empty);
+        if (value > maximum)
+        {
+            return new MonophasicPulseCurrentParameterNormalization(
+                Format(kind, maximum),
+                false,
+                $"{GetName(kind)}允许范围为 {FormatNumber(minimum, decimals)}～{FormatNumber(maximum, decimals)}，"
+                    + $"已调整为 {FormatNumber(maximum, decimals)}。");
+        }
+
+        var rounded = Math.Round(value, decimals, MidpointRounding.AwayFromZero);
+        return new MonophasicPulseCurrentParameterNormalization(Format(kind, rounded), true, string.Empty);
     }
 
     public static bool TryParseValidated(
@@ -31,10 +45,7 @@ public static class MonophasicPulseCurrentParameterRules
     {
         value = 0;
         error = string.Empty;
-        if ((!double.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out value)
-                && !double.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out value))
-            || double.IsNaN(value)
-            || double.IsInfinity(value))
+        if (!TryParseFiniteNumber(text, out value))
         {
             error = $"{GetName(kind)}请输入有效数字。";
             return false;
@@ -44,8 +55,7 @@ public static class MonophasicPulseCurrentParameterRules
         var rounded = Math.Round(value, decimals, MidpointRounding.AwayFromZero);
         if (value < minimum || value > maximum || Math.Abs(value - rounded) > 0.0000001d)
         {
-            error = $"{GetName(kind)}范围为 {FormatNumber(minimum, decimals)}～{FormatNumber(maximum, decimals)}，"
-                + $"最多保留 {decimals} 位小数。";
+            error = GetRangeError(kind, minimum, maximum, decimals);
             return false;
         }
 
@@ -137,6 +147,20 @@ public static class MonophasicPulseCurrentParameterRules
 
     private static string FormatNumber(double value, int decimals) =>
         value.ToString(decimals == 2 ? "0.00" : "0.0", CultureInfo.InvariantCulture);
+
+    private static bool TryParseFiniteNumber(string? text, out double value) =>
+        (double.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out value)
+            || double.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out value))
+        && !double.IsNaN(value)
+        && !double.IsInfinity(value);
+
+    private static string GetRangeError(
+        MonophasicPulseCurrentParameterKind kind,
+        double minimum,
+        double maximum,
+        int decimals) =>
+        $"{GetName(kind)}范围为 {FormatNumber(minimum, decimals)}～{FormatNumber(maximum, decimals)}，"
+            + $"最多保留 {decimals} 位小数。";
 }
 
 public enum MonophasicPulseCurrentParameterKind
