@@ -39,6 +39,7 @@ public partial class FemSimulationView : UserControl
         DataContextChanged += ViewDataContextChanged;
         Unloaded += (_, _) =>
         {
+            EndSlicePan();
             sampleLoadCts?.Cancel();
             sampleLoadCts?.Dispose();
             sampleLoadCts = null;
@@ -54,6 +55,11 @@ public partial class FemSimulationView : UserControl
         if (DataContext is not FemSimulationViewModel viewModel)
             return;
 
+        await ActivateViewModelAsync(viewModel);
+    }
+
+    private async Task ActivateViewModelAsync(FemSimulationViewModel viewModel)
+    {
         SubscribeToViewModel(viewModel);
         var cancellation = new CancellationTokenSource();
         sampleLoadCts = cancellation;
@@ -67,6 +73,13 @@ public partial class FemSimulationView : UserControl
             else
             {
                 DebugLog.WriteWarning("未自动加载内置有限元示例，可使用“选择清单”手动导入。");
+            }
+
+            if (IsLoaded &&
+                ReferenceEquals(DataContext, viewModel) &&
+                viewModel.Is3D)
+            {
+                await NavigateCurrentResultAsync();
             }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -89,9 +102,7 @@ public partial class FemSimulationView : UserControl
     {
         if (IsLoaded && e.NewValue is FemSimulationViewModel viewModel)
         {
-            SubscribeToViewModel(viewModel);
-            if (viewModel.Is3D)
-                await NavigateCurrentResultAsync();
+            await ActivateViewModelAsync(viewModel);
         }
     }
 
@@ -566,10 +577,14 @@ public partial class FemSimulationView : UserControl
 
     private void EndSlicePan()
     {
-        if (slicePanViewer is null) return;
-        slicePanViewer.ReleaseMouseCapture();
-        slicePanViewer.ClearValue(CursorProperty);
+        var viewer = slicePanViewer;
+        if (viewer is null) return;
+
+        // ReleaseMouseCapture synchronously raises mouse events. Clear the shared
+        // state first so a reentrant SlicePanEnd cannot clear it underneath us.
         slicePanViewer = null;
+        viewer.ReleaseMouseCapture();
+        viewer.ClearValue(CursorProperty);
     }
 
     private async void FocusStimulusClick(object sender, System.Windows.RoutedEventArgs e)
