@@ -31,10 +31,6 @@ public sealed class RuinaoTesHardwareBridge
         CancellationToken cancellationToken = default) =>
         hardwareClient.HandshakeAsync(cancellationToken);
 
-    public Task<bool> IsBackplaneDeviceReadyAsync(
-        CancellationToken cancellationToken = default) =>
-        hardwareClient.IsDeviceReadyAsync(cancellationToken);
-
     public Task<uint> ReadProductModelAsync(CancellationToken cancellationToken = default) =>
         hardwareClient.ReadProductModelAsync(cancellationToken);
 

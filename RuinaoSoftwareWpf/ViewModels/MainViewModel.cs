@@ -663,6 +663,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
             if (entry.Reason == HardwareConnectionChangeReason.HeartbeatLost)
             {
+                ShellState.FooterStatus = entry.Message;
                 toastService.ShowError("仪器已断联", entry.Message);
             }
         }

@@ -1232,33 +1232,9 @@ public sealed class HardwareService : IHardwareService
             }
             catch (Exception ex)
             {
-                logger.Warning($"心跳握手失败，开始重新枚举目标USB设备：{ex.Message}");
-
-                bool deviceReady;
-                try
-                {
-                    deviceReady = await RunDeviceOperationAsync(
-                        hardwareBridge.IsBackplaneDeviceReadyAsync,
-                        cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception discoveryException)
-                {
-                    deviceReady = false;
-                    logger.Error("心跳失败后重新枚举USB设备时发生异常", discoveryException);
-                }
-
-                if (deviceReady)
-                {
-                    // USB仍在时不把一次迟到或超时回复直接判为拔线；下一周期继续发送握手。
-                    logger.Warning("目标USB设备04B4:00F1仍存在且驱动正常，保留联机状态，下一心跳周期继续检测");
-                    continue;
-                }
-
-                logger.Error("心跳握手失败且未发现可用的04B4:00F1，仪器判定断联，心跳结束", ex);
+                // Windows仍能枚举到USB设备不代表协议通信正常。心跳未收到有效回复时，
+                // 立即结束当前通信会话，避免界面继续显示已联机并让后续命令反复超时。
+                logger.Error("心跳握手未收到有效回复，仪器通信判定断开，心跳结束", ex);
                 IsConnected = false;
                 await StopImpedanceMonitoringWorkerAsync();
                 ClearDeviceTopology();

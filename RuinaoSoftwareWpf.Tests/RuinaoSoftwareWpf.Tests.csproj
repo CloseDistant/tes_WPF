@@ -20,6 +20,10 @@
       <HintPath>..\RuinaoSoftwareWpf\Libs\RuinaoTesHardware\RuinaoTesProtocol.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <Reference Include="RuinaoTesHardware">
+      <HintPath>..\RuinaoSoftwareWpf\Libs\RuinaoTesHardware\RuinaoTesHardware.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>
