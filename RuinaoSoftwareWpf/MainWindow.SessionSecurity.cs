@@ -1,17 +1,10 @@
 namespace RuinaoSoftwareWpf;
 
-using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 using System.Windows.Threading;
 
 public partial class MainWindow
 {
-    private readonly ISessionSecurityService sessionSecurityService =
-        AppComposition.Services.GetRequiredService<ISessionSecurityService>();
-    private readonly GlobalUserActivityMonitor globalUserActivityMonitor =
-        AppComposition.Services.GetRequiredService<GlobalUserActivityMonitor>();
-    private readonly SessionLockViewModel sessionLockViewModel =
-        AppComposition.Services.GetRequiredService<SessionLockViewModel>();
     private readonly DispatcherTimer sessionSecurityTimer = new()
     {
         Interval = TimeSpan.FromSeconds(1)

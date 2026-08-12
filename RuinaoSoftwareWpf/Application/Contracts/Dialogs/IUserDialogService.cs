@@ -12,6 +12,8 @@ public interface IUserDialogService
 
     bool ConfirmDirectCurrentSynchronizedStart(DirectCurrentSynchronizedStartConfirmationRequest request);
 
+    PasswordChangeDialogResult? RequestPasswordChange(string? errorMessage = null);
+
     void ShowInformation(string title, string message);
 
     void ShowError(string title, string message);

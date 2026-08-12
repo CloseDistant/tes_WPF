@@ -50,58 +50,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Assets\CaptureWorkbench\Videos\EyeCalibrationDemo.mp4">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\Videos\PictureBrowseDemo.mp4">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\Videos\VideoBrowseDemo.mp4">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\Videos\VoiceBaselineDemo.mp4">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\Videos\WordReadingDemo.mp4">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\Videos\ShortTextReadingDemo.mp4">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\Videos\EmotionQuestionDemo.mp4">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\Videos\DotProbeDemo.mp4">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\Videos\EmotionOddballDemo.mp4">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\Videos\EmotionLetterSearchDemo.mp4">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\Videos\EmotionStroopDemo.mp4">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\PictureBrowse\**\*.*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\VideoBrowse\**\*.*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\DotProbe\**\*.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\EmotionOddball\**\*.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\EmotionLetterSearch\**\*.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\CaptureWorkbench\EmotionStroop\**\*.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\Eeg\EEG_64_standard_1020_coordinates.json">
+    <Content Include="Assets\**\*.*" Exclude="Assets\asset-manifest.sha256">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Tools\ffmpeg\ffmpeg.exe">
@@ -113,6 +62,12 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
+
+  <Target Name="ValidateAssetManifest"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\Build\Validate-AssetManifest.ps1&quot;" />
+  </Target>
 
   <Target Name="GenerateBuildIntegrityManifest"
           AfterTargets="Build"

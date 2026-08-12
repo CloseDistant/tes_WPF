@@ -16,13 +16,16 @@ using System.Windows.Threading;
 /// </summary>
 public partial class MainWindow : Window
 {
-    // 通过 DI 容器创建主 ViewModel。
-    private readonly MainViewModel viewModel = AppComposition.CreateMainViewModel();
-    private readonly ILoggingService logger = (ILoggingService)AppComposition.Services.GetService(typeof(ILoggingService))!;
-    private readonly IRuntimeTelemetryService telemetry = (IRuntimeTelemetryService)AppComposition.Services.GetService(typeof(IRuntimeTelemetryService))!;
-    private readonly IAccountService accountService = (IAccountService)AppComposition.Services.GetService(typeof(IAccountService))!;
-    private readonly IAuditTrailService auditTrail = (IAuditTrailService)AppComposition.Services.GetService(typeof(IAuditTrailService))!;
-    private readonly ISoftwareActivationService softwareActivationService = (ISoftwareActivationService)AppComposition.Services.GetService(typeof(ISoftwareActivationService))!;
+    private readonly MainViewModel viewModel;
+    private readonly ILoggingService logger;
+    private readonly IRuntimeTelemetryService telemetry;
+    private readonly IAccountService accountService;
+    private readonly IAuditTrailService auditTrail;
+    private readonly ISoftwareActivationService softwareActivationService;
+    private readonly ISessionSecurityService sessionSecurityService;
+    private readonly GlobalUserActivityMonitor globalUserActivityMonitor;
+    private readonly SessionLockViewModel sessionLockViewModel;
+    private readonly IUserDialogService userDialogService;
     private long lastRenderTicks;
     private bool closeAfterShutdown;
     private bool shutdownInProgress;
@@ -31,8 +34,29 @@ public partial class MainWindow : Window
 
     internal bool IsShutdownRequested => shutdownRequested || shutdownInProgress || closeAfterShutdown;
 
-    public MainWindow()
+    public MainWindow(
+        MainViewModel viewModel,
+        ILoggingService logger,
+        IRuntimeTelemetryService telemetry,
+        IAccountService accountService,
+        IAuditTrailService auditTrail,
+        ISoftwareActivationService softwareActivationService,
+        ISessionSecurityService sessionSecurityService,
+        GlobalUserActivityMonitor globalUserActivityMonitor,
+        SessionLockViewModel sessionLockViewModel,
+        IUserDialogService userDialogService)
     {
+        this.viewModel = viewModel;
+        this.logger = logger;
+        this.telemetry = telemetry;
+        this.accountService = accountService;
+        this.auditTrail = auditTrail;
+        this.softwareActivationService = softwareActivationService;
+        this.sessionSecurityService = sessionSecurityService;
+        this.globalUserActivityMonitor = globalUserActivityMonitor;
+        this.sessionLockViewModel = sessionLockViewModel;
+        this.userDialogService = userDialogService;
+
         logger.Info("开始加载主窗口 XAML");
         InitializeComponent();
         logger.Info("主窗口 XAML 加载完成");

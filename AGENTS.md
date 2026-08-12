@@ -73,7 +73,7 @@
 - `Services/`：应用服务接口、业务用例和领域规则入口。
 - `Services/Impl/`、`Infrastructure/`：数据库、文件、系统、媒体、日志和其他外部能力实现。
 - `Device/`：主程序与硬件/协议之间的防腐层和适配边界。
-- `Infrastructure/AppComposition.cs`：唯一组合根，负责依赖注入注册和对象图构建。
+- `Infrastructure/Composition/AppComposition.cs`：唯一组合根，负责依赖注入注册和对象图构建。
 
 该项目内部必须遵循第 4 节的单向依赖规则。目录不是架构本身；判断依据是代码职责和真实依赖。
 
@@ -221,7 +221,7 @@ View 只负责：
 
 ## 7. 依赖注入与生命周期
 
-- `Infrastructure/AppComposition.cs` 是唯一 DI 组合根。
+- `Infrastructure/Composition/AppComposition.cs` 是唯一 DI 组合根。
 - 构造函数注入优先；只有创建短生命周期对象时使用显式工厂。
 - 禁止属性注入和隐藏式服务定位。
 - Singleton 必须线程安全，并且其依赖不得是更短生命周期对象。

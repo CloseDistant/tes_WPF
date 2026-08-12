@@ -45,6 +45,8 @@ internal sealed class TestUserDialogService : IUserDialogService
         return SynchronizedStartConfirmationHandler?.Invoke(request) ?? SynchronizedStartConfirmationResult;
     }
 
+    public PasswordChangeDialogResult? RequestPasswordChange(string? errorMessage = null) => null;
+
     public void ShowInformation(string title, string message)
     {
     }

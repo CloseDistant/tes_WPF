@@ -1,0 +1,103 @@
+﻿namespace RuinaoSoftwareWpf;
+
+/// <summary>
+/// 硬件业务服务接口。
+///
+/// ViewModel 不直接操作设备，而是通过 IHardwareService 发命令。
+/// 这样以后如果硬件协议变了，只要换实现类，界面代码不需要改。
+/// </summary>
+public interface IHardwareService : IHardwareConnectionState
+{
+    /// <summary>最近一次成功取得的设备拓扑；未联机或尚未扫描时为null。</summary>
+    DeviceTopologySnapshot? CurrentDeviceTopology { get; }
+
+    /// <summary>设备拓扑被刷新或清空时触发。</summary>
+    event EventHandler<DeviceTopologyChangedEventArgs>? DeviceTopologyChanged;
+
+    /// <summary>最近一次CH1～CH16阻抗快照；断联或尚未读取时为null。</summary>
+    StimulationImpedanceSnapshot? CurrentStimulationImpedance { get; }
+
+    /// <summary>阻抗快照刷新或清空时触发。</summary>
+    event EventHandler<StimulationImpedanceChangedEventArgs>? StimulationImpedanceChanged;
+
+    /// <summary>自动或手动联机正在执行时为true，用于禁止重复点击联机。</summary>
+    bool IsConnecting { get; }
+
+    /// <summary>
+    /// 联机：建立与设备的通讯，并启动心跳检测。
+    /// </summary>
+    Task<HardwareOperationResult> ConnectAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 握手检测：发送一次握手帧，检查设备是否响应。
+    /// </summary>
+    Task<HardwareOperationResult> HandshakeAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 断开：停止心跳，断开设备连接。
+    /// </summary>
+    Task<HardwareOperationResult> DisconnectAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 读取产品型号。
+    /// </summary>
+    Task<HardwareOperationResult> ReadProductModelAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 读取板卡型号。
+    /// </summary>
+    Task<HardwareOperationResult> ReadBoardModelAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 阻抗检测。
+    /// </summary>
+    Task<HardwareOperationResult> CheckImpedanceAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 设置电刺激页面是否需要持续阻抗监控。启用后在联机状态下立即读取，随后每2秒读取一次。
+    /// </summary>
+    void SetStimulationImpedanceMonitoringEnabled(bool enabled);
+
+    /// <summary>重新读取背板槽位和在线业务板身份信息。</summary>
+    Task<DeviceTopologySnapshot> RefreshDeviceTopologyAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 启动指定 TI 组的刺激。
+    /// </summary>
+    Task<HardwareOperationResult> StartGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        PrescriptionDefinition parameterRecord,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 停止指定刺激组。
+    /// </summary>
+    Task<HardwareOperationResult> StopGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string stimulationType,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 紧急停止指定 TI 组的刺激。
+    /// </summary>
+    Task<HardwareOperationResult> EmergencyStopGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string stimulationType = StimulationModeCodes.TemporalInterference,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>停止已完成通道并写入自然完成记录。</summary>
+    Task<HardwareOperationResult> CompleteGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string stimulationType,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 软件退出时调用：优雅地停止心跳等后台任务。
+    /// </summary>
+    Task ShutdownAsync();
+}

@@ -2,12 +2,6 @@ using System.Windows.Media;
 
 namespace RuinaoSoftwareWpf;
 
-public sealed record EegMarkerTag(
-    string Name,
-    string KeyText,
-    Color Color,
-    string Code);
-
 public sealed record EegMarkerRecord(
     string Name,
     string Shortcut,

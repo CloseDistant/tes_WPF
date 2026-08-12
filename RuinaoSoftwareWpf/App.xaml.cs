@@ -1,7 +1,6 @@
 using System.Configuration;
 using System.Data;
 using System.Windows;
-using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 
@@ -21,7 +20,7 @@ public partial class App : Application
     private ILoggingService? logger;
 
     private ILoggingService Logger =>
-        logger ??= AppComposition.Services.GetRequiredService<ILoggingService>();
+        logger ??= AppComposition.GetLoggingService();
 
     /// <summary>
     /// 软件启动时调用。
@@ -110,6 +109,10 @@ public partial class App : Application
         };
 
         base.OnStartup(e);
+
+        var mainWindow = AppComposition.CreateMainWindow();
+        MainWindow = mainWindow;
+        mainWindow.Show();
     }
 
     /// <summary>

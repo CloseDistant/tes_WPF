@@ -71,9 +71,9 @@ public sealed class StimulationTreatmentLifecycleTests
         Assert.Equal(2, request.Channels.Count);
         Assert.Equal(1.25, request.Channels[0].CurrentMilliamp);
         Assert.Equal(1.75, request.Channels[1].CurrentMilliamp);
-        var first = JsonSerializer.Deserialize<StimulationRecordParameters.ChannelParameterSnapshot>(
+        var first = JsonSerializer.Deserialize<ChannelParameterSnapshot>(
             request.Channels[0].ParameterSnapshotJson);
-        var second = JsonSerializer.Deserialize<StimulationRecordParameters.ChannelParameterSnapshot>(
+        var second = JsonSerializer.Deserialize<ChannelParameterSnapshot>(
             request.Channels[1].ParameterSnapshotJson);
         Assert.Equal(1000, first?.CarrierFrequencyHz);
         Assert.Equal(1010, second?.CarrierFrequencyHz);
@@ -102,7 +102,7 @@ public sealed class StimulationTreatmentLifecycleTests
 
         var savedChannel = Assert.Single(request.Channels);
         Assert.Equal(34286, savedChannel.PlannedTotalCount);
-        var snapshot = JsonSerializer.Deserialize<StimulationRecordParameters.ChannelParameterSnapshot>(
+        var snapshot = JsonSerializer.Deserialize<ChannelParameterSnapshot>(
             savedChannel.ParameterSnapshotJson);
         Assert.Equal(10, snapshot?.PulseWidthMilliseconds);
         Assert.Equal(5, snapshot?.PulseRiseWidthMilliseconds);

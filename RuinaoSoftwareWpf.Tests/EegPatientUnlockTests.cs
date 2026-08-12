@@ -199,6 +199,8 @@ public sealed class EegPatientUnlockTests
             DirectCurrentSynchronizedStartConfirmationRequest request) =>
             false;
 
+        public PasswordChangeDialogResult? RequestPasswordChange(string? errorMessage = null) => null;
+
         public void ShowInformation(string title, string message)
         {
         }

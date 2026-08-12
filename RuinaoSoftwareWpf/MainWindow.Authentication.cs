@@ -2,7 +2,6 @@ namespace RuinaoSoftwareWpf;
 
 using System.Windows;
 using RuinaoSoftwareWpf.Views;
-using RuinaoSoftwareWpf.Views.Dialogs;
 
 public partial class MainWindow
 {
@@ -177,13 +176,8 @@ public partial class MainWindow
         string? error = null;
         while (true)
         {
-            var dialog = new ChangePasswordDialog { Owner = this };
-            if (!string.IsNullOrWhiteSpace(error))
-            {
-                dialog.ErrorMessage = error;
-            }
-
-            if (dialog.ShowDialog() != true)
+            var changePassword = userDialogService.RequestPasswordChange(error);
+            if (changePassword is null)
             {
                 await accountService.LogoutAsync();
                 return new PasswordChangeOutcome("首次登录必须修改密码，请重新登录", true);
@@ -193,8 +187,8 @@ public partial class MainWindow
             {
                 await accountService.ChangePasswordAsync(new ChangePasswordRequest(
                     user.UserId,
-                    dialog.NewPassword,
-                    dialog.ConfirmPassword));
+                    changePassword.NewPassword,
+                    changePassword.ConfirmPassword));
                 return new PasswordChangeOutcome("密码已修改，请使用新密码重新登录", false);
             }
             catch (Exception exception)

@@ -1,0 +1,162 @@
+namespace RuinaoSoftwareWpf;
+
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+
+internal sealed class CaptureMediaEncoder : ICaptureMediaEncoder
+{
+    public void WaitForFileReady(string filePath)
+    {
+        for (var index = 0; index < 30; index++)
+        {
+            try
+            {
+                if (File.Exists(filePath) && new FileInfo(filePath).Length > 0)
+                {
+                    using var stream = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    return;
+                }
+            }
+            catch (IOException)
+            {
+            }
+
+            Thread.Sleep(100);
+        }
+
+        throw new IOException($"文件尚未准备完成：{filePath}");
+    }
+
+    public async Task<double?> CalculateAdjustedFrameRateAsync(string audioPath, int writtenFrameCount)
+    {
+        if (writtenFrameCount <= 1)
+        {
+            return null;
+        }
+
+        var audioDurationMs = await CaptureMediaSyncProbe.ProbeDurationMsAsync(audioPath);
+        if (!audioDurationMs.HasValue || audioDurationMs.Value <= 0)
+        {
+            return null;
+        }
+
+        var frameRate = writtenFrameCount / (audioDurationMs.Value / 1000d);
+        return frameRate is >= 1d and <= 60d ? frameRate : null;
+    }
+
+    public async Task NormalizeVideoDurationAsync(string rawVideoPath, string normalizedVideoPath, double? adjustedFrameRate)
+    {
+        if (!adjustedFrameRate.HasValue)
+        {
+            File.Copy(rawVideoPath, normalizedVideoPath, overwrite: true);
+            return;
+        }
+
+        var startInfo = CreateProcessStartInfo(ResolveFfmpegPath());
+        startInfo.ArgumentList.Add("-y");
+        startInfo.ArgumentList.Add("-r");
+        startInfo.ArgumentList.Add(adjustedFrameRate.Value.ToString("0.###", CultureInfo.InvariantCulture));
+        startInfo.ArgumentList.Add("-i");
+        startInfo.ArgumentList.Add(rawVideoPath);
+        startInfo.ArgumentList.Add("-c:v");
+        startInfo.ArgumentList.Add("mjpeg");
+        startInfo.ArgumentList.Add("-q:v");
+        startInfo.ArgumentList.Add("3");
+        startInfo.ArgumentList.Add(normalizedVideoPath);
+        var result = await ExternalProcessRunner.RunAsync(startInfo, TimeSpan.FromMinutes(2));
+        if (result.ExitCode != 0 || !File.Exists(normalizedVideoPath))
+        {
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(result.StandardError)
+                ? "OpenCV 原始视频时长校正失败"
+                : result.StandardError.Trim());
+        }
+    }
+
+    public async Task MergeAsync(string videoPath, string audioPath, string outputPath)
+    {
+        var startInfo = CreateProcessStartInfo(ResolveFfmpegPath());
+        foreach (var argument in new[]
+        {
+            "-y", "-i", videoPath, "-i", audioPath, "-map", "0:v:0", "-map", "1:a:0",
+            "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", outputPath
+        })
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        var result = await ExternalProcessRunner.RunAsync(startInfo, TimeSpan.FromMinutes(5));
+        if (result.ExitCode != 0 || !File.Exists(outputPath))
+        {
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(result.StandardError)
+                ? "FFmpeg 合成失败"
+                : result.StandardError.Trim());
+        }
+    }
+
+    public void DeleteDiscardedRecording(CaptureSessionInfo session)
+    {
+        Exception? lastException = null;
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            try
+            {
+                DeleteFile(session.RawVideoPath);
+                DeleteFile(session.NormalizedVideoPath);
+                DeleteFile(session.AudioPath);
+                DeleteFile(session.MergedVideoPath);
+                if (Directory.Exists(session.OutputDirectory) && !Directory.EnumerateFileSystemEntries(session.OutputDirectory).Any())
+                {
+                    Directory.Delete(session.OutputDirectory);
+                }
+
+                return;
+            }
+            catch (IOException exception)
+            {
+                lastException = exception;
+                Thread.Sleep(150);
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                lastException = exception;
+                Thread.Sleep(150);
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"取消模块后无法删除音视频文件：{session.OutputDirectory}",
+            lastException);
+    }
+
+    internal static string ResolveFfmpegPath(string? applicationDirectory = null)
+    {
+        return TrustedExecutablePath.RequireBundledTool(
+            Path.Combine("ffmpeg", "ffmpeg.exe"),
+            applicationDirectory);
+    }
+
+    internal static string ResolveFfprobePath(string? applicationDirectory = null)
+    {
+        return TrustedExecutablePath.RequireBundledTool(
+            Path.Combine("ffmpeg", "ffprobe.exe"),
+            applicationDirectory);
+    }
+
+    private static ProcessStartInfo CreateProcessStartInfo(string fileName) => new()
+    {
+        FileName = fileName,
+        UseShellExecute = false,
+        CreateNoWindow = true,
+        RedirectStandardError = true,
+        RedirectStandardOutput = true
+    };
+
+    private static void DeleteFile(string path)
+    {
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+    }
+}

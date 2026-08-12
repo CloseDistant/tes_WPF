@@ -34,14 +34,15 @@ public sealed class DependencyInjectionArchitectureTests
         var productionDirectory = Path.Combine(repositoryRoot, "RuinaoSoftwareWpf");
         var allowedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            Path.Combine(productionDirectory, "App.xaml.cs"),
-            Path.Combine(productionDirectory, "MainWindow.xaml.cs"),
-            Path.Combine(productionDirectory, "MainWindow.SessionSecurity.cs"),
-            Path.Combine(productionDirectory, "Infrastructure", "AppComposition.cs")
+            Path.GetFullPath(Path.Combine(
+                productionDirectory,
+                "Infrastructure",
+                "Composition",
+                "AppComposition.cs"))
         };
         var violations = Directory
             .EnumerateFiles(productionDirectory, "*.cs", SearchOption.AllDirectories)
-            .Where(path => !allowedFiles.Contains(path))
+            .Where(path => !allowedFiles.Contains(Path.GetFullPath(path)))
             .Where(path =>
             {
                 var source = File.ReadAllText(path);
