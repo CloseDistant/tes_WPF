@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using System.Globalization;
 
@@ -35,6 +35,13 @@ public sealed class PatientFormViewModel : ObservableObject
     public bool IsEditMode => Mode == PatientFormMode.Edit;
     public string Title => IsCreateMode ? "新增患者" : "编辑患者信息";
     public string? PatientCode { get; }
+    public int NameMaxLength => PatientSaveRequestValidator.PatientNameMaxLength;
+    public int ClinicalInfoMaxLength => PatientSaveRequestValidator.ClinicalInfoMaxLength;
+    public int IdCardNumberMaxLength => PatientSaveRequestValidator.IdCardNumberMaxLength;
+    public int PhoneMaxLength => PatientSaveRequestValidator.PhoneMaxLength;
+    public int EmergencyContactNameMaxLength => PatientSaveRequestValidator.EmergencyContactNameMaxLength;
+    public int HomeAddressMaxLength => PatientSaveRequestValidator.HomeAddressMaxLength;
+    public string ClinicalInfoLengthText => $"{ClinicalInfo.Length} / {ClinicalInfoMaxLength}";
 
     public string Name { get => name; set => SetProperty(ref name, value); }
     public PatientSex? Sex { get => sex; set => SetProperty(ref sex, value); }
@@ -46,10 +53,38 @@ public sealed class PatientFormViewModel : ObservableObject
     public string EmergencyContactName { get => emergencyContactName; set => SetProperty(ref emergencyContactName, value); }
     public string EmergencyContactPhone { get => emergencyContactPhone; set => SetProperty(ref emergencyContactPhone, value); }
     public string HomeAddress { get => homeAddress; set => SetProperty(ref homeAddress, value); }
-    public string ClinicalInfo { get => clinicalInfo; set => SetProperty(ref clinicalInfo, value); }
+    public string ClinicalInfo
+    {
+        get => clinicalInfo;
+        set
+        {
+            if (SetProperty(ref clinicalInfo, value))
+            {
+                OnPropertyChanged(nameof(ClinicalInfoLengthText));
+            }
+        }
+    }
     public string ErrorMessage { get => errorMessage; private set => SetProperty(ref errorMessage, value); }
 
     public PatientValidationResult Validate(out PatientSaveRequest request)
+    {
+        request = BuildRequest();
+        var result = PatientSaveRequestValidator.Validate(request, Mode);
+        ErrorMessage = result.Message;
+        return result;
+    }
+
+    public PatientValidationError? ValidateField(string fieldName)
+    {
+        var result = PatientSaveRequestValidator.Validate(BuildRequest(), Mode);
+        return result.Errors.FirstOrDefault(error => error.FieldName == fieldName);
+    }
+
+    public void ShowError(string message) => ErrorMessage = message;
+
+    public void ClearError() => ErrorMessage = string.Empty;
+
+    private PatientSaveRequest BuildRequest()
     {
         var hasBirthDate = DateOnly.TryParseExact(
             BirthDateText.Trim(),
@@ -57,7 +92,7 @@ public sealed class PatientFormViewModel : ObservableObject
             CultureInfo.InvariantCulture,
             DateTimeStyles.None,
             out var birthDate);
-        request = new PatientSaveRequest(
+        return new PatientSaveRequest(
             PatientCode,
             Name.Trim(),
             Sex,
@@ -68,12 +103,7 @@ public sealed class PatientFormViewModel : ObservableObject
             Normalize(EmergencyContactPhone),
             Normalize(HomeAddress),
             Normalize(ClinicalInfo));
-        var result = PatientSaveRequestValidator.Validate(request, Mode);
-        ErrorMessage = result.Message;
-        return result;
     }
-
-    public void ClearError() => ErrorMessage = string.Empty;
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
