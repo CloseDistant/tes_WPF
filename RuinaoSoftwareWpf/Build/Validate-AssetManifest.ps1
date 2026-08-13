@@ -52,9 +52,10 @@ foreach ($reference in $sourceAssetReferences)
 $actual = @($header) + @($entries)
 if ($Update)
 {
-    [IO.File]::WriteAllLines(
+    $manifestContent = [string]::Join("`n", $actual) + "`n"
+    [IO.File]::WriteAllText(
         $manifestPath,
-        $actual,
+        $manifestContent,
         [Text.UTF8Encoding]::new($false))
     Write-Host "Updated asset manifest: $manifestPath ($($entries.Count) files)"
     exit 0
