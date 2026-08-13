@@ -1,10 +1,10 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using System.Globalization;
 using System.Text;
 
 /// <summary>
-/// 账号密码的统一复杂度策略。登录验证不调用本策略，以兼容既有密码和初始 Admin 密码。
+/// 账号密码的统一输入和复杂度策略。
 /// </summary>
 public static class AccountPasswordPolicy
 {
@@ -13,6 +13,16 @@ public static class AccountPasswordPolicy
 
     public const string RequirementText =
         "密码须为 8～20 个字符，且至少包含字母、数字、特殊字符中的两类，不允许包含空格";
+
+    /// <summary>
+    /// 登录仅校验安全输入边界，不校验新密码复杂度，以兼容初始 Admin 和既有账号。
+    /// </summary>
+    public static bool IsValidLoginInput(string? password)
+    {
+        return !string.IsNullOrEmpty(password)
+            && new StringInfo(password).LengthInTextElements <= MaximumLength
+            && !password.EnumerateRunes().Any(Rune.IsWhiteSpace);
+    }
 
     public static void Validate(string password, string confirmPassword)
     {

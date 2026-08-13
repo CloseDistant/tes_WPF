@@ -1,4 +1,4 @@
-<Window x:Class="RuinaoSoftwareWpf.Views.Dialogs.AccountRegisterDialog"
+﻿<Window x:Class="RuinaoSoftwareWpf.Views.Dialogs.AccountRegisterDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:RuinaoSoftwareWpf"
@@ -68,6 +68,7 @@
 
                 <TextBlock Text="登录名" VerticalAlignment="Center" Foreground="#C8D0DE" />
                 <TextBox x:Name="LoginNameBox"
+                         MaxLength="{x:Static local:AccountLoginNamePolicy.MaximumLength}"
                          Grid.Column="1"
                          Height="30"
                          Background="#313644"
@@ -79,6 +80,7 @@
 
                 <TextBlock Grid.Row="1" Text="密码" VerticalAlignment="Center" Foreground="#C8D0DE" />
                 <PasswordBox x:Name="PasswordBox"
+                             MaxLength="{x:Static local:AccountPasswordPolicy.MaximumLength}"
                              Grid.Row="1"
                              Grid.Column="1"
                              Height="30"
@@ -91,6 +93,7 @@
 
                 <TextBlock Grid.Row="2" Text="再次输入密码" VerticalAlignment="Center" Foreground="#C8D0DE" />
                 <PasswordBox x:Name="ConfirmPasswordBox"
+                             MaxLength="{x:Static local:AccountPasswordPolicy.MaximumLength}"
                              Grid.Row="2"
                              Grid.Column="1"
                              Height="30"

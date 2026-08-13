@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using Microsoft.EntityFrameworkCore;
 using System.IO;
@@ -103,17 +103,19 @@ public sealed class LocalAccountService : IAccountService
     {
         await EnsureInitializedAsync(cancellationToken);
 
-        if (string.IsNullOrWhiteSpace(loginName) || string.IsNullOrWhiteSpace(password))
+        if (string.IsNullOrWhiteSpace(loginName) || string.IsNullOrEmpty(password))
         {
             await WriteAuditAsync(null, null, "login", "failed", "登录名和密码不能为空", cancellationToken);
             return new AccountLoginResult(false, null, "登录名和密码不能为空");
         }
 
         var normalizedLoginName = loginName.Trim();
-        if (!IsValidLoginName(normalizedLoginName))
+        if (!AccountLoginNamePolicy.IsValid(normalizedLoginName)
+            || !AccountPasswordPolicy.IsValidLoginInput(password))
         {
-            await WriteAuditAsync(null, null, "login", "failed", "登录名格式不正确", cancellationToken);
-            return new AccountLoginResult(false, null, "登录名或密码错误");
+            const string message = "登录名或密码格式不正确";
+            await WriteAuditAsync(null, null, "login", "failed", message, cancellationToken);
+            return new AccountLoginResult(false, null, message);
         }
 
         await loginGate.WaitAsync(cancellationToken);
@@ -218,7 +220,7 @@ public sealed class LocalAccountService : IAccountService
                 user.LockoutEndUnixMs = null;
             }
 
-            if (string.IsNullOrEmpty(password)
+            if (!AccountPasswordPolicy.IsValidLoginInput(password)
                 || !PasswordHasher.VerifyPassword(password, user.PasswordHash, user.PasswordSalt))
             {
                 user.FailedLoginAttempts++;
@@ -630,10 +632,7 @@ public sealed class LocalAccountService : IAccountService
             throw new InvalidOperationException("登录名和姓名不能为空");
         }
 
-        if (!IsValidLoginName(request.LoginName.Trim()))
-        {
-            throw new InvalidOperationException("账号只能使用英文字母和数字");
-        }
+        AccountLoginNamePolicy.Validate(request.LoginName.Trim());
 
         AccountPasswordPolicy.Validate(request.Password, request.ConfirmPassword);
 
@@ -641,11 +640,6 @@ public sealed class LocalAccountService : IAccountService
         {
             throw new InvalidOperationException("职业只能选择 Doctor 或 Technician");
         }
-    }
-
-    private static bool IsValidLoginName(string loginName)
-    {
-        return loginName.Length > 0 && loginName.All(static ch => ch is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9');
     }
 
     private static CurrentUserInfo ToCurrentUser(AccountUserEntity user)
