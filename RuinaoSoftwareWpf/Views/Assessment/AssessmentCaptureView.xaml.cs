@@ -87,6 +87,20 @@ public partial class AssessmentCaptureView : UserControl
         playbackTimer.Start();
     }
 
+    private void SkipDemoButton_Click(object sender, RoutedEventArgs e)
+    {
+        var viewModel = ViewModel;
+        if (viewModel is null || !viewModel.SkipDemoForDevelopment())
+        {
+            return;
+        }
+
+        playbackTimer.Stop();
+        DemoMedia.Stop();
+        DemoMedia.Position = TimeSpan.Zero;
+        StartCameraPreview();
+    }
+
     private async void StartCalibrationButton_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         var viewModel = ViewModel;

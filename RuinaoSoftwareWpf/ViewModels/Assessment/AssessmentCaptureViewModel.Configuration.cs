@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 /// <summary>
 /// 采集工作台 ViewModel 的流程状态与内置模块配置。
@@ -147,7 +147,9 @@ public sealed partial class AssessmentCaptureViewModel
         new(QuestionnaireHModuleCode, "ModuleQuestionnaireH"),
         new(QuestionnaireIModuleCode, "ModuleQuestionnaireI"),
         new(QuestionnaireJModuleCode, "ModuleQuestionnaireJ"),
-        new(SyncTestModuleCode, "ModuleSyncTest", true)
+#if DEBUG
+        new(SyncTestModuleCode, "ModuleSyncTest", true),
+#endif
     ];
 
     /// <summary>

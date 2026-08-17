@@ -448,6 +448,8 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public string PrimaryActionText => isDemoCompleted ? T("CaptureWorkspaceReplayDemo") : T("CaptureWorkspacePlayDemo");
 
+    public string SkipDemoButtonText => T("CaptureWorkspaceSkipDemo");
+
     public string SecondaryActionText => T("CaptureWorkspaceStart");
 
     public string WorkspaceTitleText => T("AssessmentCapture");
@@ -747,6 +749,13 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     public bool IsGenericFallbackStage => IsFallbackStage && !IsCompletionStage;
 
     public bool ShowDemoPlayAction => IsDemoStep && !isDemoPlaying && !isDemoCompleted;
+
+    public bool ShowDevelopmentSkipDemoAction =>
+        IsDevelopmentModuleNavigationEnabled
+        && IsDemoStep
+        && isDemoPlaying
+        && activeModuleAttempt is null
+        && !captureMediaService.IsCapturing;
 
     public bool ShowFaceCheckAction => IsDemoStep && isDemoCompleted && !IsFormModule;
 
@@ -1186,6 +1195,23 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         StageNoticeText = string.Empty;
         PlaybackTimeText = "00:00 / 播放中";
         NotifyStageChanged();
+    }
+
+    public bool SkipDemoForDevelopment()
+    {
+        if (!ShowDevelopmentSkipDemoAction)
+        {
+            return false;
+        }
+
+        StopModuleExecutionTimers();
+        isDemoPlaying = false;
+        isDemoCompleted = true;
+        MoveToStep(CaptureWorkbenchStep.FaceCheck);
+        PlaybackTimeText = T("CaptureWorkspaceDemoSkipped");
+        StageNoticeText = T("CaptureWorkspaceDemoSkippedNotice");
+        NotifyStageChanged();
+        return true;
     }
 
     public void CancelDemoPlaybackForNavigation()
@@ -2108,6 +2134,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(DevHintText));
         OnPropertyChanged(nameof(StartButtonStateText));
         OnPropertyChanged(nameof(PrimaryActionText));
+        OnPropertyChanged(nameof(SkipDemoButtonText));
         OnPropertyChanged(nameof(IsDemoStage));
         OnPropertyChanged(nameof(IsDemoPlaying));
         OnPropertyChanged(nameof(IsDemoCompleted));
@@ -2195,6 +2222,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(SavingStageDescriptionText));
         OnPropertyChanged(nameof(IsGenericFallbackStage));
         OnPropertyChanged(nameof(ShowDemoPlayAction));
+        OnPropertyChanged(nameof(ShowDevelopmentSkipDemoAction));
         OnPropertyChanged(nameof(ShowFaceCheckAction));
         OnPropertyChanged(nameof(ShowModuleStartAction));
         OnPropertyChanged(nameof(ShowSyncTestStartAction));
