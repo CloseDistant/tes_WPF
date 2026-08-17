@@ -34,6 +34,23 @@ public partial class MainWindow : Window
 
     internal bool IsShutdownRequested => shutdownRequested || shutdownInProgress || closeAfterShutdown;
 
+    internal void RestoreAndActivate()
+    {
+        if (IsShutdownRequested)
+        {
+            return;
+        }
+
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Show();
+        Activate();
+        Focus();
+    }
+
     public MainWindow(
         MainViewModel viewModel,
         ILoggingService logger,

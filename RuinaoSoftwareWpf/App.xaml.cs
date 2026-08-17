@@ -16,8 +16,15 @@ namespace RuinaoSoftwareWpf;
 /// </summary>
 public partial class App : Application
 {
+    private const string SingleInstanceMutexName =
+        @"Local\RuinaoSoftwareWpf.SingleInstance.35D1BCDD-E527-4A59-9085-617606B4FC8E";
+    private const string SingleInstancePipeName =
+        "RuinaoSoftwareWpf.SingleInstance.Activation.35D1BCDD-E527-4A59-9085-617606B4FC8E";
+
     private bool systemAwakeInhibitionActive;
     private ILoggingService? logger;
+    private SingleInstanceCoordinator? singleInstanceCoordinator;
+    private int pendingActivationRequest;
 
     private ILoggingService Logger =>
         logger ??= AppComposition.GetLoggingService();
@@ -27,6 +34,11 @@ public partial class App : Application
     /// </summary>
     protected override void OnStartup(StartupEventArgs e)
     {
+        if (!TryEnterSingleInstance())
+        {
+            return;
+        }
+
         if (!BackupRestoreRecoveryGuard.TryRecoverPending(out var recoveryMessage))
         {
             MessageBox.Show(
@@ -112,7 +124,9 @@ public partial class App : Application
 
         var mainWindow = AppComposition.CreateMainWindow();
         MainWindow = mainWindow;
+        mainWindow.Closing += OnMainWindowClosing;
         mainWindow.Show();
+        ActivateMainWindowIfRequested();
     }
 
     /// <summary>
@@ -131,7 +145,97 @@ public partial class App : Application
         }
 
         logger?.Info($"软件退出，ExitCode={e.ApplicationExitCode}");
+        singleInstanceCoordinator?.Dispose();
+        singleInstanceCoordinator = null;
         base.OnExit(e);
+    }
+
+    private bool TryEnterSingleInstance()
+    {
+        singleInstanceCoordinator = new SingleInstanceCoordinator(
+            SingleInstanceMutexName,
+            SingleInstancePipeName);
+        if (singleInstanceCoordinator.TryAcquireOwnership(TimeSpan.Zero))
+        {
+            StartActivationListener();
+            return true;
+        }
+
+        if (TryActivateExistingInstance())
+        {
+            Shutdown();
+            return false;
+        }
+
+        var result = MessageBox.Show(
+            "软件已在运行，或正在安全关闭。\n\n请选择“重试”等待关闭完成，或选择“取消”退出本次启动。",
+            "软件正在运行",
+            MessageBoxButton.RetryCancel,
+            MessageBoxImage.Information);
+        if (result != MessageBoxResult.Retry)
+        {
+            Shutdown();
+            return false;
+        }
+
+        if (singleInstanceCoordinator.TryAcquireOwnership(TimeSpan.FromSeconds(10)))
+        {
+            StartActivationListener();
+            return true;
+        }
+
+        if (!TryActivateExistingInstance())
+        {
+            MessageBox.Show(
+                "软件仍在运行且暂时没有响应。请返回已打开的软件窗口，或等待其完成安全关闭后再试。\n\n请勿在仪器运行期间强制结束进程。",
+                "软件暂时无法启动",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+
+        Shutdown();
+        return false;
+    }
+
+    private bool TryActivateExistingInstance()
+    {
+        return singleInstanceCoordinator!
+            .TryActivateExistingAsync(TimeSpan.FromSeconds(2))
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    private void StartActivationListener()
+    {
+        singleInstanceCoordinator!.ActivationRequested += OnActivationRequested;
+        singleInstanceCoordinator.StartListening();
+    }
+
+    private void OnActivationRequested(object? sender, EventArgs e)
+    {
+        Interlocked.Exchange(ref pendingActivationRequest, 1);
+        _ = Dispatcher.BeginInvoke(
+            ActivateMainWindowIfRequested,
+            DispatcherPriority.Send);
+    }
+
+    private void ActivateMainWindowIfRequested()
+    {
+        if (Volatile.Read(ref pendingActivationRequest) == 0 || MainWindow is not MainWindow mainWindow)
+        {
+            return;
+        }
+
+        Interlocked.Exchange(ref pendingActivationRequest, 0);
+        mainWindow.RestoreAndActivate();
+    }
+
+    private void OnMainWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (sender is MainWindow { IsShutdownRequested: true })
+        {
+            singleInstanceCoordinator?.StopListening();
+        }
     }
 
     private static bool IsFatalException(Exception exception)
