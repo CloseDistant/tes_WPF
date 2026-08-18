@@ -14,6 +14,7 @@ public sealed class AssessmentModuleLifecycleServiceTests
             new FixedPatientService(CreatePatient("patient-a")),
             TimeProvider.System);
         var request = new AssessmentModuleStartRequest(
+            7,
             "patient-b",
             "session-1",
             "eye_calibration",
@@ -36,6 +37,7 @@ public sealed class AssessmentModuleLifecycleServiceTests
             new FixedPatientService(CreatePatient("patient-a")),
             TimeProvider.System);
         var request = new AssessmentModuleStartRequest(
+            7,
             "patient-a",
             "session-1",
             "eye_calibration",
@@ -73,16 +75,26 @@ public sealed class AssessmentModuleLifecycleServiceTests
     {
         public int StartCount { get; private set; }
 
-        public Task<AssessmentProgressSnapshot> GetProgressAsync(
+        public Task<AssessmentRunContext?> GetActiveRunAsync(
             string patientCode,
             int totalModuleCount,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(new AssessmentProgressSnapshot(
-                1,
-                patientCode,
-                AssessmentRunStatus.InProgress,
-                0,
-                []));
+            Task.FromResult<AssessmentRunContext?>(null);
+
+        public Task<AssessmentRunContext> CreateRunAsync(
+            string patientCode,
+            int totalModuleCount,
+            DateTimeOffset startedAt,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AssessmentRunContext(7, patientCode, 0, totalModuleCount, startedAt));
+
+        public Task<AssessmentRunContext> ResumeRunAsync(
+            long runId,
+            string patientCode,
+            int totalModuleCount,
+            DateTimeOffset resumedAt,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AssessmentRunContext(runId, patientCode, 0, totalModuleCount, resumedAt));
 
         public Task<AssessmentModuleRunContext> StartModuleAsync(
             AssessmentModuleStartRequest request,

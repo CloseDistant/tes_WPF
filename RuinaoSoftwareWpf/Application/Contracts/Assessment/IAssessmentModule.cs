@@ -6,11 +6,6 @@ namespace RuinaoSoftwareWpf.ApplicationContracts;
 /// </summary>
 public interface IAssessmentModule
 {
-    Task<AssessmentProgressSnapshot> GetProgressAsync(
-        string patientCode,
-        int totalModuleCount,
-        CancellationToken cancellationToken = default);
-
     Task<AssessmentModuleRunContext> StartAsync(
         AssessmentModuleStartRequest request,
         CancellationToken cancellationToken = default);

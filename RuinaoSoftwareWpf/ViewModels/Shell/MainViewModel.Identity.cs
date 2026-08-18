@@ -24,7 +24,7 @@ public sealed partial class MainViewModel
         try
         {
             await Patient.InitializeAsync();
-            await AssessmentCapture.LoadPatientProgressAsync();
+            await AssessmentFeature.ShowEntryAsync();
             ShellState.FooterStatus = patientService.CurrentPatient is null ? "请新增或选择患者" : $"当前患者：{patientService.CurrentPatient.PatientCode}";
         }
         catch (Exception ex)
@@ -64,7 +64,7 @@ public sealed partial class MainViewModel
         }
 
         var patient = await patientService.CreatePatientAsync(dialog.Request);
-        await AssessmentCapture.LoadPatientProgressAsync();
+        await AssessmentFeature.ShowEntryAsync();
         ShellState.FooterStatus = $"患者已新增并切换为当前患者：{patient.Name}";
     }
 
@@ -143,7 +143,7 @@ public sealed partial class MainViewModel
         }
 
         var patient = await patientService.SwitchCurrentPatientAsync(dialog.SelectedPatient.PatientCode);
-        await AssessmentCapture.LoadPatientProgressAsync();
+        await AssessmentFeature.ShowEntryAsync();
         ShellState.FooterStatus = $"已切换到患者：{patient.Name}。";
     }
 

@@ -143,6 +143,11 @@ public partial class AssessmentCaptureView : UserControl
         {
             await BeginModuleRecordingSessionAsync(viewModel);
         }
+        catch (AssessmentModuleStartException exception)
+        {
+            viewModel.ShowStageNotice($"当前评估模块无法启动：{exception.InnerException?.Message ?? exception.Message}");
+            return;
+        }
         catch (Exception exception)
         {
             StopModuleRecording(viewModel, CaptureMediaStopReason.Failed, viewModel.Localize("CaptureWorkspaceMediaStartFailed", exception.Message));
@@ -182,6 +187,11 @@ public partial class AssessmentCaptureView : UserControl
         try
         {
             await BeginModuleRecordingSessionAsync(viewModel);
+        }
+        catch (AssessmentModuleStartException exception)
+        {
+            viewModel.ShowStageNotice($"当前评估模块无法启动：{exception.InnerException?.Message ?? exception.Message}");
+            return;
         }
         catch (Exception exception)
         {
@@ -451,9 +461,18 @@ public partial class AssessmentCaptureView : UserControl
         // View 只组织当前模块上下文，实际文件路径、音视频录制和数据库记录交给录制服务。
         var sessionName = await viewModel.GetOrStartUnifiedSessionKeyAsync();
         var moduleCode = viewModel.CurrentModuleCode;
-        long? assessmentAttemptId = viewModel.IsSyncTestModule || viewModel.IsDevelopmentModuleOverride
-            ? null
-            : (await viewModel.BeginCurrentModuleAttemptAsync(sessionName)).AttemptId;
+        long? assessmentAttemptId = null;
+        if (!viewModel.IsSyncTestModule && !viewModel.IsDevelopmentModuleOverride)
+        {
+            try
+            {
+                assessmentAttemptId = (await viewModel.BeginCurrentModuleAttemptAsync(sessionName)).AttemptId;
+            }
+            catch (Exception exception)
+            {
+                throw new AssessmentModuleStartException(exception);
+            }
+        }
 
         var session = await viewModel.StartMediaRecordingAsync(new CaptureMediaStartRequest(
             assessmentAttemptId,
@@ -464,6 +483,9 @@ public partial class AssessmentCaptureView : UserControl
 
         viewModel.BeginFrameSaving(session.OutputDirectory);
     }
+
+    private sealed class AssessmentModuleStartException(Exception innerException)
+        : Exception("正式评估模块上下文无效。", innerException);
 
     private static void StopModuleRecording(
         AssessmentCaptureViewModel viewModel,

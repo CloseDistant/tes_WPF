@@ -4,9 +4,22 @@ using RuinaoSoftwareWpf.ApplicationContracts;
 
 public interface IAssessmentRunStore
 {
-    Task<AssessmentProgressSnapshot> GetProgressAsync(
+    Task<AssessmentRunContext?> GetActiveRunAsync(
         string patientCode,
         int totalModuleCount,
+        CancellationToken cancellationToken = default);
+
+    Task<AssessmentRunContext> CreateRunAsync(
+        string patientCode,
+        int totalModuleCount,
+        DateTimeOffset startedAt,
+        CancellationToken cancellationToken = default);
+
+    Task<AssessmentRunContext> ResumeRunAsync(
+        long runId,
+        string patientCode,
+        int totalModuleCount,
+        DateTimeOffset resumedAt,
         CancellationToken cancellationToken = default);
 
     Task<AssessmentModuleRunContext> StartModuleAsync(

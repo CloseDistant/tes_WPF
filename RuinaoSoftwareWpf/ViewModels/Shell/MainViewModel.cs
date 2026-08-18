@@ -78,6 +78,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         PrescriptionViewModel prescription,
         EegSignalCaptureViewModel eegSignalCapture,
         AssessmentCaptureViewModel assessmentCapture,
+        AssessmentFeatureHostViewModel assessmentFeature,
         FemSimulationViewModel femSimulation,
         DeviceViewModel device,
         ConfigViewModel config,
@@ -112,6 +113,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         Prescription = prescription;
         EegSignalCapture = eegSignalCapture;
         AssessmentCapture = assessmentCapture;
+        AssessmentFeature = assessmentFeature;
         FemSimulation = femSimulation;
         Device = device;
         Config = config;
@@ -265,6 +267,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
     /// <summary>采集工作台 ViewModel。</summary>
     public AssessmentCaptureViewModel AssessmentCapture { get; }
+
+    /// <summary>数字表型评估入口与采集工作台宿主。</summary>
+    public AssessmentFeatureHostViewModel AssessmentFeature { get; }
 
     /// <summary>FEM 仿真页面 ViewModel。</summary>
     public FemSimulationViewModel FemSimulation { get; }
@@ -522,7 +527,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
             AppPage.Control => ResolveStimulationPageViewModel(),
             AppPage.EegSignalCapture => EegSignalCapture,
             AppPage.ClosedLoopControl => ConfigurePlaceholder(page),
-            AppPage.AssessmentCapture => AssessmentCapture,
+            AppPage.AssessmentCapture => AssessmentFeature,
             AppPage.ElectrodePlanning => ConfigurePlaceholder(page),
             AppPage.HeadModel => ConfigurePlaceholder(page),
             AppPage.ProtocolManager => Prescription,
@@ -764,6 +769,10 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         }
 
         ChangeCurrentPage(page);
+        if (page == AppPage.AssessmentCapture)
+        {
+            await AssessmentFeature.ShowEntryAsync(cancellationToken);
+        }
     }
 
     private void ChangeCurrentPage(AppPage page)
@@ -781,6 +790,11 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         if (currentPage == AppPage.AssessmentCapture && page != AppPage.AssessmentCapture)
         {
             AssessmentCapture.ReleaseCameraForNavigation();
+        }
+
+        if (page == AppPage.AssessmentCapture)
+        {
+            AssessmentFeature.ShowEntry();
         }
 
         var nextPageViewModel = page == AppPage.Control

@@ -114,6 +114,7 @@ public static class AppComposition
         services.AddSingleton<IEegRecordingRepository>(provider => provider.GetRequiredService<SqliteCaptureRecordingRepository>());
         services.AddSingleton<IUnifiedSessionRepository>(provider => provider.GetRequiredService<SqliteCaptureRecordingRepository>());
         services.AddSingleton<IAssessmentRunStore>(provider => provider.GetRequiredService<SqliteCaptureRecordingRepository>());
+        services.AddSingleton<IAssessmentRunCoordinator, AssessmentRunCoordinator>();
         services.AddSingleton<ApplicationContracts.IAssessmentModule, AssessmentModuleLifecycleService>();
         services.AddSingleton<IUnifiedSessionService, UnifiedSessionService>(); // 电刺激、EEG、数字表型共享 Session 与时间轴
         services.AddSingleton<CaptureMediaRecorder>(); // OpenCV、音频、编码和仓储的底层录制实现
@@ -178,6 +179,8 @@ public static class AppComposition
         services.AddSingleton<PrescriptionViewModel>(); // 公用处方管理页面
         services.AddSingleton<EegSignalCaptureViewModel>(); // EEG 采集面板
         services.AddSingleton<AssessmentCaptureViewModel>(); // 采集工作台：导航切换时保留模块进度
+        services.AddSingleton<AssessmentEntryViewModel>(); // 数字表型评估的患者级 Run 入口
+        services.AddSingleton<AssessmentFeatureHostViewModel>(); // 入口与采集工作台的单一页面宿主
         services.AddSingleton<AssessmentWorkbenchCoordinator>(); // 数字表型工作台流程协调器和模块 VM 容器
         services.AddSingleton<FemSimulationViewModel>();   // FEM 仿真面板
         services.AddSingleton<DeviceViewModel>();          // 设备管理面板

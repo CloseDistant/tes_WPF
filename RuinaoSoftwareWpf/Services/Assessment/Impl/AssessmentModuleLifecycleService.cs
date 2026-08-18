@@ -22,24 +22,6 @@ internal sealed class AssessmentModuleLifecycleService : IAssessmentModule
         this.timeProvider = timeProvider;
     }
 
-    public Task<AssessmentProgressSnapshot> GetProgressAsync(
-        string patientCode,
-        int totalModuleCount,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(patientCode);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(totalModuleCount);
-        if (!string.Equals(
-                patientService.CurrentPatient?.PatientCode,
-                patientCode,
-                StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("只能读取当前患者的评估进度。");
-        }
-
-        return store.GetProgressAsync(patientCode, totalModuleCount, cancellationToken);
-    }
-
     public Task<AssessmentModuleRunContext> StartAsync(
         AssessmentModuleStartRequest request,
         CancellationToken cancellationToken = default)
@@ -55,6 +37,8 @@ internal sealed class AssessmentModuleLifecycleService : IAssessmentModule
         {
             throw new ArgumentOutOfRangeException(nameof(request), "模块序号超出正式评估流程范围。");
         }
+
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(request.RunId);
 
         return store.StartModuleAsync(request, timeProvider.GetUtcNow(), cancellationToken);
     }

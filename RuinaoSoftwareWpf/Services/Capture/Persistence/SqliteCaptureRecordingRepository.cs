@@ -476,9 +476,31 @@ public sealed class SqliteCaptureRecordingRepository :
         }, cancellationToken);
     }
 
-    public Task<AssessmentProgressSnapshot> GetProgressAsync(
+    public async Task<AssessmentRunContext?> GetActiveRunAsync(
         string patientCode,
         int totalModuleCount,
+        CancellationToken cancellationToken = default)
+    {
+        var databasePath = AppDatabasePathProvider.MainDatabasePath;
+        await using var context = await OpenContextAsync(databasePath, cancellationToken);
+        var run = await context.AssessmentRuns
+            .AsNoTracking()
+            .Where(item => item.PatientCode == patientCode && item.Status == "in_progress")
+            .OrderByDescending(item => item.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (run is null)
+        {
+            return null;
+        }
+
+        ValidateRunShape(run, patientCode, totalModuleCount);
+        return ToRunContext(run);
+    }
+
+    public Task<AssessmentRunContext> CreateRunAsync(
+        string patientCode,
+        int totalModuleCount,
+        DateTimeOffset startedAt,
         CancellationToken cancellationToken = default)
     {
         var databasePath = AppDatabasePathProvider.MainDatabasePath;
@@ -486,21 +508,55 @@ public sealed class SqliteCaptureRecordingRepository :
         {
             await using var context = await OpenContextAsync(databasePath, cancellationToken);
             await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-            var nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var run = await context.AssessmentRuns
+            var existing = await context.AssessmentRuns
                 .Where(item => item.PatientCode == patientCode && item.Status == "in_progress")
                 .OrderByDescending(item => item.Id)
                 .FirstOrDefaultAsync(cancellationToken);
-            if (run is null)
+            if (existing is not null)
             {
-                return new AssessmentProgressSnapshot(
-                    null,
-                    patientCode,
-                    AssessmentRunStatus.InProgress,
-                    0,
-                    []);
+                throw new InvalidOperationException("当前患者已经存在进行中的评估，请重新加载后继续该评估。");
             }
 
+            var startedAtUnixMs = startedAt.ToUnixTimeMilliseconds();
+            var run = new AssessmentRunEntity
+            {
+                PatientCode = patientCode,
+                Status = "in_progress",
+                TotalModuleCount = totalModuleCount,
+                NextModuleIndex = 0,
+                StartedAtUnixMs = startedAtUnixMs,
+                CreatedAtUnixMs = startedAtUnixMs,
+                UpdatedAtUnixMs = startedAtUnixMs
+            };
+            context.AssessmentRuns.Add(run);
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return ToRunContext(run);
+        }, cancellationToken);
+    }
+
+    public Task<AssessmentRunContext> ResumeRunAsync(
+        long runId,
+        string patientCode,
+        int totalModuleCount,
+        DateTimeOffset resumedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var databasePath = AppDatabasePathProvider.MainDatabasePath;
+        return ExecuteWriteAsync(databasePath, async () =>
+        {
+            await using var context = await OpenContextAsync(databasePath, cancellationToken);
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            var run = await context.AssessmentRuns
+                .FirstOrDefaultAsync(item => item.Id == runId, cancellationToken)
+                ?? throw new InvalidOperationException("当前评估已经不存在，请返回评估入口重新加载。");
+            ValidateRunShape(run, patientCode, totalModuleCount);
+            if (!string.Equals(run.Status, "in_progress", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("当前评估已经结束，请返回评估入口重新加载。");
+            }
+
+            var resumedAtUnixMs = resumedAt.ToUnixTimeMilliseconds();
             var interruptedAttempts = await context.AssessmentModuleAttempts
                 .Where(item => item.RunId == run.Id && (item.Status == "running" || item.Status == "saving"))
                 .ToListAsync(cancellationToken);
@@ -508,29 +564,15 @@ public sealed class SqliteCaptureRecordingRepository :
             {
                 attempt.Status = "cancelled_invalid";
                 attempt.ErrorCode = "APPLICATION_INTERRUPTED";
-                attempt.Message = "软件退出或患者恢复时发现未结束模块，本次尝试已作废。";
-                attempt.EndedAtUnixMs = nowUnixMs;
-                attempt.UpdatedAtUnixMs = nowUnixMs;
+                attempt.Message = "继续评估时发现未结束模块，本次尝试已作废并将从模块开头重新执行。";
+                attempt.EndedAtUnixMs = resumedAtUnixMs;
+                attempt.UpdatedAtUnixMs = resumedAtUnixMs;
             }
 
-            if (interruptedAttempts.Count > 0)
-            {
-                await context.SaveChangesAsync(cancellationToken);
-            }
-
-            var completedModules = await context.AssessmentModuleAttempts
-                .Where(item => item.RunId == run.Id && item.Status == "completed")
-                .OrderBy(item => item.ModuleIndex)
-                .Select(item => item.ModuleCode)
-                .Distinct()
-                .ToListAsync(cancellationToken);
+            run.UpdatedAtUnixMs = resumedAtUnixMs;
+            await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return new AssessmentProgressSnapshot(
-                run.Id,
-                patientCode,
-                AssessmentRunStatus.InProgress,
-                Math.Clamp(run.NextModuleIndex, 0, totalModuleCount),
-                completedModules);
+            return ToRunContext(run);
         }, cancellationToken);
     }
 
@@ -546,33 +588,12 @@ public sealed class SqliteCaptureRecordingRepository :
             await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
             var startedAtUnixMs = startedAt.ToUnixTimeMilliseconds();
             var run = await context.AssessmentRuns
-                .Where(item => item.PatientCode == request.PatientCode && item.Status == "in_progress")
-                .OrderByDescending(item => item.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-            if (run is null)
+                .FirstOrDefaultAsync(item => item.Id == request.RunId, cancellationToken)
+                ?? throw new InvalidOperationException("当前评估上下文不可用，请返回评估入口重新加载。");
+            ValidateRunShape(run, request.PatientCode, request.TotalModuleCount);
+            if (!string.Equals(run.Status, "in_progress", StringComparison.Ordinal))
             {
-                if (request.ModuleIndex != 0)
-                {
-                    throw new InvalidOperationException("患者没有未完成评估，必须从第一个模块开始。");
-                }
-
-                run = new AssessmentRunEntity
-                {
-                    PatientCode = request.PatientCode,
-                    Status = "in_progress",
-                    TotalModuleCount = request.TotalModuleCount,
-                    NextModuleIndex = 0,
-                    StartedAtUnixMs = startedAtUnixMs,
-                    CreatedAtUnixMs = startedAtUnixMs,
-                    UpdatedAtUnixMs = startedAtUnixMs
-                };
-                context.AssessmentRuns.Add(run);
-                await context.SaveChangesAsync(cancellationToken);
-            }
-
-            if (run.TotalModuleCount != request.TotalModuleCount)
-            {
-                throw new InvalidOperationException("当前未完成评估的模块数量与正式流程不一致，请先完成数据兼容处理。");
+                throw new InvalidOperationException("当前评估已经结束，请返回评估入口重新加载。");
             }
 
             if (run.NextModuleIndex != request.ModuleIndex)
@@ -620,6 +641,32 @@ public sealed class SqliteCaptureRecordingRepository :
                 request.ModuleIndex,
                 startedAt);
         }, cancellationToken);
+    }
+
+    private static AssessmentRunContext ToRunContext(AssessmentRunEntity run)
+    {
+        return new AssessmentRunContext(
+            run.Id,
+            run.PatientCode,
+            Math.Clamp(run.NextModuleIndex, 0, run.TotalModuleCount),
+            run.TotalModuleCount,
+            DateTimeOffset.FromUnixTimeMilliseconds(run.StartedAtUnixMs));
+    }
+
+    private static void ValidateRunShape(
+        AssessmentRunEntity run,
+        string patientCode,
+        int totalModuleCount)
+    {
+        if (!string.Equals(run.PatientCode, patientCode, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("当前患者与评估记录不一致，请返回评估入口重新加载。");
+        }
+
+        if (run.TotalModuleCount != totalModuleCount)
+        {
+            throw new InvalidOperationException("当前未完成评估的模块数量与正式流程不一致，请先完成数据兼容处理。");
+        }
     }
 
     public Task MarkSavingAsync(

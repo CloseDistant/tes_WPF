@@ -32,6 +32,14 @@
             <views:AssessmentCaptureView />
         </DataTemplate>
 
+        <DataTemplate DataType="{x:Type local:AssessmentEntryViewModel}">
+            <views:AssessmentEntryView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:AssessmentFeatureHostViewModel}">
+            <ContentControl Content="{Binding CurrentContent}" />
+        </DataTemplate>
+
         <DataTemplate DataType="{x:Type local:EegSignalCaptureViewModel}">
             <views:EegSignalCaptureView />
         </DataTemplate>
