@@ -13,6 +13,7 @@ public sealed class AssessmentEntryViewModel : ObservableObject
     private readonly ILocalizationService localization;
     private readonly ILoggingService logger;
     private readonly AsyncRelayCommand primaryActionCommand;
+    private readonly AsyncRelayCommand selectPatientCommand;
     private AssessmentEntryState state = AssessmentEntryState.Loading;
     private AssessmentRunContext? activeRun;
     private string errorMessage = string.Empty;
@@ -33,13 +34,22 @@ public sealed class AssessmentEntryViewModel : ObservableObject
                 or AssessmentEntryState.ActiveRun
                 or AssessmentEntryState.Error);
         PrimaryActionCommand = primaryActionCommand;
+        selectPatientCommand = new AsyncRelayCommand(
+            ExecuteSelectPatientAsync,
+            () => patientService.CurrentPatient is null
+                && State is AssessmentEntryState.NoPatient or AssessmentEntryState.Error);
+        SelectPatientCommand = selectPatientCommand;
         localization.LanguageChanged += (_, _) => NotifyTextChanged();
         patientService.CurrentPatientChanged += (_, _) => NotifyPatientChanged();
     }
 
     public event EventHandler<AssessmentRunContext>? RunActivated;
 
+    public event EventHandler<AssessmentPatientSelectionRequestedEventArgs>? PatientSelectionRequested;
+
     public ICommand PrimaryActionCommand { get; }
+
+    public ICommand SelectPatientCommand { get; }
 
     public AssessmentEntryState State
     {
@@ -50,9 +60,12 @@ public sealed class AssessmentEntryViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(IsBusy));
                 OnPropertyChanged(nameof(IsPrimaryActionVisible));
+                OnPropertyChanged(nameof(IsNoPatientState));
                 OnPropertyChanged(nameof(PrimaryActionText));
+                OnPropertyChanged(nameof(SelectPatientActionText));
                 OnPropertyChanged(nameof(HasError));
                 primaryActionCommand.RaiseCanExecuteChanged();
+                selectPatientCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -65,11 +78,22 @@ public sealed class AssessmentEntryViewModel : ObservableObject
 
     public string CurrentPatientCode => patientService.CurrentPatient?.PatientCode ?? "--";
 
+    public string NoPatientTitleText => localization.Text("AssessmentEntryNoPatientTitle");
+
+    public string NoPatientDescriptionText => localization.Text("AssessmentEntryNoPatientDescription");
+
     public bool IsBusy => State is AssessmentEntryState.Loading
         or AssessmentEntryState.Starting
-        or AssessmentEntryState.Recovering;
+        or AssessmentEntryState.Recovering
+        or AssessmentEntryState.SelectingPatient;
+
+    public bool IsNoPatientState => patientService.CurrentPatient is null;
 
     public bool IsPrimaryActionVisible => patientService.CurrentPatient is not null;
+
+    public string SelectPatientActionText => State == AssessmentEntryState.SelectingPatient
+        ? localization.Text("AssessmentEntrySelectingPatient")
+        : localization.Text("AssessmentEntrySelectPatient");
 
     public string PrimaryActionText => State switch
     {
@@ -97,8 +121,7 @@ public sealed class AssessmentEntryViewModel : ObservableObject
         NotifyPatientChanged();
         if (patientService.CurrentPatient is null)
         {
-            ErrorMessage = localization.Text("AssessmentEntryNoPatient");
-            State = AssessmentEntryState.Error;
+            State = AssessmentEntryState.NoPatient;
             return;
         }
 
@@ -114,6 +137,38 @@ public sealed class AssessmentEntryViewModel : ObservableObject
         catch (Exception exception)
         {
             ApplyError(localization.Text("AssessmentEntryLoadFailed"), exception);
+        }
+    }
+
+    public async Task ExecuteSelectPatientAsync(CancellationToken cancellationToken = default)
+    {
+        if (patientService.CurrentPatient is not null
+            || State is not (AssessmentEntryState.NoPatient or AssessmentEntryState.Error))
+        {
+            return;
+        }
+
+        State = AssessmentEntryState.SelectingPatient;
+        ErrorMessage = string.Empty;
+        try
+        {
+            var request = new AssessmentPatientSelectionRequestedEventArgs(cancellationToken);
+            PatientSelectionRequested?.Invoke(this, request);
+            if (!request.IsHandled)
+            {
+                throw new InvalidOperationException("患者选择入口尚未连接到主界面。");
+            }
+
+            await request.Completion;
+            await LoadAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            State = AssessmentEntryState.NoPatient;
+        }
+        catch (Exception exception)
+        {
+            ApplyError(localization.Text("AssessmentEntryPatientSelectionFailed"), exception);
         }
     }
 
@@ -166,6 +221,8 @@ public sealed class AssessmentEntryViewModel : ObservableObject
         OnPropertyChanged(nameof(CurrentPatientName));
         OnPropertyChanged(nameof(CurrentPatientCode));
         OnPropertyChanged(nameof(IsPrimaryActionVisible));
+        OnPropertyChanged(nameof(IsNoPatientState));
+        selectPatientCommand.RaiseCanExecuteChanged();
     }
 
     private void NotifyTextChanged()
@@ -173,5 +230,8 @@ public sealed class AssessmentEntryViewModel : ObservableObject
         OnPropertyChanged(nameof(PageTitleText));
         OnPropertyChanged(nameof(CurrentPatientLabelText));
         OnPropertyChanged(nameof(PrimaryActionText));
+        OnPropertyChanged(nameof(NoPatientTitleText));
+        OnPropertyChanged(nameof(NoPatientDescriptionText));
+        OnPropertyChanged(nameof(SelectPatientActionText));
     }
 }

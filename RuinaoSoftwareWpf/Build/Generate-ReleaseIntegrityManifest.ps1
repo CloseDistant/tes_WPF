@@ -8,6 +8,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+Import-Module Microsoft.PowerShell.Utility
 
 $manifestName = 'release-integrity.manifest'
 $header = '# ruinao-release-integrity-v1'

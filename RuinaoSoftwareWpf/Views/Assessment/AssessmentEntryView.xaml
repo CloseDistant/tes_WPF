@@ -42,6 +42,45 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="AssessmentEntrySelectPatientButton" TargetType="Button">
+            <Setter Property="MinWidth" Value="178" />
+            <Setter Property="Height" Value="46" />
+            <Setter Property="Padding" Value="28,10" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="#C48229" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#F1F3F6" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#1D2330" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#DDA04C" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#252C39" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="42,30,42,36">
@@ -57,47 +96,79 @@
                        FontWeight="SemiBold" />
         </Border>
 
-        <StackPanel Grid.Row="1"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Margin="0,0,0,28">
-            <Border MinWidth="520"
-                    BorderBrush="#303744"
-                    BorderThickness="0,1,0,1"
-                    Padding="26,16"
-                    Margin="0,0,0,34">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <TextBlock Text="{Binding CurrentPatientLabelText}"
-                               Foreground="#95A4BC"
-                               FontSize="13"
-                               VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding CurrentPatientName}"
-                               Foreground="#F1F3F6"
-                               FontSize="13"
-                               FontWeight="SemiBold"
-                               Margin="24,0,0,0"
-                               VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding CurrentPatientCode}"
-                               Foreground="#95A4BC"
-                               FontSize="13"
-                               Margin="24,0,0,0"
-                               VerticalAlignment="Center" />
-                </StackPanel>
-            </Border>
+        <Grid Grid.Row="1" Margin="0,0,0,28">
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Visibility="{Binding IsPrimaryActionVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Border MinWidth="520"
+                        BorderBrush="#303744"
+                        BorderThickness="0,1,0,1"
+                        Padding="26,16"
+                        Margin="0,0,0,34">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock Text="{Binding CurrentPatientLabelText}"
+                                   Foreground="#95A4BC"
+                                   FontSize="13"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding CurrentPatientName}"
+                                   Foreground="#F1F3F6"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Margin="24,0,0,0"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding CurrentPatientCode}"
+                                   Foreground="#95A4BC"
+                                   FontSize="13"
+                                   Margin="24,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
 
-            <Button Content="{Binding PrimaryActionText}"
-                    Command="{Binding PrimaryActionCommand}"
-                    Visibility="{Binding IsPrimaryActionVisible, Converter={StaticResource BoolToVisibilityConverter}}"
-                    Style="{StaticResource AssessmentEntryPrimaryButton}" />
+                <Button Content="{Binding PrimaryActionText}"
+                        Command="{Binding PrimaryActionCommand}"
+                        Style="{StaticResource AssessmentEntryPrimaryButton}" />
 
-            <TextBlock Text="{Binding ErrorMessage}"
-                       Foreground="#E47979"
-                       FontSize="12"
-                       TextAlignment="Center"
-                       TextWrapping="Wrap"
-                       MaxWidth="620"
-                       Margin="0,18,0,0"
-                       Visibility="{Binding HasError, Converter={StaticResource BoolToVisibilityConverter}}" />
-        </StackPanel>
+                <TextBlock Text="{Binding ErrorMessage}"
+                           Foreground="#E47979"
+                           FontSize="12"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           MaxWidth="620"
+                           Margin="0,18,0,0"
+                           Visibility="{Binding HasError, Converter={StaticResource BoolToVisibilityConverter}}" />
+            </StackPanel>
+
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Visibility="{Binding IsNoPatientState, Converter={StaticResource BoolToVisibilityConverter}}">
+                <TextBlock Text="&#xE77B;"
+                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                           FontSize="44"
+                           Foreground="#6F7F98"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,20" />
+                <TextBlock Text="{Binding NoPatientTitleText}"
+                           Foreground="#F1F3F6"
+                           FontSize="24"
+                           FontWeight="SemiBold"
+                           TextAlignment="Center" />
+                <TextBlock Text="{Binding NoPatientDescriptionText}"
+                           Foreground="#95A4BC"
+                           FontSize="14"
+                           TextAlignment="Center"
+                           Margin="0,12,0,30" />
+                <Button Content="{Binding SelectPatientActionText}"
+                        Command="{Binding SelectPatientCommand}"
+                        Style="{StaticResource AssessmentEntrySelectPatientButton}" />
+                <TextBlock Text="{Binding ErrorMessage}"
+                           Foreground="#E47979"
+                           FontSize="12"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           MaxWidth="620"
+                           Margin="0,18,0,0"
+                           Visibility="{Binding HasError, Converter={StaticResource BoolToVisibilityConverter}}" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>

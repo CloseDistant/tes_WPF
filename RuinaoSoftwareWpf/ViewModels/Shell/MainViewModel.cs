@@ -114,6 +114,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         EegSignalCapture = eegSignalCapture;
         AssessmentCapture = assessmentCapture;
         AssessmentFeature = assessmentFeature;
+        AssessmentFeature.Entry.PatientSelectionRequested += OnAssessmentPatientSelectionRequested;
         FemSimulation = femSimulation;
         Device = device;
         Config = config;

@@ -6,6 +6,41 @@ using Xunit;
 public sealed class AssessmentEntryViewModelTests
 {
     [Fact]
+    public async Task LoadAsync_WithoutPatient_ShowsPatientSelectionStateWithoutQueryingRun()
+    {
+        var coordinator = new RecordingRunCoordinator();
+        var patientService = new FixedPatientService(null);
+        var viewModel = CreateViewModel(coordinator, patientService);
+
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(AssessmentEntryState.NoPatient, viewModel.State);
+        Assert.True(viewModel.IsNoPatientState);
+        Assert.Equal("选择患者", viewModel.SelectPatientActionText);
+        Assert.Equal(0, coordinator.GetActiveCount);
+    }
+
+    [Fact]
+    public async Task SelectPatientAsync_AfterSelection_ReloadsAssessmentEntry()
+    {
+        var coordinator = new RecordingRunCoordinator();
+        var patientService = new FixedPatientService(null);
+        var viewModel = CreateViewModel(coordinator, patientService);
+        viewModel.PatientSelectionRequested += (_, request) =>
+        {
+            request.IsHandled = true;
+            patientService.SetCurrentPatient(CreatePatient("patient-a"));
+        };
+
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+        await viewModel.ExecuteSelectPatientAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(AssessmentEntryState.NoActiveRun, viewModel.State);
+        Assert.False(viewModel.IsNoPatientState);
+        Assert.Equal(1, coordinator.GetActiveCount);
+    }
+
+    [Fact]
     public async Task LoadAsync_WithoutActiveRun_ShowsStartNewAssessment()
     {
         var coordinator = new RecordingRunCoordinator();
@@ -61,9 +96,14 @@ public sealed class AssessmentEntryViewModelTests
     }
 
     private static AssessmentEntryViewModel CreateViewModel(RecordingRunCoordinator coordinator) =>
+        CreateViewModel(coordinator, new FixedPatientService(CreatePatient("patient-a")));
+
+    private static AssessmentEntryViewModel CreateViewModel(
+        RecordingRunCoordinator coordinator,
+        FixedPatientService patientService) =>
         new(
             coordinator,
-            new FixedPatientService(CreatePatient("patient-a")),
+            patientService,
             new AppLocalizationService(),
             new NullLoggingService());
 
@@ -89,11 +129,15 @@ public sealed class AssessmentEntryViewModelTests
         public AssessmentRunContext? CreatedRun { get; init; }
         public long? ResumedRunId { get; private set; }
         public int CreateCount { get; private set; }
+        public int GetActiveCount { get; private set; }
 
         public Task<AssessmentRunContext?> GetActiveRunAsync(
             int totalModuleCount,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(ActiveRun);
+            CancellationToken cancellationToken = default)
+        {
+            GetActiveCount++;
+            return Task.FromResult(ActiveRun);
+        }
 
         public Task<AssessmentRunContext> CreateRunAsync(
             int totalModuleCount,
@@ -119,15 +163,17 @@ public sealed class AssessmentEntryViewModelTests
         }
     }
 
-    private sealed class FixedPatientService(PatientRecord patient) : IPatientService
+    private sealed class FixedPatientService(PatientRecord? patient) : IPatientService
     {
-        public event EventHandler? CurrentPatientChanged
-        {
-            add { }
-            remove { }
-        }
+        public event EventHandler? CurrentPatientChanged;
 
-        public PatientRecord? CurrentPatient { get; } = patient;
+        public PatientRecord? CurrentPatient { get; private set; } = patient;
+
+        public void SetCurrentPatient(PatientRecord currentPatient)
+        {
+            CurrentPatient = currentPatient;
+            CurrentPatientChanged?.Invoke(this, EventArgs.Empty);
+        }
         public Task InitializeAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string> GenerateNextPatientCodeAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<PatientRecord> CreatePatientAsync(PatientSaveRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();

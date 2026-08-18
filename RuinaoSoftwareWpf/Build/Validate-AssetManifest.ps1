@@ -4,6 +4,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+Import-Module Microsoft.PowerShell.Utility
+
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $assetsDirectory = Join-Path $projectDirectory 'Assets'
 $manifestPath = Join-Path $assetsDirectory 'asset-manifest.sha256'

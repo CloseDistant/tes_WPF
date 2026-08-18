@@ -5,6 +5,82 @@ using RuinaoSoftwareWpf.Views.Dialogs;
 
 public sealed partial class MainViewModel
 {
+    private void OnAssessmentPatientSelectionRequested(
+        object? sender,
+        AssessmentPatientSelectionRequestedEventArgs eventArgs)
+    {
+        eventArgs.IsHandled = true;
+        eventArgs.Completion = SelectOrCreatePatientForAssessmentAsync(eventArgs.CancellationToken);
+    }
+
+    private async Task SelectOrCreatePatientForAssessmentAsync(CancellationToken cancellationToken)
+    {
+        if (patientService.CurrentPatient is not null)
+        {
+            return;
+        }
+
+        if (!CanManagePatients)
+        {
+            toastService.ShowInformation("只有 Admin 或 Doctor 可以新增或选择患者。", "无患者管理权限");
+            return;
+        }
+
+        if (IsPatientOperationLocked)
+        {
+            toastService.ShowInformation("当前模块正在运行或保存，不能切换患者。", "患者切换已禁用");
+            return;
+        }
+
+        var firstPage = await patientService.GetPatientsPageAsync(
+            new PageRequest(0, 30),
+            cancellationToken);
+        if (firstPage.Items.Count == 0)
+        {
+            var createDialog = new PatientFormDialog(null)
+            {
+                Owner = Application.Current?.MainWindow
+            };
+            if (createDialog.ShowDialog() != true || createDialog.Request is null)
+            {
+                return;
+            }
+
+            if (!await EndSessionBeforePatientChangeAsync("新增并切换患者"))
+            {
+                return;
+            }
+
+            var createdPatient = await patientService.CreatePatientAsync(
+                createDialog.Request,
+                cancellationToken);
+            ShellState.FooterStatus = $"患者已新增并切换为当前患者：{createdPatient.Name}";
+            return;
+        }
+
+        var switchDialog = new PatientSwitchDialog(
+            patientService,
+            firstPage,
+            currentPatientCode: null)
+        {
+            Owner = Application.Current?.MainWindow
+        };
+        if (switchDialog.ShowDialog() != true || switchDialog.SelectedPatient is null)
+        {
+            return;
+        }
+
+        if (!await EndSessionBeforePatientChangeAsync("选择患者"))
+        {
+            return;
+        }
+
+        var selectedPatient = await patientService.SwitchCurrentPatientAsync(
+            switchDialog.SelectedPatient.PatientCode,
+            cancellationToken);
+        ShellState.FooterStatus = $"已选择患者：{selectedPatient.Name}。";
+    }
+
     private async Task InitializeAccountAsync()
     {
         try

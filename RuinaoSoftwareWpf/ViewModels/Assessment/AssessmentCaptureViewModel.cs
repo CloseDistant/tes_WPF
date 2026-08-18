@@ -1647,7 +1647,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
             isModuleSaveFailed = false;
             currentStep = CaptureWorkbenchStep.Completed;
-            StageNoticeText = "开发调试采集已保存；正式评估进度未改变。";
+            StageNoticeText = "开发调试采集已保存。";
         }
         else if (args.Status is CaptureMediaCompletionStatus.Discarded
             or CaptureMediaCompletionStatus.Interrupted)
@@ -1657,7 +1657,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
             currentStep = IsSyncTestModule ? CaptureWorkbenchStep.ModuleExecution : CaptureWorkbenchStep.Demo;
             isDemoCompleted = IsSyncTestModule;
             isDemoPlaying = false;
-            StageNoticeText = "开发调试采集已取消；正式评估进度未改变。";
+            StageNoticeText = "开发调试采集已取消。";
         }
         else
         {
