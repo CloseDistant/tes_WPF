@@ -8,7 +8,6 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using OpenCvSharp;
 using RuinaoSoftwareWpf.ApplicationContracts;
 
 /// <summary>
@@ -29,7 +28,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private readonly AssessmentWorkbenchCoordinator workbenchCoordinator;
     private readonly ICameraCaptureService cameraCaptureService;
     private readonly ICaptureMediaService captureMediaService;
-    private readonly ICaptureVideoFrameSink captureVideoFrameSink;
     private readonly ICaptureFormRecordService captureFormRecordService;
     private readonly DispatcherTimer calibrationTimer = new();
     private readonly DispatcherTimer pictureBrowseTimer = new();
@@ -162,7 +160,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public AssessmentCaptureViewModel(
         ICaptureMediaService captureMediaService,
-        ICaptureVideoFrameSink captureVideoFrameSink,
         ICaptureFormRecordService captureFormRecordService,
         ICameraCaptureService cameraCaptureService,
         ILocalizationService localization,
@@ -175,7 +172,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         AssessmentWorkbenchCoordinator workbenchCoordinator)
     {
         this.captureMediaService = captureMediaService;
-        this.captureVideoFrameSink = captureVideoFrameSink;
         this.captureFormRecordService = captureFormRecordService;
         this.cameraCaptureService = cameraCaptureService;
         this.localization = localization;
@@ -244,19 +240,21 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     internal bool IsCameraOpen => cameraCaptureService.IsOpen;
 
-    internal bool OpenCamera(int preferredIndex)
+    internal Task<bool> OpenCameraAsync(
+        int preferredIndex,
+        CancellationToken cancellationToken = default)
     {
-        return cameraCaptureService.Open(preferredIndex);
+        return cameraCaptureService.OpenAsync(preferredIndex, cancellationToken);
     }
 
-    internal bool ReadCameraFrame(Mat targetFrame)
+    internal bool TryTakeLatestCameraPreview(out CameraPreviewSnapshot snapshot)
     {
-        return cameraCaptureService.Read(targetFrame);
+        return cameraCaptureService.TryTakeLatestPreview(out snapshot);
     }
 
-    internal void CloseCamera()
+    internal Task CloseCameraAsync(CancellationToken cancellationToken = default)
     {
-        cameraCaptureService.Close();
+        return cameraCaptureService.CloseAsync(cancellationToken);
     }
 
     public void ReleaseCameraForNavigation()
@@ -290,7 +288,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
             }
         }
 
-        cameraCaptureService.Close();
         NotifyStageChanged();
     }
 
@@ -428,11 +425,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     internal void RequestMediaStop(CaptureMediaStopReason reason, string message)
     {
         captureMediaService.RequestStop(reason, message);
-    }
-
-    internal int RecordMediaFrame(Mat frame)
-    {
-        return captureVideoFrameSink.RecordFrame(frame);
     }
 
     internal async Task WaitForMediaIdleAsync(CancellationToken cancellationToken = default)
@@ -1275,6 +1267,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public void ResetFrameSavingStatus()
     {
+        cameraCaptureService.SetRecordingEnabled(false);
         savedFrameCount = 0;
         frameOutputDirectory = string.Empty;
         FrameSaveStatusText = T("CaptureWorkspaceRecordingPending");
@@ -1283,6 +1276,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public void DiscardFrameSavingStatus()
     {
+        cameraCaptureService.SetRecordingEnabled(false);
         savedFrameCount = 0;
         frameOutputDirectory = string.Empty;
         FrameSaveStatusText = T("CaptureWorkspaceRecordingDiscarded");
@@ -1515,18 +1509,26 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     {
         frameOutputDirectory = outputDirectory;
         savedFrameCount = 0;
+        cameraCaptureService.SetRecordingEnabled(true);
         FrameSaveStatusText = T("CaptureWorkspaceRecordingActive");
         OnPropertyChanged(nameof(FrameOutputDirectory));
     }
 
-    public void RecordSavedFrame()
+    public void UpdateRecordedFrameCount(int frameCount)
     {
-        savedFrameCount++;
+        if (frameCount <= savedFrameCount)
+        {
+            return;
+        }
+
+        savedFrameCount = frameCount;
         FrameSaveStatusText = T("CaptureWorkspaceRecordingFrameCount", savedFrameCount);
     }
 
     public void StopFrameSaving()
     {
+        cameraCaptureService.SetRecordingEnabled(false);
+        savedFrameCount = Math.Max(savedFrameCount, cameraCaptureService.RecordedFrameCount);
         if (savedFrameCount > 0)
         {
             FrameSaveStatusText = T("CaptureWorkspaceMergingFrameCount", savedFrameCount);

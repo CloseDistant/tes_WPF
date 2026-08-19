@@ -616,8 +616,8 @@
                                                     <Grid x:Name="CalibrationMarker"
                                                           Width="56"
                                                           Height="56"
-                                                          Canvas.Left="{Binding CalibrationCanvasLeft}"
-                                                          Canvas.Top="{Binding CalibrationCanvasTop}"
+                                                          Canvas.Left="0"
+                                                          Canvas.Top="0"
                                                           Visibility="{Binding IsCalibrationMarkerVisible, Converter={StaticResource BoolToVisibilityConverter}}"
                                                           RenderTransformOrigin="0.5,0.5">
                                                         <Grid.RenderTransform>
@@ -1789,18 +1789,26 @@
                                 BorderThickness="1"
                                 CornerRadius="4"
                                 Margin="0,12,0,10">
-                            <Grid>
+                            <Grid x:Name="CameraPreviewViewport"
+                                  SizeChanged="CameraPreviewViewport_SizeChanged">
                                 <Image x:Name="CameraPreviewImage"
                                        Stretch="UniformToFill" />
-                                <Rectangle Width="155"
-                                           Height="170"
-                                           Stroke="{StaticResource Gold}"
-                                           StrokeThickness="2"
-                                           StrokeDashArray="4 3"
-                                           RadiusX="6"
-                                           RadiusY="6"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center" />
+                                <Canvas x:Name="CameraOverlayCanvas"
+                                        IsHitTestVisible="False"
+                                        ClipToBounds="True">
+                                    <Rectangle x:Name="CameraGuideRectangle"
+                                               Stroke="{StaticResource Gold}"
+                                               StrokeThickness="2"
+                                               StrokeDashArray="4 3"
+                                               RadiusX="6"
+                                               RadiusY="6"
+                                               Visibility="Collapsed" />
+                                    <Rectangle x:Name="CameraFaceRectangle"
+                                               StrokeThickness="2"
+                                               RadiusX="4"
+                                               RadiusY="4"
+                                               Visibility="Collapsed" />
+                                </Canvas>
                                 <TextBlock Text="{Binding CameraPreviewPlaceholderText}"
                                            x:Name="CameraPreviewStatusText"
                                            Foreground="{StaticResource SubText}"

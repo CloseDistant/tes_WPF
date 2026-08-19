@@ -13,7 +13,8 @@ public sealed class ApplicationLayerArchitectureTests
         typeof(IStimulationDeviceGateway),
         typeof(IAssessmentModule),
         typeof(ICaptureMediaService),
-        typeof(IEegAcquisitionService)
+        typeof(IEegAcquisitionService),
+        typeof(ICameraCaptureService)
     ];
 
     [Fact]
@@ -106,8 +107,9 @@ public sealed class ApplicationLayerArchitectureTests
             .ToArray();
 
         Assert.Contains(typeof(ICaptureMediaService), constructorParameterTypes);
-        Assert.Contains(typeof(ICaptureVideoFrameSink), constructorParameterTypes);
         Assert.Contains(typeof(ICaptureFormRecordService), constructorParameterTypes);
+        Assert.Contains(typeof(ICameraCaptureService), constructorParameterTypes);
+        Assert.DoesNotContain(typeof(ICaptureVideoFrameSink), constructorParameterTypes);
     }
 
     [Fact]

@@ -1,14 +1,16 @@
 namespace RuinaoSoftwareWpf;
 
-using OpenCvSharp;
-
-public interface ICameraCaptureService : IDisposable
+public interface ICameraCaptureService : IAsyncDisposable
 {
     bool IsOpen { get; }
 
-    bool Open(int preferredIndex);
+    int RecordedFrameCount { get; }
 
-    bool Read(Mat targetFrame);
+    Task<bool> OpenAsync(int preferredIndex, CancellationToken cancellationToken = default);
 
-    void Close();
+    bool TryTakeLatestPreview(out CameraPreviewSnapshot snapshot);
+
+    void SetRecordingEnabled(bool enabled);
+
+    Task CloseAsync(CancellationToken cancellationToken = default);
 }

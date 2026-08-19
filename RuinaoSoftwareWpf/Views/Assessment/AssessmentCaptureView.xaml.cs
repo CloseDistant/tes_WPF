@@ -6,7 +6,6 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using System.ComponentModel;
 using System.IO;
-using OpenCvSharp;
 using RuinaoSoftwareWpf.ApplicationContracts;
 
 namespace RuinaoSoftwareWpf.Views;
@@ -28,13 +27,14 @@ public partial class AssessmentCaptureView : UserControl
         Interval = TimeSpan.FromMilliseconds(80)
     };
 
-    private Mat? cameraFrame;
+    private readonly SemaphoreSlim cameraLifecycleGate = new(1, 1);
     private bool cameraPreviewHasFrame;
     private bool faceInGuideFrame;
     private DateTime lastFaceOkAt = DateTime.MinValue;
+    private DateTime lastRecordingStatusUpdateAt = DateTime.MinValue;
+    private DateTimeOffset lastCameraPreviewCapturedAt = DateTimeOffset.MinValue;
+    private CameraPreviewOverlayState? latestCameraOverlay;
     private AssessmentCaptureViewModel? calibrationAnimationViewModel;
-    private double previousCalibrationMarkerLeft;
-    private double previousCalibrationMarkerTop;
     private bool hasCalibrationMarkerPosition;
 
     public AssessmentCaptureView()
@@ -44,7 +44,7 @@ public partial class AssessmentCaptureView : UserControl
         cameraTimer.Tick += (_, _) => UpdateCameraPreview();
         DataContextChanged += AssessmentCaptureView_DataContextChanged;
         Loaded += AssessmentCaptureView_Loaded;
-        Unloaded += (_, _) => StopPageActivitiesForUnload();
+        Unloaded += AssessmentCaptureView_Unloaded;
     }
 
     private AssessmentCaptureViewModel? ViewModel => DataContext as AssessmentCaptureViewModel;
@@ -67,10 +67,15 @@ public partial class AssessmentCaptureView : UserControl
             }
         }
 
-        StartCameraPreview();
+        await StartCameraPreviewAsync();
     }
 
-    private void StopPageActivitiesForUnload()
+    private async void AssessmentCaptureView_Unloaded(object sender, RoutedEventArgs e)
+    {
+        await StopPageActivitiesForUnloadAsync();
+    }
+
+    private async Task StopPageActivitiesForUnloadAsync()
     {
         DetachCalibrationAnimationViewModel();
         StopCalibrationMarkerAnimation();
@@ -78,7 +83,7 @@ public partial class AssessmentCaptureView : UserControl
         DemoMedia.Stop();
         VideoBrowseMedia.Stop();
         ViewModel?.CancelDemoPlaybackForNavigation();
-        StopCameraPreview();
+        await StopCameraPreviewAsync();
     }
 
     private void AssessmentCaptureView_DataContextChanged(
@@ -101,10 +106,10 @@ public partial class AssessmentCaptureView : UserControl
 
         calibrationAnimationViewModel = viewModel;
         calibrationAnimationViewModel.PropertyChanged += OnCalibrationViewModelPropertyChanged;
-        previousCalibrationMarkerLeft = viewModel.CalibrationCanvasLeft;
-        previousCalibrationMarkerTop = viewModel.CalibrationCanvasTop;
+        SetCalibrationMarkerPosition(
+            viewModel.CalibrationCanvasLeft,
+            viewModel.CalibrationCanvasTop);
         hasCalibrationMarkerPosition = true;
-        StopCalibrationMarkerAnimation();
     }
 
     private void DetachCalibrationAnimationViewModel()
@@ -136,6 +141,7 @@ public partial class AssessmentCaptureView : UserControl
         if (viewModel is null || !viewModel.IsCalibrationMarkerVisible)
         {
             StopCalibrationMarkerAnimation();
+            hasCalibrationMarkerPosition = false;
             return;
         }
 
@@ -143,39 +149,35 @@ public partial class AssessmentCaptureView : UserControl
         var targetTop = viewModel.CalibrationCanvasTop;
         if (!hasCalibrationMarkerPosition || viewModel.CalibrationMoveDurationMilliseconds <= 0)
         {
-            StopCalibrationMarkerAnimation();
-            previousCalibrationMarkerLeft = targetLeft;
-            previousCalibrationMarkerTop = targetTop;
+            SetCalibrationMarkerPosition(targetLeft, targetTop);
             hasCalibrationMarkerPosition = true;
             return;
         }
 
-        var offsetX = previousCalibrationMarkerLeft - targetLeft;
-        var offsetY = previousCalibrationMarkerTop - targetTop;
+        var startX = CalibrationMarkerTransform.X;
+        var startY = CalibrationMarkerTransform.Y;
         var duration = TimeSpan.FromMilliseconds(viewModel.CalibrationMoveDurationMilliseconds);
         var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
 
         CalibrationMarkerTransform.BeginAnimation(TranslateTransform.XProperty, null);
         CalibrationMarkerTransform.BeginAnimation(TranslateTransform.YProperty, null);
-        CalibrationMarkerTransform.X = 0;
-        CalibrationMarkerTransform.Y = 0;
+        CalibrationMarkerTransform.X = targetLeft;
+        CalibrationMarkerTransform.Y = targetTop;
         CalibrationMarkerTransform.BeginAnimation(
             TranslateTransform.XProperty,
-            new DoubleAnimation(offsetX, 0, duration)
+            new DoubleAnimation(startX, targetLeft, duration)
             {
                 EasingFunction = easing,
                 FillBehavior = FillBehavior.Stop
             });
         CalibrationMarkerTransform.BeginAnimation(
             TranslateTransform.YProperty,
-            new DoubleAnimation(offsetY, 0, duration)
+            new DoubleAnimation(startY, targetTop, duration)
             {
                 EasingFunction = easing,
                 FillBehavior = FillBehavior.Stop
             });
 
-        previousCalibrationMarkerLeft = targetLeft;
-        previousCalibrationMarkerTop = targetTop;
         hasCalibrationMarkerPosition = true;
     }
 
@@ -185,6 +187,14 @@ public partial class AssessmentCaptureView : UserControl
         CalibrationMarkerTransform.BeginAnimation(TranslateTransform.YProperty, null);
         CalibrationMarkerTransform.X = 0;
         CalibrationMarkerTransform.Y = 0;
+    }
+
+    private void SetCalibrationMarkerPosition(double left, double top)
+    {
+        CalibrationMarkerTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        CalibrationMarkerTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        CalibrationMarkerTransform.X = left;
+        CalibrationMarkerTransform.Y = top;
     }
 
     private void PlayDemoButton_Click(object sender, System.Windows.RoutedEventArgs e)
@@ -203,7 +213,7 @@ public partial class AssessmentCaptureView : UserControl
         playbackTimer.Start();
     }
 
-    private void SkipDemoButton_Click(object sender, RoutedEventArgs e)
+    private async void SkipDemoButton_Click(object sender, RoutedEventArgs e)
     {
         var viewModel = ViewModel;
         if (viewModel is null || !viewModel.SkipDemoForDevelopment())
@@ -214,7 +224,7 @@ public partial class AssessmentCaptureView : UserControl
         playbackTimer.Stop();
         DemoMedia.Stop();
         DemoMedia.Position = TimeSpan.Zero;
-        StartCameraPreview();
+        await StartCameraPreviewAsync();
     }
 
     private async void StartCalibrationButton_Click(object sender, System.Windows.RoutedEventArgs e)
@@ -232,7 +242,7 @@ public partial class AssessmentCaptureView : UserControl
         if (viewModel.IsDemoStep)
         {
             viewModel.BeginFaceCheck();
-            StartCameraPreview();
+            await StartCameraPreviewAsync();
             return;
         }
 
@@ -244,7 +254,7 @@ public partial class AssessmentCaptureView : UserControl
 
         if (!cameraPreviewHasFrame)
         {
-            StartCameraPreview();
+            await StartCameraPreviewAsync();
             viewModel.ShowStageNotice(viewModel.Localize("CaptureWorkspaceCameraNoFrameStageNotice"));
             return;
         }
@@ -295,7 +305,7 @@ public partial class AssessmentCaptureView : UserControl
 
         if (!cameraPreviewHasFrame)
         {
-            StartCameraPreview();
+            await StartCameraPreviewAsync();
             viewModel.ShowStageNotice(viewModel.Localize("CaptureWorkspaceCameraNoFrameStageNotice"));
             return;
         }
@@ -329,16 +339,16 @@ public partial class AssessmentCaptureView : UserControl
         ViewModel?.StartWordReadingFirstGroup();
     }
 
-    private void RefreshCameraButton_Click(object sender, RoutedEventArgs e)
+    private async void RefreshCameraButton_Click(object sender, RoutedEventArgs e)
     {
-        StartCameraPreview();
+        await StartCameraPreviewAsync();
     }
 
-    private void CameraComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void CameraComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (IsLoaded)
         {
-            StartCameraPreview();
+            await StartCameraPreviewAsync();
         }
     }
 
@@ -376,41 +386,78 @@ public partial class AssessmentCaptureView : UserControl
         ViewModel?.UpdatePlaybackTime(DemoMedia.Position, duration);
     }
 
-    private void StartCameraPreview()
+    private async Task StartCameraPreviewAsync()
     {
-        // 切换摄像头或重新进入页面时，先释放旧预览，避免设备被重复占用。
-        StopCameraPreview();
-
-        var viewModel = ViewModel;
-        if (viewModel is null || !viewModel.HasSelectedCamera)
+        await cameraLifecycleGate.WaitAsync();
+        try
         {
-            CameraPreviewImage.Source = null;
-            CameraPreviewStatusText.Text = viewModel?.Localize("CaptureWorkspaceNoCameraSelected")
-                ?? string.Empty;
-            return;
-        }
+            // 切换摄像头或重新进入页面时，先释放旧预览，避免设备被重复占用。
+            await StopCameraPreviewCoreAsync();
 
-        var cameraIndex = CameraComboBox.SelectedIndex < 0 ? 0 : CameraComboBox.SelectedIndex;
-        CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceOpeningCamera");
-        if (!viewModel.OpenCamera(cameraIndex))
+            var viewModel = ViewModel;
+            if (viewModel is null || !viewModel.HasSelectedCamera)
+            {
+                CameraPreviewStatusText.Text = viewModel?.Localize("CaptureWorkspaceNoCameraSelected")
+                    ?? string.Empty;
+                return;
+            }
+
+            var cameraIndex = CameraComboBox.SelectedIndex < 0 ? 0 : CameraComboBox.SelectedIndex;
+            CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceOpeningCamera");
+            if (!await viewModel.OpenCameraAsync(cameraIndex))
+            {
+                CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceCameraOpenFailed");
+                return;
+            }
+
+            cameraTimer.Start();
+        }
+        catch (Exception exception)
         {
-            StopCameraPreview();
-            CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceCameraOpenFailed");
-            return;
+            CameraPreviewStatusText.Text = ViewModel?.Localize("CaptureWorkspaceCameraOpenFailed")
+                ?? exception.Message;
         }
-
-        cameraFrame = new Mat();
-        cameraTimer.Start();
+        finally
+        {
+            cameraLifecycleGate.Release();
+        }
     }
 
-    private void StopCameraPreview()
+    private async Task StopCameraPreviewAsync()
+    {
+        await cameraLifecycleGate.WaitAsync();
+        try
+        {
+            await StopCameraPreviewCoreAsync();
+        }
+        finally
+        {
+            cameraLifecycleGate.Release();
+        }
+    }
+
+    private async Task StopCameraPreviewCoreAsync()
     {
         cameraTimer.Stop();
         StopRecordingForPreviewStop();
-        cameraFrame?.Dispose();
-        cameraFrame = null;
-        ViewModel?.CloseCamera();
+        if (ViewModel is { } viewModel)
+        {
+            await viewModel.CloseCameraAsync();
+        }
+
+        ResetCameraPreviewDisplay();
+    }
+
+    private void ResetCameraPreviewDisplay()
+    {
+        CameraPreviewImage.Source = null;
+        CameraGuideRectangle.Visibility = Visibility.Collapsed;
+        CameraFaceRectangle.Visibility = Visibility.Collapsed;
         cameraPreviewHasFrame = false;
+        faceInGuideFrame = false;
+        latestCameraOverlay = null;
+        lastCameraPreviewCapturedAt = DateTimeOffset.MinValue;
+        lastRecordingStatusUpdateAt = DateTime.MinValue;
     }
 
     private void StopRecordingForPreviewStop()
@@ -438,139 +485,133 @@ public partial class AssessmentCaptureView : UserControl
     private void UpdateCameraPreview()
     {
         var viewModel = ViewModel;
-        if (viewModel is null || !viewModel.IsCameraOpen || cameraFrame is null)
+        if (viewModel is null || !viewModel.IsCameraOpen)
         {
             return;
         }
 
-        if (!viewModel.ReadCameraFrame(cameraFrame))
+        if (!viewModel.TryTakeLatestCameraPreview(out var snapshot))
         {
-            CameraPreviewStatusText.Text = ViewModel?.Localize("CaptureWorkspaceNoFrameRead") ?? string.Empty;
+            if (!cameraPreviewHasFrame
+                || DateTimeOffset.Now - lastCameraPreviewCapturedAt > TimeSpan.FromSeconds(1))
+            {
+                faceInGuideFrame = false;
+                CameraFaceRectangle.Visibility = Visibility.Collapsed;
+                CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceNoFrameRead");
+            }
+
             return;
         }
 
-        RecordFrameIfNeeded(cameraFrame);
-        var faceStatus = UpdateFaceDetectionOverlay(cameraFrame);
-
-        using var bgra = new Mat();
-        Cv2.CvtColor(cameraFrame, bgra, ColorConversionCodes.BGR2BGRA);
-        var bitmap = BitmapSource.Create(
-            bgra.Width,
-            bgra.Height,
-            96,
-            96,
-            System.Windows.Media.PixelFormats.Bgra32,
-            null,
-            bgra.Data,
-            (int)(bgra.Step() * bgra.Height),
-            (int)bgra.Step());
-
-        bitmap.Freeze();
-        CameraPreviewImage.Source = bitmap;
-        cameraPreviewHasFrame = true;
-        CameraPreviewStatusText.Text = faceStatus;
-    }
-
-    private string UpdateFaceDetectionOverlay(Mat frame)
-    {
-        // 当前阶段使用肤色区域近似人脸检测，主要用于流程原型和取景提示。
-        // 后续如果接入正式人脸识别 SDK，可替换 DetectFaceLikeRegion。
-        var guideRect = GuideRectFor(frame);
-        Cv2.Rectangle(frame, guideRect, new Scalar(0, 165, 255), 2, LineTypes.AntiAlias);
-
-        var faceRect = DetectFaceLikeRegion(frame);
-        if (faceRect is null)
+        using (snapshot)
         {
-            faceInGuideFrame = false;
-            return ViewModel?.Localize("CaptureWorkspaceNoFaceDetected") ?? string.Empty;
-        }
-
-        var face = faceRect.Value;
-        var faceCenter = new OpenCvSharp.Point(face.X + face.Width / 2, face.Y + face.Height / 2);
-        var overlapRatio = CalculateOverlapRatio(face, guideRect);
-        var isInside = guideRect.Contains(faceCenter) && overlapRatio >= 0.85;
-
-        faceInGuideFrame = isInside;
-        if (isInside)
-        {
-            lastFaceOkAt = DateTime.Now;
-        }
-
-        Cv2.Rectangle(frame, face, isInside ? new Scalar(60, 220, 60) : new Scalar(0, 0, 255), 2, LineTypes.AntiAlias);
-        return isInside
-            ? ViewModel?.Localize("CaptureWorkspaceFaceInsideFrame") ?? string.Empty
-            : ViewModel?.Localize("CaptureWorkspaceMoveFaceIntoFrame") ?? string.Empty;
-    }
-
-    private static OpenCvSharp.Rect GuideRectFor(Mat frame)
-    {
-        var width = frame.Width;
-        var height = frame.Height;
-        var guideWidth = (int)(width * 0.62);
-        var guideHeight = (int)(height * 0.88);
-        return new OpenCvSharp.Rect((width - guideWidth) / 2, (height - guideHeight) / 2, guideWidth, guideHeight);
-    }
-
-    private static double CalculateOverlapRatio(OpenCvSharp.Rect face, OpenCvSharp.Rect guide)
-    {
-        var left = Math.Max(face.Left, guide.Left);
-        var top = Math.Max(face.Top, guide.Top);
-        var right = Math.Min(face.Right, guide.Right);
-        var bottom = Math.Min(face.Bottom, guide.Bottom);
-
-        if (right <= left || bottom <= top)
-        {
-            return 0;
-        }
-
-        var overlapArea = (right - left) * (bottom - top);
-        var faceArea = Math.Max(face.Width * face.Height, 1);
-        return overlapArea / (double)faceArea;
-    }
-
-    private static OpenCvSharp.Rect? DetectFaceLikeRegion(Mat frame)
-    {
-        // 轻量级肤色检测：适合当前原型阶段的实时提示，不等同于正式人脸识别算法。
-        // 复杂光照、遮挡、背景肤色物体都可能影响结果。
-        using var ycrcb = new Mat();
-        using var mask = new Mat();
-        using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(7, 7));
-
-        Cv2.CvtColor(frame, ycrcb, ColorConversionCodes.BGR2YCrCb);
-        Cv2.InRange(ycrcb, new Scalar(0, 133, 77), new Scalar(255, 173, 127), mask);
-        Cv2.MorphologyEx(mask, mask, MorphTypes.Open, kernel);
-        Cv2.MorphologyEx(mask, mask, MorphTypes.Close, kernel);
-        Cv2.GaussianBlur(mask, mask, new OpenCvSharp.Size(5, 5), 0);
-
-        Cv2.FindContours(mask, out OpenCvSharp.Point[][] contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
-
-        OpenCvSharp.Rect? bestRect = null;
-        var bestArea = 0d;
-        var minArea = frame.Width * frame.Height * 0.015;
-        foreach (var contour in contours)
-        {
-            var rect = Cv2.BoundingRect(contour);
-            var area = rect.Width * rect.Height;
-            if (area < minArea)
+            if (DateTimeOffset.Now - snapshot.CapturedAt > TimeSpan.FromSeconds(1))
             {
-                continue;
+                faceInGuideFrame = false;
+                CameraFaceRectangle.Visibility = Visibility.Collapsed;
+                CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceNoFrameRead");
+                return;
             }
 
-            var ratio = rect.Width / (double)Math.Max(rect.Height, 1);
-            if (ratio < 0.45 || ratio > 1.6)
+            var bitmap = BitmapSource.Create(
+                snapshot.Width,
+                snapshot.Height,
+                96,
+                96,
+                PixelFormats.Bgra32,
+                null,
+                snapshot.BgraPixels,
+                snapshot.Stride);
+            bitmap.Freeze();
+            CameraPreviewImage.Source = bitmap;
+            latestCameraOverlay = new CameraPreviewOverlayState(
+                snapshot.Width,
+                snapshot.Height,
+                snapshot.GuideBounds,
+                snapshot.FaceBounds,
+                snapshot.FaceState);
+            lastCameraPreviewCapturedAt = snapshot.CapturedAt;
+            UpdateCameraOverlay(latestCameraOverlay.Value);
+
+            cameraPreviewHasFrame = true;
+            faceInGuideFrame = snapshot.FaceState == CameraFaceState.InsideGuide;
+            if (faceInGuideFrame)
             {
-                continue;
+                lastFaceOkAt = DateTime.Now;
             }
 
-            if (area > bestArea)
+            CameraPreviewStatusText.Text = snapshot.FaceState switch
             {
-                bestArea = area;
-                bestRect = rect;
+                CameraFaceState.InsideGuide => viewModel.Localize("CaptureWorkspaceFaceInsideFrame"),
+                CameraFaceState.OutsideGuide => viewModel.Localize("CaptureWorkspaceMoveFaceIntoFrame"),
+                _ => viewModel.Localize("CaptureWorkspaceNoFaceDetected")
+            };
+
+            if (viewModel.IsMediaRecording
+                && DateTime.Now - lastRecordingStatusUpdateAt >= TimeSpan.FromMilliseconds(500))
+            {
+                viewModel.UpdateRecordedFrameCount(snapshot.RecordedFrameCount);
+                lastRecordingStatusUpdateAt = DateTime.Now;
             }
         }
-
-        return bestRect;
     }
+
+    private void CameraPreviewViewport_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (latestCameraOverlay is { } snapshot)
+        {
+            UpdateCameraOverlay(snapshot);
+        }
+    }
+
+    private void UpdateCameraOverlay(CameraPreviewOverlayState snapshot)
+    {
+        var viewportWidth = CameraPreviewViewport.ActualWidth;
+        var viewportHeight = CameraPreviewViewport.ActualHeight;
+        if (viewportWidth <= 0 || viewportHeight <= 0 || snapshot.Width <= 0 || snapshot.Height <= 0)
+        {
+            return;
+        }
+
+        var scale = Math.Max(viewportWidth / snapshot.Width, viewportHeight / snapshot.Height);
+        var offsetX = (viewportWidth - snapshot.Width * scale) / 2d;
+        var offsetY = (viewportHeight - snapshot.Height * scale) / 2d;
+        PositionOverlayRectangle(CameraGuideRectangle, snapshot.GuideBounds, scale, offsetX, offsetY, snapshot);
+        CameraGuideRectangle.Visibility = Visibility.Visible;
+
+        if (snapshot.FaceBounds is not { } faceBounds)
+        {
+            CameraFaceRectangle.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        PositionOverlayRectangle(CameraFaceRectangle, faceBounds, scale, offsetX, offsetY, snapshot);
+        CameraFaceRectangle.Stroke = snapshot.FaceState == CameraFaceState.InsideGuide
+            ? Brushes.LimeGreen
+            : Brushes.Red;
+        CameraFaceRectangle.Visibility = Visibility.Visible;
+    }
+
+    private static void PositionOverlayRectangle(
+        System.Windows.Shapes.Rectangle rectangle,
+        NormalizedCameraRect bounds,
+        double scale,
+        double offsetX,
+        double offsetY,
+        CameraPreviewOverlayState snapshot)
+    {
+        Canvas.SetLeft(rectangle, offsetX + bounds.X * snapshot.Width * scale);
+        Canvas.SetTop(rectangle, offsetY + bounds.Y * snapshot.Height * scale);
+        rectangle.Width = bounds.Width * snapshot.Width * scale;
+        rectangle.Height = bounds.Height * snapshot.Height * scale;
+    }
+
+    private readonly record struct CameraPreviewOverlayState(
+        int Width,
+        int Height,
+        NormalizedCameraRect GuideBounds,
+        NormalizedCameraRect? FaceBounds,
+        CameraFaceState FaceState);
 
     private async Task BeginModuleRecordingSessionAsync(AssessmentCaptureViewModel viewModel)
     {
@@ -619,31 +660,6 @@ public partial class AssessmentCaptureView : UserControl
         }
 
         viewModel.RequestMediaStop(reason, message);
-    }
-
-    private void RecordFrameIfNeeded(Mat frame)
-    {
-        var viewModel = ViewModel;
-        if (viewModel is null || !viewModel.IsMediaRecording)
-        {
-            return;
-        }
-
-        if (!viewModel.IsCalibrationStage)
-        {
-            // 第三步结束后，下一帧到来时触发录制收尾。
-            // 所有任务类模块共用该完成入口，具体流程状态由各模块 ViewModel 维护。
-            StopModuleRecording(viewModel, CaptureMediaStopReason.Completed, viewModel.Localize("CaptureWorkspaceModuleMediaCompleted", viewModel.CurrentModule));
-            return;
-        }
-
-        if (viewModel.IsSyncTestModule && !viewModel.IsSyncTestRecordingActive)
-        {
-            return;
-        }
-
-        viewModel.RecordMediaFrame(frame);
-        viewModel.RecordSavedFrame();
     }
 
 }
