@@ -79,13 +79,15 @@ public readonly record struct FaceQualityEvaluation(
 /// </summary>
 public sealed class FaceQualityEvaluator
 {
+    private static readonly int[] ChinIndices = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
     private static readonly int[] LeftEyeIndices = [60, 61, 62, 63, 64, 65, 66, 67];
     private static readonly int[] RightEyeIndices = [68, 69, 70, 71, 72, 73, 74, 75];
     private static readonly int[] NoseIndices = [51, 52, 53, 54, 55, 56, 57, 58, 59];
     private static readonly int[] MouthIndices =
         [76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95];
     private static readonly int[] CentralFeatureIndices =
-        [60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75,
+        [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+         60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75,
          51, 52, 53, 54, 55, 56, 57, 58, 59,
          76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95];
 
@@ -108,6 +110,14 @@ public sealed class FaceQualityEvaluator
         var rightEyeAspectRatio = CalculateEyeAspectRatio(observation.Landmarks, RightEyeIndices);
 
         if (VisibleRatio(observation.Landmarks, CentralFeatureIndices) < thresholds.OverallVisibleRatio)
+        {
+            return new FaceQualityEvaluation(
+                CameraFaceState.FaceOccluded,
+                leftEyeAspectRatio,
+                rightEyeAspectRatio);
+        }
+
+        if (VisibleRatio(observation.Landmarks, ChinIndices) < thresholds.FeatureVisibleRatio)
         {
             return new FaceQualityEvaluation(
                 CameraFaceState.FaceOccluded,

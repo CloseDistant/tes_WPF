@@ -28,6 +28,17 @@ public sealed class FaceQualityEvaluatorTests
     }
 
     [Fact]
+    public void Evaluate_ReturnsFaceOccludedWhenChinIsUnavailable()
+    {
+        var landmarks = CreateLandmarks();
+        SetConfidence(landmarks, 11, 21, 0);
+
+        var result = evaluator.Evaluate(CreateObservation(landmarks));
+
+        Assert.Equal(CameraFaceState.FaceOccluded, result.State);
+    }
+
+    [Fact]
     public void Evaluate_ReturnsEyesNotVisibleWhenOneEyeIsUnavailable()
     {
         var landmarks = CreateLandmarks();
