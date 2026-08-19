@@ -7,26 +7,13 @@ public sealed partial class AssessmentCaptureViewModel
     private void BeginCalibrationSequence()
     {
         pictureBrowseTimer.Stop();
-        calibrationTimer.Stop();
-        calibrationFrames.Clear();
+        ResetCalibrationSequence();
 
-        for (var trialIndex = 0; trialIndex < calibrationTrials.Length; trialIndex++)
+        foreach (var frame in calibrationSequenceFactory.Create())
         {
-            var trial = calibrationTrials[trialIndex];
-            calibrationFrames.Enqueue(new("+", 50, 50, TimeSpan.FromMilliseconds(trial.FirstCrossMs)));
-
-            for (var pointNumber = 1; pointNumber <= trial.PointCount; pointNumber++)
-            {
-                var (x, y) = trial.IsFixedLayout
-                    ? PositionForFixedPoint(pointNumber, trial.LayoutValues)
-                    : PositionForRegionPoint(pointNumber, trial.LayoutValues[pointNumber - 1]);
-                calibrationFrames.Enqueue(new(pointNumber.ToString(), x, y, TimeSpan.FromMilliseconds(trial.NumberMs)));
-            }
-
-            calibrationFrames.Enqueue(new("+", 50, 50, TimeSpan.FromMilliseconds(trial.LastCrossMs)));
+            calibrationFrames.Enqueue(frame);
         }
 
-        CalibrationStatusText = "校准进行中";
         ShowNextCalibrationFrame();
     }
 
@@ -36,26 +23,91 @@ public sealed partial class AssessmentCaptureViewModel
     /// </summary>
     private void ShowNextCalibrationFrame()
     {
+        calibrationTimer.Stop();
         if (calibrationFrames.Count == 0)
         {
-            calibrationTimer.Stop();
-            CalibrationText = "完成";
-            CalibrationX = 50;
-            CalibrationY = 50;
-            CalibrationStatusText = "校准完成，准备进入图片浏览";
+            IsCalibrationMarkerVisible = false;
+            CalibrationAnimationSequence++;
             MoveToStep(CaptureWorkbenchStep.Completed);
             NotifyStageChanged();
             return;
         }
 
         var frame = calibrationFrames.Dequeue();
+        if (calibrationTrialIndex != frame.TrialIndex)
+        {
+            calibrationTrialIndex = frame.TrialIndex;
+            OnPropertyChanged(nameof(CalibrationTrialTitle));
+        }
+
         CalibrationText = frame.Text;
+        CalibrationMarkerColor = frame.MarkerColor;
         CalibrationX = frame.X;
         CalibrationY = frame.Y;
-        OnPropertyChanged(nameof(CalibrationCanvasLeft));
-        OnPropertyChanged(nameof(CalibrationCanvasTop));
+        CalibrationMoveDurationMilliseconds = (int)Math.Round(frame.MoveDuration.TotalMilliseconds);
+        IsCalibrationMarkerVisible = true;
+        CalibrationAnimationSequence++;
+        RecordCalibrationFrameEvent(frame);
         calibrationTimer.Interval = frame.Duration;
         calibrationTimer.Start();
+    }
+
+    private void RecordCalibrationFrameEvent(CalibrationFrame frame)
+    {
+        var startedAt = DateTimeOffset.Now;
+        if (frame.Kind == CalibrationFrameKind.Point)
+        {
+            RecordModuleEventSafely(
+                "eye_calibration_point_started",
+                $"眼动校准第 {frame.TrialIndex} 轮第 {frame.PointIndex} 点开始",
+                new
+                {
+                    trialIndex = frame.TrialIndex,
+                    pointIndex = frame.PointIndex,
+                    displayNumber = frame.Text,
+                    positionType = frame.Region.HasValue ? (frame.Region == 1 ? "upper" : "lower") : "grid",
+                    region = frame.Region,
+                    xRatio = Math.Round(frame.X / 100d, 4),
+                    yRatio = Math.Round(frame.Y / 100d, 4),
+                    durationMs = (int)frame.Duration.TotalMilliseconds,
+                    moveDurationMs = (int)frame.MoveDuration.TotalMilliseconds,
+                    startedAtUnixMs = startedAt.ToUnixTimeMilliseconds()
+                },
+                startedAt,
+                null);
+            return;
+        }
+
+        RecordModuleEventSafely(
+            frame.Kind == CalibrationFrameKind.StartCross
+                ? "eye_calibration_trial_started"
+                : "eye_calibration_trial_ending",
+            frame.Kind == CalibrationFrameKind.StartCross
+                ? $"眼动校准第 {frame.TrialIndex} 轮开始"
+                : $"眼动校准第 {frame.TrialIndex} 轮结束十字开始",
+            new
+            {
+                trialIndex = frame.TrialIndex,
+                durationMs = (int)frame.Duration.TotalMilliseconds,
+                startedAtUnixMs = startedAt.ToUnixTimeMilliseconds()
+            },
+            startedAt,
+            null);
+    }
+
+    private void ResetCalibrationSequence()
+    {
+        calibrationTimer.Stop();
+        calibrationFrames.Clear();
+        calibrationTrialIndex = 1;
+        CalibrationText = "+";
+        CalibrationMarkerColor = EyeCalibrationSequenceFactory.CrossColor;
+        CalibrationX = 50;
+        CalibrationY = 50;
+        CalibrationMoveDurationMilliseconds = 0;
+        IsCalibrationMarkerVisible = false;
+        CalibrationAnimationSequence++;
+        OnPropertyChanged(nameof(CalibrationTrialTitle));
     }
 
     /// <summary>

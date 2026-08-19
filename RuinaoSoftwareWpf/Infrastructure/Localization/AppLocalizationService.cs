@@ -186,6 +186,7 @@ public sealed class AppLocalizationService : ILocalizationService
         ["CaptureWorkspaceMainPictureBrowse"] = ("当前图片浏览阶段：图片将在此处按顺序展示", "Picture browsing: images will be shown here in sequence"),
         ["CaptureWorkspaceMainVideoBrowse"] = ("当前视频浏览阶段：视频将在此处随机播放", "Video browsing: videos will be played here in random order"),
         ["CaptureWorkspaceMainEyeCalibration"] = ("当前校准阶段：此区域切换为眼动校准点阵", "Calibration stage: this area switches to the eye calibration point grid"),
+        ["CaptureWorkspaceCalibrationTrialTitle"] = ("眼动校准 · 第 {0} 轮", "Eye calibration · Trial {0}"),
         ["CaptureWorkspaceMainCompleted"] = ("当前完成阶段：准备进入{0}", "Completed: ready to enter {0}"),
         ["CaptureWorkspaceDevHintExecution"] = ("开发预览：此处后续显示 8 点 / 10 点校准内容", "Development preview: 8-point / 10-point calibration content is shown here"),
         ["CaptureWorkspaceDevHintDefault"] = ("开发预览：点击左侧临时按钮进入下一步骤", "Development preview: click the temporary button on the left to enter the next step"),

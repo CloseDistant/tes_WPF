@@ -37,6 +37,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private readonly DispatcherTimer voiceBaselineTimer = new();
     private readonly DispatcherTimer wordReadingTimer = new();
     private readonly DispatcherTimer syncTestTimer = new();
+    private readonly EyeCalibrationSequenceFactory calibrationSequenceFactory;
     private readonly Random videoBrowseRandom = new();
     private readonly Queue<CalibrationFrame> calibrationFrames = new();
     private static readonly Brush ActiveStepBrush = new SolidColorBrush(Color.FromRgb(208, 144, 62));
@@ -83,7 +84,11 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private string calibrationText = "+";
     private double calibrationX = 50;
     private double calibrationY = 50;
-    private string calibrationStatusText = "待开始";
+    private string calibrationMarkerColor = "#969DA8";
+    private bool isCalibrationMarkerVisible;
+    private int calibrationMoveDurationMilliseconds;
+    private int calibrationAnimationSequence;
+    private int calibrationTrialIndex = 1;
     private string frameSaveStatusText = string.Empty;
     private string frameOutputDirectory = string.Empty;
     private string stageNoticeText = string.Empty;
@@ -181,6 +186,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         this.patientService = patientService;
         this.toastService = toastService;
         this.workbenchCoordinator = workbenchCoordinator;
+        calibrationSequenceFactory = new EyeCalibrationSequenceFactory(new Random());
         this.localization.LanguageChanged += (_, _) =>
         {
             RefreshModuleDisplayNames();
@@ -827,15 +833,35 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         }
     }
 
-    public double CalibrationCanvasLeft => (CalibrationX / 100d * 760d) - 22d;
+    public double CalibrationCanvasLeft => (CalibrationX / 100d * 760d) - 28d;
 
-    public double CalibrationCanvasTop => (CalibrationY / 100d * 460d) - 22d;
+    public double CalibrationCanvasTop => (CalibrationY / 100d * 460d) - 28d;
 
-    public string CalibrationStatusText
+    public string CalibrationMarkerColor
     {
-        get => calibrationStatusText;
-        private set => SetProperty(ref calibrationStatusText, value);
+        get => calibrationMarkerColor;
+        private set => SetProperty(ref calibrationMarkerColor, value);
     }
+
+    public bool IsCalibrationMarkerVisible
+    {
+        get => isCalibrationMarkerVisible;
+        private set => SetProperty(ref isCalibrationMarkerVisible, value);
+    }
+
+    public int CalibrationMoveDurationMilliseconds
+    {
+        get => calibrationMoveDurationMilliseconds;
+        private set => SetProperty(ref calibrationMoveDurationMilliseconds, value);
+    }
+
+    public int CalibrationAnimationSequence
+    {
+        get => calibrationAnimationSequence;
+        private set => SetProperty(ref calibrationAnimationSequence, value);
+    }
+
+    public string CalibrationTrialTitle => T("CaptureWorkspaceCalibrationTrialTitle", calibrationTrialIndex);
 
     public string FrameSaveStatusText
     {
@@ -1845,7 +1871,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         isDemoPlaying = false;
         StopModuleExecutionTimers();
         PlaybackTimeText = "00:00 / 未播放";
-        CalibrationStatusText = "待开始";
         ResetFrameSavingStatus();
         ResetBasicInfoFormState(false);
         ResetQuestionnaireState(false);
@@ -1936,7 +1961,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         isDemoPlaying = false;
         StopModuleExecutionTimers();
         PlaybackTimeText = "00:00 / 未播放";
-        CalibrationStatusText = "待开始";
         ResetFrameSavingStatus();
         ResetBasicInfoFormState(false);
         ResetQuestionnaireState(false);
@@ -2121,7 +2145,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     /// </summary>
     private void StopModuleExecutionTimers()
     {
-        calibrationTimer.Stop();
+        ResetCalibrationSequence();
         ResetPictureBrowseState();
         ResetVideoBrowseState();
         ResetVoiceBaselineState();
@@ -2133,37 +2157,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         ResetEmotionLetterSearchState();
         ResetEmotionStroopState();
         ResetSyncTestState();
-    }
-
-    private static (double X, double Y) PositionForFixedPoint(int pointNumber, int[] numberAtPositions)
-    {
-        var positions = new (double X, double Y)[]
-        {
-            (18, 18), (50, 18), (82, 18),
-            (18, 50), (82, 50),
-            (18, 82), (50, 82), (82, 82)
-        };
-
-        var positionIndex = Array.IndexOf(numberAtPositions, pointNumber);
-        return positionIndex >= 0 && positionIndex < positions.Length
-            ? positions[positionIndex]
-            : (50, 50);
-    }
-
-    private static (double X, double Y) PositionForRegionPoint(int pointNumber, int region)
-    {
-        var slot = (pointNumber - 1) % 5;
-        var x = slot switch
-        {
-            0 => 18d,
-            1 => 34d,
-            2 => 50d,
-            3 => 66d,
-            _ => 82d
-        };
-
-        var y = region == 1 ? 28d : 72d;
-        return (x, y);
     }
 
     private void LoadCameraDevices()
@@ -2215,6 +2208,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(FormFillStepTitleText));
         OnPropertyChanged(nameof(FormCompletedStepTitleText));
         OnPropertyChanged(nameof(CurrentModule));
+        OnPropertyChanged(nameof(CalibrationTrialTitle));
         OnPropertyChanged(nameof(CurrentModuleCode));
         OnPropertyChanged(nameof(NextModule));
         OnPropertyChanged(nameof(SharedDisplayTitle));

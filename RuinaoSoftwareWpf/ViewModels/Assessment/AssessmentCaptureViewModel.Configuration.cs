@@ -17,20 +17,6 @@ public sealed partial class AssessmentCaptureViewModel
         Saving = 5
     }
 
-    /// <summary>
-    /// 眼动校准单次试次配置。
-    /// 固定顺序试次使用 8 个点位，随机显示试次使用 10 个上下区域点。
-    /// </summary>
-    private sealed record CalibrationTrial(
-        int PointCount,
-        int FirstCrossMs,
-        int NumberMs,
-        int LastCrossMs,
-        int[] LayoutValues,
-        bool IsFixedLayout);
-
-    private sealed record CalibrationFrame(string Text, double X, double Y, TimeSpan Duration);
-
     private sealed record PictureBrowseItem(string ImagePath, int ImageType);
 
     private sealed record VideoBrowseItem(string VideoPath, int VideoType);
@@ -688,11 +674,4 @@ public sealed partial class AssessmentCaptureViewModel
         "模块完成"
     ];
 
-    private readonly CalibrationTrial[] calibrationTrials =
-    [
-        new(8, 1200, 1000, 800, [1, 5, 3, 7, 8, 4, 6, 2], true),
-        new(10, 800, 1000, 800, [1, 2, 2, 1, 2, 2, 1, 1, 2, 1], false),
-        new(8, 800, 1000, 800, [4, 6, 1, 8, 7, 2, 5, 3], true),
-        new(10, 800, 1000, 1200, [2, 1, 1, 2, 2, 2, 1, 1, 1, 2], false)
-    ];
 }

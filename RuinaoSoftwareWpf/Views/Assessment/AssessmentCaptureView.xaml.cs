@@ -2,7 +2,9 @@
 using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using System.ComponentModel;
 using System.IO;
 using OpenCvSharp;
 using RuinaoSoftwareWpf.ApplicationContracts;
@@ -30,12 +32,17 @@ public partial class AssessmentCaptureView : UserControl
     private bool cameraPreviewHasFrame;
     private bool faceInGuideFrame;
     private DateTime lastFaceOkAt = DateTime.MinValue;
+    private AssessmentCaptureViewModel? calibrationAnimationViewModel;
+    private double previousCalibrationMarkerLeft;
+    private double previousCalibrationMarkerTop;
+    private bool hasCalibrationMarkerPosition;
 
     public AssessmentCaptureView()
     {
         InitializeComponent();
         playbackTimer.Tick += (_, _) => UpdatePlaybackTime();
         cameraTimer.Tick += (_, _) => UpdateCameraPreview();
+        DataContextChanged += AssessmentCaptureView_DataContextChanged;
         Loaded += AssessmentCaptureView_Loaded;
         Unloaded += (_, _) => StopPageActivitiesForUnload();
     }
@@ -44,6 +51,7 @@ public partial class AssessmentCaptureView : UserControl
 
     private async void AssessmentCaptureView_Loaded(object sender, RoutedEventArgs e)
     {
+        AttachCalibrationAnimationViewModel(ViewModel);
         // 如果用户离开演示播放页后又返回，MediaElement 不会自动恢复画面。
         // 这里兜底清理“播放中但没有播放器上下文”的状态，让用户重新完整观看演示。
         ViewModel?.CancelDemoPlaybackForNavigation();
@@ -64,11 +72,119 @@ public partial class AssessmentCaptureView : UserControl
 
     private void StopPageActivitiesForUnload()
     {
+        DetachCalibrationAnimationViewModel();
+        StopCalibrationMarkerAnimation();
         playbackTimer.Stop();
         DemoMedia.Stop();
         VideoBrowseMedia.Stop();
         ViewModel?.CancelDemoPlaybackForNavigation();
         StopCameraPreview();
+    }
+
+    private void AssessmentCaptureView_DataContextChanged(
+        object sender,
+        DependencyPropertyChangedEventArgs e)
+    {
+        DetachCalibrationAnimationViewModel();
+        if (IsLoaded)
+        {
+            AttachCalibrationAnimationViewModel(e.NewValue as AssessmentCaptureViewModel);
+        }
+    }
+
+    private void AttachCalibrationAnimationViewModel(AssessmentCaptureViewModel? viewModel)
+    {
+        if (viewModel is null || ReferenceEquals(calibrationAnimationViewModel, viewModel))
+        {
+            return;
+        }
+
+        calibrationAnimationViewModel = viewModel;
+        calibrationAnimationViewModel.PropertyChanged += OnCalibrationViewModelPropertyChanged;
+        previousCalibrationMarkerLeft = viewModel.CalibrationCanvasLeft;
+        previousCalibrationMarkerTop = viewModel.CalibrationCanvasTop;
+        hasCalibrationMarkerPosition = true;
+        StopCalibrationMarkerAnimation();
+    }
+
+    private void DetachCalibrationAnimationViewModel()
+    {
+        if (calibrationAnimationViewModel is not null)
+        {
+            calibrationAnimationViewModel.PropertyChanged -= OnCalibrationViewModelPropertyChanged;
+            calibrationAnimationViewModel = null;
+        }
+
+        hasCalibrationMarkerPosition = false;
+    }
+
+    private void OnCalibrationViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not nameof(AssessmentCaptureViewModel.CalibrationAnimationSequence))
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Render,
+            new Action(ApplyCalibrationMarkerAnimation));
+    }
+
+    private void ApplyCalibrationMarkerAnimation()
+    {
+        var viewModel = calibrationAnimationViewModel;
+        if (viewModel is null || !viewModel.IsCalibrationMarkerVisible)
+        {
+            StopCalibrationMarkerAnimation();
+            return;
+        }
+
+        var targetLeft = viewModel.CalibrationCanvasLeft;
+        var targetTop = viewModel.CalibrationCanvasTop;
+        if (!hasCalibrationMarkerPosition || viewModel.CalibrationMoveDurationMilliseconds <= 0)
+        {
+            StopCalibrationMarkerAnimation();
+            previousCalibrationMarkerLeft = targetLeft;
+            previousCalibrationMarkerTop = targetTop;
+            hasCalibrationMarkerPosition = true;
+            return;
+        }
+
+        var offsetX = previousCalibrationMarkerLeft - targetLeft;
+        var offsetY = previousCalibrationMarkerTop - targetTop;
+        var duration = TimeSpan.FromMilliseconds(viewModel.CalibrationMoveDurationMilliseconds);
+        var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+        CalibrationMarkerTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        CalibrationMarkerTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        CalibrationMarkerTransform.X = 0;
+        CalibrationMarkerTransform.Y = 0;
+        CalibrationMarkerTransform.BeginAnimation(
+            TranslateTransform.XProperty,
+            new DoubleAnimation(offsetX, 0, duration)
+            {
+                EasingFunction = easing,
+                FillBehavior = FillBehavior.Stop
+            });
+        CalibrationMarkerTransform.BeginAnimation(
+            TranslateTransform.YProperty,
+            new DoubleAnimation(offsetY, 0, duration)
+            {
+                EasingFunction = easing,
+                FillBehavior = FillBehavior.Stop
+            });
+
+        previousCalibrationMarkerLeft = targetLeft;
+        previousCalibrationMarkerTop = targetTop;
+        hasCalibrationMarkerPosition = true;
+    }
+
+    private void StopCalibrationMarkerAnimation()
+    {
+        CalibrationMarkerTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        CalibrationMarkerTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        CalibrationMarkerTransform.X = 0;
+        CalibrationMarkerTransform.Y = 0;
     }
 
     private void PlayDemoButton_Click(object sender, System.Windows.RoutedEventArgs e)

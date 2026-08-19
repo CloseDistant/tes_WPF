@@ -601,36 +601,43 @@
 
                                             <Grid Visibility="{Binding IsEyeCalibrationStage, Converter={StaticResource BoolToVisibilityConverter}}"
                                                   Background="#F5F7FA">
-                                                <TextBlock Text="{Binding CurrentModule}"
+                                                <TextBlock Text="{Binding CalibrationTrialTitle}"
                                                            Foreground="#5F6673"
-                                                           FontSize="13"
+                                                           FontSize="18"
                                                            FontWeight="SemiBold"
                                                            HorizontalAlignment="Left"
                                                            VerticalAlignment="Top"
                                                            Margin="18" />
                                                 <Canvas Width="760"
                                                         Height="460"
+                                                        ClipToBounds="True"
                                                         HorizontalAlignment="Center"
                                                         VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding CalibrationText}"
-                                                               Canvas.Left="{Binding CalibrationCanvasLeft}"
-                                                               Canvas.Top="{Binding CalibrationCanvasTop}"
-                                                               Foreground="#11141D"
-                                                               FontSize="34"
-                                                               FontWeight="SemiBold" />
+                                                    <Grid x:Name="CalibrationMarker"
+                                                          Width="56"
+                                                          Height="56"
+                                                          Canvas.Left="{Binding CalibrationCanvasLeft}"
+                                                          Canvas.Top="{Binding CalibrationCanvasTop}"
+                                                          Visibility="{Binding IsCalibrationMarkerVisible, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                          RenderTransformOrigin="0.5,0.5">
+                                                        <Grid.RenderTransform>
+                                                            <TranslateTransform x:Name="CalibrationMarkerTransform" />
+                                                        </Grid.RenderTransform>
+                                                        <Ellipse Fill="{Binding CalibrationMarkerColor}"
+                                                                 Opacity="0.28" />
+                                                        <Ellipse Width="40"
+                                                                 Height="40"
+                                                                 Fill="{Binding CalibrationMarkerColor}"
+                                                                 HorizontalAlignment="Center"
+                                                                 VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding CalibrationText}"
+                                                                   Foreground="White"
+                                                                   FontSize="20"
+                                                                   FontWeight="SemiBold"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center" />
+                                                    </Grid>
                                                 </Canvas>
-                                                <Border Background="#E8ECF2"
-                                                        BorderBrush="#CCD3DF"
-                                                        BorderThickness="1"
-                                                        CornerRadius="4"
-                                                        Padding="12,8"
-                                                        HorizontalAlignment="Right"
-                                                        VerticalAlignment="Bottom"
-                                                        Margin="0,0,16,14">
-                                                    <TextBlock Text="{Binding CalibrationStatusText}"
-                                                               Foreground="#1F2530"
-                                                               FontWeight="SemiBold" />
-                                                </Border>
                                             </Grid>
 
                                             <Grid Visibility="{Binding IsPictureBrowseStage, Converter={StaticResource BoolToVisibilityConverter}}"
