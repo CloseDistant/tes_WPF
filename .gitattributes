@@ -25,6 +25,10 @@
 *.yaml   text eol=lf
 *.sha256 text eol=lf
 
+# Model assets are covered by a byte-for-byte integrity manifest.
+/RuinaoSoftwareWpf/Assets/CaptureWorkbench/FaceDetectionModels/*.xml text eol=lf
+/RuinaoSoftwareWpf/Assets/CaptureWorkbench/FaceDetectionModels/*.txt text eol=lf
+
 # Binary assets are never line-ending normalized.
 *.png  binary
 *.jpg  binary
