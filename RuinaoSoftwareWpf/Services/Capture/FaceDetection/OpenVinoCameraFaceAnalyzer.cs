@@ -14,7 +14,7 @@ using System.IO;
 public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
 {
     private const double FaceDetectionConfidence = 0.65;
-    private const double FaceAnalysisPaddingRatio = 0.12;
+    private const double ModelInputPaddingRatio = 0.12;
     private static readonly Size FaceDetectorInputSize = new(300, 300);
     private static readonly Size LandmarkInputSize = new(64, 64);
     private static readonly Size HeadPoseInputSize = new(60, 60);
@@ -69,12 +69,11 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
             }
 
             var primary = detectedFaces.MaxBy(static item => item.Bounds.Width * item.Bounds.Height);
-            var analysisBounds = ExpandAndClamp(
+            var modelInputBounds = ExpandAndClamp(
                 primary.Bounds,
                 frame.Width,
                 frame.Height,
-                FaceAnalysisPaddingRatio);
-            var normalizedPrimary = Normalize(analysisBounds, frame.Width, frame.Height);
+                ModelInputPaddingRatio);
             if (detectedFaces.Count > 1)
             {
                 return new CameraFaceAnalysis(
@@ -83,16 +82,22 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
                     capturedAt,
                     CameraFaceState.MultipleFaces,
                     detectedFaces.Count,
-                    normalizedPrimary);
+                    Normalize(primary.Bounds, frame.Width, frame.Height));
             }
 
-            var landmarks = DetectLandmarks(frame, analysisBounds);
-            var pose = EstimateHeadPose(frame, analysisBounds);
+            var landmarks = DetectLandmarks(frame, modelInputBounds);
+            var pose = EstimateHeadPose(frame, modelInputBounds);
             var evaluation = qualityEvaluator.Evaluate(new FaceQualityObservation(
                 landmarks,
                 pose.Yaw,
                 pose.Pitch,
                 pose.Roll));
+            var detectedFaceBounds = CalculateDetectedFaceBounds(
+                primary.Bounds,
+                landmarks,
+                frame.Width,
+                frame.Height,
+                FaceQualityThresholds.Default.LandmarkConfidence);
 
             return new CameraFaceAnalysis(
                 sequence,
@@ -100,7 +105,7 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
                 capturedAt,
                 evaluation.State,
                 1,
-                normalizedPrimary,
+                Normalize(detectedFaceBounds, frame.Width, frame.Height),
                 pose.Yaw,
                 pose.Pitch,
                 pose.Roll,
@@ -268,7 +273,11 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
         logger.Error(message, exception);
     }
 
-    private static Rect ExpandAndClamp(Rect bounds, int width, int height, double paddingRatio)
+    private static Rect ExpandAndClamp(
+        Rect bounds,
+        int width,
+        int height,
+        double paddingRatio)
     {
         var horizontalPadding = (int)Math.Round(bounds.Width * paddingRatio);
         var verticalPadding = (int)Math.Round(bounds.Height * paddingRatio);
@@ -279,6 +288,69 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
             bounds.Bottom + verticalPadding,
             width,
             height);
+    }
+
+    internal static Rect CalculateDetectedFaceBounds(
+        Rect detectorBounds,
+        IReadOnlyList<FaceLandmarkPoint> landmarks,
+        int frameWidth,
+        int frameHeight,
+        double minimumConfidence)
+    {
+        FaceLandmarkPoint? previous = null;
+        var minimumX = (double)detectorBounds.Left;
+        var maximumX = (double)detectorBounds.Right;
+        var maximumY = (double)detectorBounds.Bottom;
+        var spacingTotal = 0d;
+        var spacingCount = 0;
+        var reliablePointCount = 0;
+
+        foreach (var landmarkIndex in FaceLandmarkIndices.FaceContour)
+        {
+            if (landmarkIndex >= landmarks.Count
+                || landmarks[landmarkIndex].Confidence < minimumConfidence)
+            {
+                previous = null;
+                continue;
+            }
+
+            var current = landmarks[landmarkIndex];
+            minimumX = Math.Min(minimumX, current.X);
+            maximumX = Math.Max(maximumX, current.X);
+            maximumY = Math.Max(maximumY, current.Y);
+            reliablePointCount++;
+
+            if (previous is { } adjacent)
+            {
+                spacingTotal += Distance(adjacent, current);
+                spacingCount++;
+            }
+
+            previous = current;
+        }
+
+        if (reliablePointCount == 0)
+        {
+            return detectorBounds;
+        }
+
+        var contourMargin = spacingCount > 0
+            ? Math.Clamp((int)Math.Ceiling(spacingTotal / spacingCount), 2, 16)
+            : 2;
+        return ClampRect(
+            Math.Min(detectorBounds.Left, (int)Math.Floor(minimumX) - contourMargin),
+            detectorBounds.Top,
+            Math.Max(detectorBounds.Right, (int)Math.Ceiling(maximumX) + contourMargin),
+            Math.Max(detectorBounds.Bottom, (int)Math.Ceiling(maximumY) + contourMargin),
+            frameWidth,
+            frameHeight);
+    }
+
+    private static double Distance(FaceLandmarkPoint left, FaceLandmarkPoint right)
+    {
+        var x = left.X - right.X;
+        var y = left.Y - right.Y;
+        return Math.Sqrt(x * x + y * y);
     }
 
     private static Rect ClampRect(int left, int top, int right, int bottom, int width, int height)

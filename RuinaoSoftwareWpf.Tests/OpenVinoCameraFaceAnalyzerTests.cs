@@ -6,6 +6,29 @@ using Xunit;
 public sealed class OpenVinoCameraFaceAnalyzerTests
 {
     [Fact]
+    public void CalculateDetectedFaceBounds_ExtendsBottomToDetectedChin()
+    {
+        var detectorBounds = new Rect(100, 50, 100, 100);
+        var landmarks = Enumerable
+            .Range(0, 98)
+            .Select(_ => new FaceLandmarkPoint(0, 0, 0))
+            .ToArray();
+        landmarks[15] = new FaceLandmarkPoint(145, 160, 1);
+        landmarks[16] = new FaceLandmarkPoint(150, 170, 1);
+        landmarks[17] = new FaceLandmarkPoint(155, 160, 1);
+
+        var result = OpenVinoCameraFaceAnalyzer.CalculateDetectedFaceBounds(
+            detectorBounds,
+            landmarks,
+            frameWidth: 640,
+            frameHeight: 480,
+            minimumConfidence: 0.08);
+
+        Assert.True(result.Bottom > 170);
+        Assert.True(result.Bottom > detectorBounds.Bottom);
+    }
+
+    [Fact]
     public void Analyze_LoadsBundledModelsAndReportsNoFaceForBlankFrame()
     {
         var logger = new RecordingLoggingService();

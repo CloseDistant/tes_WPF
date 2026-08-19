@@ -43,6 +43,12 @@ public readonly record struct FaceLandmarkPoint(
     double Y,
     double Confidence);
 
+internal static class FaceLandmarkIndices
+{
+    public static IReadOnlyList<int> FaceContour { get; } = Enumerable.Range(0, 33).ToArray();
+    public static IReadOnlyList<int> Chin { get; } = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
+}
+
 public sealed record FaceQualityObservation(
     IReadOnlyList<FaceLandmarkPoint> Landmarks,
     double YawDegrees,
@@ -79,7 +85,6 @@ public readonly record struct FaceQualityEvaluation(
 /// </summary>
 public sealed class FaceQualityEvaluator
 {
-    private static readonly int[] ChinIndices = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
     private static readonly int[] LeftEyeIndices = [60, 61, 62, 63, 64, 65, 66, 67];
     private static readonly int[] RightEyeIndices = [68, 69, 70, 71, 72, 73, 74, 75];
     private static readonly int[] NoseIndices = [51, 52, 53, 54, 55, 56, 57, 58, 59];
@@ -117,7 +122,7 @@ public sealed class FaceQualityEvaluator
                 rightEyeAspectRatio);
         }
 
-        if (VisibleRatio(observation.Landmarks, ChinIndices) < thresholds.FeatureVisibleRatio)
+        if (VisibleRatio(observation.Landmarks, FaceLandmarkIndices.Chin) < thresholds.FeatureVisibleRatio)
         {
             return new FaceQualityEvaluation(
                 CameraFaceState.FaceOccluded,
