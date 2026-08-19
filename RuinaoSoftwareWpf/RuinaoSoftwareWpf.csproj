@@ -29,7 +29,6 @@
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
     <PackageReference Include="Sdcb.OpenVINO" Version="0.8.1" />
-    <PackageReference Include="Sdcb.OpenVINO.runtime.win-x64" Version="2026.2.0" />
     <PackageReference Include="System.Management" Version="10.0.0" />
     <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
     <Reference Include="RuinaoTesHardware">
@@ -61,6 +60,19 @@
     </Content>
     <Content Include="Tools\ffmpeg\ffprobe.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="Tools\OpenVINO\win-x64\*.dll">
+      <Link>runtimes\win-x64\native\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="Tools\OpenVINO\README.md">
+      <Link>Tools\OpenVINO\README.md</Link>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="Tools\OpenVINO\LICENSE.txt">
+      <Link>Tools\OpenVINO\LICENSE.txt</Link>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
