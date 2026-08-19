@@ -14,6 +14,7 @@ using System.IO;
 public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
 {
     private const double FaceDetectionConfidence = 0.65;
+    private const double FaceAnalysisPaddingRatio = 0.12;
     private static readonly Size FaceDetectorInputSize = new(300, 300);
     private static readonly Size LandmarkInputSize = new(64, 64);
     private static readonly Size HeadPoseInputSize = new(60, 60);
@@ -68,7 +69,12 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
             }
 
             var primary = detectedFaces.MaxBy(static item => item.Bounds.Width * item.Bounds.Height);
-            var normalizedPrimary = Normalize(primary.Bounds, frame.Width, frame.Height);
+            var analysisBounds = ExpandAndClamp(
+                primary.Bounds,
+                frame.Width,
+                frame.Height,
+                FaceAnalysisPaddingRatio);
+            var normalizedPrimary = Normalize(analysisBounds, frame.Width, frame.Height);
             if (detectedFaces.Count > 1)
             {
                 return new CameraFaceAnalysis(
@@ -80,7 +86,6 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
                     normalizedPrimary);
             }
 
-            var analysisBounds = ExpandAndClamp(primary.Bounds, frame.Width, frame.Height, 0.08);
             var landmarks = DetectLandmarks(frame, analysisBounds);
             var pose = EstimateHeadPose(frame, analysisBounds);
             var evaluation = qualityEvaluator.Evaluate(new FaceQualityObservation(
