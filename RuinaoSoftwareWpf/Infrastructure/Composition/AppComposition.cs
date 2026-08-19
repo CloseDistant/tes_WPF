@@ -130,6 +130,7 @@ public static class AppComposition
         services.AddSingleton<ICaptureMediaEncoder, CaptureMediaEncoder>();
         services.AddSingleton<ICaptureMediaSyncProbe, CaptureMediaSyncProbe>();
         services.AddSingleton<IModuleEventRecorder, ModuleEventRecorder>(); // 模块事件顺序写入与退出等待
+        services.AddSingleton<ICameraFaceAnalyzer, OpenVinoCameraFaceAnalyzer>();
         // 单台工作站同一时间只允许一个摄像头会话；采集 ViewModel 也是 Singleton，
         // 因此摄像头服务使用相同生命周期，并由根容器统一释放。
         services.AddSingleton<ICameraCaptureService, OpenCvCameraCaptureService>();

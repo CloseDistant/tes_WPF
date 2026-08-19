@@ -2,13 +2,6 @@ namespace RuinaoSoftwareWpf;
 
 using System.Buffers;
 
-public enum CameraFaceState
-{
-    NotDetected,
-    InsideGuide,
-    OutsideGuide
-}
-
 public readonly record struct NormalizedCameraRect(
     double X,
     double Y,
@@ -34,6 +27,9 @@ public sealed class CameraPreviewSnapshot : IDisposable
         NormalizedCameraRect guideBounds,
         NormalizedCameraRect? faceBounds,
         CameraFaceState faceState,
+        int faceCount,
+        bool isPrimaryFaceInsideGuide,
+        long faceAnalysisSequence,
         int recordedFrameCount)
     {
         Sequence = sequence;
@@ -46,6 +42,9 @@ public sealed class CameraPreviewSnapshot : IDisposable
         GuideBounds = guideBounds;
         FaceBounds = faceBounds;
         FaceState = faceState;
+        FaceCount = faceCount;
+        IsPrimaryFaceInsideGuide = isPrimaryFaceInsideGuide;
+        FaceAnalysisSequence = faceAnalysisSequence;
         RecordedFrameCount = recordedFrameCount;
     }
 
@@ -69,6 +68,12 @@ public sealed class CameraPreviewSnapshot : IDisposable
     public NormalizedCameraRect? FaceBounds { get; }
 
     public CameraFaceState FaceState { get; }
+
+    public int FaceCount { get; }
+
+    public bool IsPrimaryFaceInsideGuide { get; }
+
+    public long FaceAnalysisSequence { get; }
 
     public int RecordedFrameCount { get; }
 

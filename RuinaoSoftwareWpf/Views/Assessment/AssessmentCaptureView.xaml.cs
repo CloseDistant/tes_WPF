@@ -5,6 +5,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using RuinaoSoftwareWpf.ApplicationContracts;
 
@@ -30,7 +31,7 @@ public partial class AssessmentCaptureView : UserControl
     private readonly SemaphoreSlim cameraLifecycleGate = new(1, 1);
     private bool cameraPreviewHasFrame;
     private bool faceInGuideFrame;
-    private DateTime lastFaceOkAt = DateTime.MinValue;
+    private long faceReadySinceTimestamp;
     private DateTime lastRecordingStatusUpdateAt = DateTime.MinValue;
     private DateTimeOffset lastCameraPreviewCapturedAt = DateTimeOffset.MinValue;
     private CameraPreviewOverlayState? latestCameraOverlay;
@@ -260,7 +261,7 @@ public partial class AssessmentCaptureView : UserControl
             return;
         }
 
-        if (!faceInGuideFrame && DateTime.Now - lastFaceOkAt > TimeSpan.FromSeconds(1.5))
+        if (!faceInGuideFrame)
         {
             viewModel.ShowStageNotice(viewModel.Localize("CaptureWorkspaceFaceNotReadyStageNotice"));
             return;
@@ -458,6 +459,8 @@ public partial class AssessmentCaptureView : UserControl
         cameraPreviewHasFrame = false;
         faceInGuideFrame = false;
         latestCameraOverlay = null;
+        faceReadySinceTimestamp = 0;
+        (DataContext as AssessmentCaptureViewModel)?.ResetFaceConditionMonitoring();
         lastCameraPreviewCapturedAt = DateTimeOffset.MinValue;
         lastRecordingStatusUpdateAt = DateTime.MinValue;
     }
@@ -480,8 +483,7 @@ public partial class AssessmentCaptureView : UserControl
         // 第三步正式采集中切换页面或关闭程序，视为中断。
         // 中断数据不合成、不作为有效记录，录制服务会尝试删除临时音视频文件。
         var message = viewModel.Localize("CaptureWorkspaceRecordingInterruptedMessage");
-        StopModuleRecording(viewModel, CaptureMediaStopReason.Discarded, message);
-        viewModel.AbortCurrentModuleExecution(message);
+        viewModel.DiscardCurrentModuleExecution(message);
     }
 
     private void UpdateCameraPreview()
@@ -539,23 +541,52 @@ public partial class AssessmentCaptureView : UserControl
                 snapshot.Height,
                 snapshot.GuideBounds,
                 snapshot.FaceBounds,
-                snapshot.FaceState);
+                snapshot.FaceState,
+                snapshot.IsPrimaryFaceInsideGuide);
             lastCameraPreviewCapturedAt = snapshot.CapturedAt;
             UpdateCameraOverlay(latestCameraOverlay.Value);
 
             cameraPreviewHasFrame = true;
-            faceInGuideFrame = snapshot.FaceState == CameraFaceState.InsideGuide;
-            if (faceInGuideFrame)
+            var nowTimestamp = Stopwatch.GetTimestamp();
+            var isNormalAndInsideGuide = snapshot.FaceState == CameraFaceState.Normal
+                && snapshot.IsPrimaryFaceInsideGuide;
+            if (isNormalAndInsideGuide)
             {
-                lastFaceOkAt = DateTime.Now;
+                faceReadySinceTimestamp = faceReadySinceTimestamp == 0
+                    ? nowTimestamp
+                    : faceReadySinceTimestamp;
+                faceInGuideFrame = Stopwatch.GetElapsedTime(faceReadySinceTimestamp, nowTimestamp)
+                    >= TimeSpan.FromSeconds(1.5);
+            }
+            else
+            {
+                faceReadySinceTimestamp = 0;
+                faceInGuideFrame = false;
             }
 
-            CameraPreviewStatusText.Text = snapshot.FaceState switch
+            var faceStatusText = FaceStateText(viewModel, snapshot.FaceState);
+            if (snapshot.FaceState == CameraFaceState.Normal && !snapshot.IsPrimaryFaceInsideGuide)
             {
-                CameraFaceState.InsideGuide => viewModel.Localize("CaptureWorkspaceFaceInsideFrame"),
-                CameraFaceState.OutsideGuide => viewModel.Localize("CaptureWorkspaceMoveFaceIntoFrame"),
-                _ => viewModel.Localize("CaptureWorkspaceNoFaceDetected")
-            };
+                faceStatusText = viewModel.Localize("CaptureWorkspaceMoveFaceIntoFrame");
+            }
+
+            var shouldMonitorFace = viewModel.IsExecutingCaptureTask
+                && viewModel.IsMediaRecording
+                && !viewModel.IsSyncTestModule;
+            var monitorUpdate = viewModel.ObserveFaceCondition(snapshot.FaceState, nowTimestamp);
+            if (shouldMonitorFace)
+            {
+                if (!monitorUpdate.IsNormal)
+                {
+                    faceStatusText = viewModel.Localize(
+                        "CaptureWorkspaceFaceAbnormalCountdown",
+                        faceStatusText,
+                        monitorUpdate.AbnormalDuration.TotalSeconds);
+                }
+
+            }
+
+            CameraPreviewStatusText.Text = faceStatusText;
 
             if (viewModel.IsMediaRecording
                 && DateTime.Now - lastRecordingStatusUpdateAt >= TimeSpan.FromMilliseconds(500))
@@ -596,7 +627,8 @@ public partial class AssessmentCaptureView : UserControl
         }
 
         PositionOverlayRectangle(CameraFaceRectangle, faceBounds, scale, offsetX, offsetY, snapshot);
-        CameraFaceRectangle.Stroke = snapshot.FaceState == CameraFaceState.InsideGuide
+        CameraFaceRectangle.Stroke = snapshot.FaceState == CameraFaceState.Normal
+            && snapshot.IsPrimaryFaceInsideGuide
             ? Brushes.LimeGreen
             : Brushes.Red;
         CameraFaceRectangle.Visibility = Visibility.Visible;
@@ -621,7 +653,23 @@ public partial class AssessmentCaptureView : UserControl
         int Height,
         NormalizedCameraRect GuideBounds,
         NormalizedCameraRect? FaceBounds,
-        CameraFaceState FaceState);
+        CameraFaceState FaceState,
+        bool IsPrimaryFaceInsideGuide);
+
+    private static string FaceStateText(
+        AssessmentCaptureViewModel viewModel,
+        CameraFaceState state) => state switch
+        {
+            CameraFaceState.Normal => viewModel.Localize("CaptureWorkspaceFaceInsideFrame"),
+            CameraFaceState.NoFace => viewModel.Localize("CaptureWorkspaceNoFaceDetected"),
+            CameraFaceState.MultipleFaces => viewModel.Localize("CaptureWorkspaceMultipleFaces"),
+            CameraFaceState.FaceOccluded => viewModel.Localize("CaptureWorkspaceFaceOccluded"),
+            CameraFaceState.EyesNotVisible => viewModel.Localize("CaptureWorkspaceEyesNotVisible"),
+            CameraFaceState.EyesClosed => viewModel.Localize("CaptureWorkspaceEyesClosed"),
+            CameraFaceState.MouthNotVisible => viewModel.Localize("CaptureWorkspaceMouthNotVisible"),
+            CameraFaceState.HeadPoseInvalid => viewModel.Localize("CaptureWorkspaceHeadPoseInvalid"),
+            _ => viewModel.Localize("CaptureWorkspaceFaceDetectorUnavailable")
+        };
 
     private async Task BeginModuleRecordingSessionAsync(AssessmentCaptureViewModel viewModel)
     {

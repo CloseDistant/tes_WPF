@@ -2,6 +2,7 @@
 
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -29,6 +30,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private readonly ICameraCaptureService cameraCaptureService;
     private readonly ICaptureMediaService captureMediaService;
     private readonly ICaptureFormRecordService captureFormRecordService;
+    private readonly FaceConditionMonitor faceConditionMonitor = new(
+        TimeSpan.FromSeconds(3),
+        Stopwatch.Frequency);
     private readonly DispatcherTimer calibrationTimer = new();
     private readonly DispatcherTimer pictureBrowseTimer = new();
     private readonly DispatcherTimer videoBrowseTimer = new();
@@ -1283,7 +1287,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(FrameOutputDirectory));
     }
 
-    public void AbortCurrentModuleExecution(string message)
+    public void DiscardCurrentModuleExecution(string message, bool notifyUser = false)
     {
         if (currentStep != CaptureWorkbenchStep.ModuleExecution)
         {
@@ -1291,6 +1295,13 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         }
 
         StopModuleExecutionTimers();
+        faceConditionMonitor.Reset();
+        DiscardFrameSavingStatus();
+        if (captureMediaService.IsCapturing)
+        {
+            captureMediaService.RequestStop(CaptureMediaStopReason.Discarded, message);
+        }
+
         MoveToStep(CaptureWorkbenchStep.FaceCheck);
         isDemoCompleted = true;
         isDemoPlaying = false;
@@ -1301,8 +1312,51 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
             syncTestRemainingSeconds = SyncTestDurationSeconds;
             isSyncTestRunning = false;
         }
+
+        if (notifyUser)
+        {
+            toastService.ShowError(T("CaptureWorkspaceFaceAttemptInvalidTitle"), message);
+        }
+
         NotifyStageChanged();
     }
+
+    internal FaceConditionMonitorUpdate ObserveFaceCondition(
+        CameraFaceState state,
+        long timestamp)
+    {
+        if (!IsExecutingCaptureTask || !IsMediaRecording || IsSyncTestModule)
+        {
+            faceConditionMonitor.Reset();
+            return new FaceConditionMonitorUpdate(state, TimeSpan.Zero, false);
+        }
+
+        var update = faceConditionMonitor.Observe(state, timestamp);
+        if (update.JustConfirmed)
+        {
+            var message = T(
+                "CaptureWorkspaceFaceAttemptInvalid",
+                FaceStateReasonText(state));
+            DiscardCurrentModuleExecution(message, notifyUser: true);
+        }
+
+        return update;
+    }
+
+    internal void ResetFaceConditionMonitoring() => faceConditionMonitor.Reset();
+
+    private string FaceStateReasonText(CameraFaceState state) => state switch
+    {
+        CameraFaceState.Normal => T("CaptureWorkspaceFaceInsideFrame"),
+        CameraFaceState.NoFace => T("CaptureWorkspaceNoFaceDetected"),
+        CameraFaceState.MultipleFaces => T("CaptureWorkspaceMultipleFaces"),
+        CameraFaceState.FaceOccluded => T("CaptureWorkspaceFaceOccluded"),
+        CameraFaceState.EyesNotVisible => T("CaptureWorkspaceEyesNotVisible"),
+        CameraFaceState.EyesClosed => T("CaptureWorkspaceEyesClosed"),
+        CameraFaceState.MouthNotVisible => T("CaptureWorkspaceMouthNotVisible"),
+        CameraFaceState.HeadPoseInvalid => T("CaptureWorkspaceHeadPoseInvalid"),
+        _ => T("CaptureWorkspaceFaceDetectorUnavailable")
+    };
 
     /// <summary>
     /// 演示视频播放完成后进入面部取景准备阶段。
