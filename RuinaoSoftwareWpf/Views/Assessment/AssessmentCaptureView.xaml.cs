@@ -34,6 +34,7 @@ public partial class AssessmentCaptureView : UserControl
     private DateTime lastRecordingStatusUpdateAt = DateTime.MinValue;
     private DateTimeOffset lastCameraPreviewCapturedAt = DateTimeOffset.MinValue;
     private CameraPreviewOverlayState? latestCameraOverlay;
+    private WriteableBitmap? cameraPreviewBitmap;
     private AssessmentCaptureViewModel? calibrationAnimationViewModel;
     private bool hasCalibrationMarkerPosition;
 
@@ -451,6 +452,7 @@ public partial class AssessmentCaptureView : UserControl
     private void ResetCameraPreviewDisplay()
     {
         CameraPreviewImage.Source = null;
+        cameraPreviewBitmap = null;
         CameraGuideRectangle.Visibility = Visibility.Collapsed;
         CameraFaceRectangle.Visibility = Visibility.Collapsed;
         cameraPreviewHasFrame = false;
@@ -513,17 +515,25 @@ public partial class AssessmentCaptureView : UserControl
                 return;
             }
 
-            var bitmap = BitmapSource.Create(
-                snapshot.Width,
-                snapshot.Height,
-                96,
-                96,
-                PixelFormats.Bgra32,
-                null,
+            if (cameraPreviewBitmap is null
+                || cameraPreviewBitmap.PixelWidth != snapshot.Width
+                || cameraPreviewBitmap.PixelHeight != snapshot.Height)
+            {
+                cameraPreviewBitmap = new WriteableBitmap(
+                    snapshot.Width,
+                    snapshot.Height,
+                    96,
+                    96,
+                    PixelFormats.Bgra32,
+                    null);
+                CameraPreviewImage.Source = cameraPreviewBitmap;
+            }
+
+            cameraPreviewBitmap.WritePixels(
+                new Int32Rect(0, 0, snapshot.Width, snapshot.Height),
                 snapshot.BgraPixels,
-                snapshot.Stride);
-            bitmap.Freeze();
-            CameraPreviewImage.Source = bitmap;
+                snapshot.Stride,
+                0);
             latestCameraOverlay = new CameraPreviewOverlayState(
                 snapshot.Width,
                 snapshot.Height,

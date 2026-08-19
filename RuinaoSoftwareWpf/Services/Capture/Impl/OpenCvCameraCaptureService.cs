@@ -174,39 +174,59 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
     private void CaptureFrames(VideoCapture capture, CancellationToken cancellationToken)
     {
         var frameSampler = new FixedIntervalFrameSampler(FrameSampleInterval, Stopwatch.Frequency);
+        var consecutiveFailures = 0;
         using var frame = new Mat();
         try
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                if (!capture.Read(frame) || frame.Empty())
+                try
                 {
-                    cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(10));
-                    continue;
-                }
+                    if (!capture.Read(frame) || frame.Empty())
+                    {
+                        consecutiveFailures++;
+                        if (consecutiveFailures == 1 || consecutiveFailures % 50 == 0)
+                        {
+                            logger.Warning(
+                                $"摄像头暂未返回有效帧，将继续尝试：consecutiveFailures={consecutiveFailures}");
+                        }
 
-                var now = Stopwatch.GetTimestamp();
-                if (!frameSampler.ShouldSample(now))
+                        cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(10));
+                        continue;
+                    }
+
+                    var now = Stopwatch.GetTimestamp();
+                    if (!frameSampler.ShouldSample(now))
+                    {
+                        continue;
+                    }
+
+                    var recordedCount = RecordedFrameCount;
+                    if (Volatile.Read(ref recordingEnabledFlag) == 1)
+                    {
+                        recordedCount = videoFrameSink.RecordFrame(frame);
+                        Volatile.Write(ref recordedFrameCount, recordedCount);
+                    }
+
+                    PublishPreviewFrame(new PendingCameraFrame(
+                        frame.Clone(),
+                        DateTimeOffset.Now,
+                        recordedCount));
+                    consecutiveFailures = 0;
+                }
+                catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
                 {
-                    continue;
-                }
+                    consecutiveFailures++;
+                    if (consecutiveFailures == 1 || consecutiveFailures % 50 == 0)
+                    {
+                        logger.Error(
+                            $"摄像头后台采集发生瞬时失败，将继续尝试：consecutiveFailures={consecutiveFailures}",
+                            exception);
+                    }
 
-                var recordedCount = RecordedFrameCount;
-                if (Volatile.Read(ref recordingEnabledFlag) == 1)
-                {
-                    recordedCount = videoFrameSink.RecordFrame(frame);
-                    Volatile.Write(ref recordedFrameCount, recordedCount);
+                    cancellationToken.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(50));
                 }
-
-                PublishPreviewFrame(new PendingCameraFrame(
-                    frame.Clone(),
-                    DateTimeOffset.Now,
-                    recordedCount));
             }
-        }
-        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.Error("摄像头后台读取失败。", exception);
         }
         finally
         {
