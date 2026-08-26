@@ -126,6 +126,7 @@ internal sealed class CaptureMediaService : ICaptureMediaService
             "completed_with_probe_error" => "MEDIA_SYNC_PROBE_FAILED",
             "merge_failed" => "MEDIA_MERGE_FAILED",
             "video_write_failed" => "VIDEO_WRITE_FAILED",
+            "audio_write_failed" => "AUDIO_WRITE_FAILED",
             "finalize_failed" => "MEDIA_FINALIZE_FAILED",
             _ => "MEDIA_CAPTURE_FAILED"
         };

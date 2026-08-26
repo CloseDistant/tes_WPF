@@ -15,7 +15,9 @@ internal sealed class CaptureMediaRecorder :
     ICaptureVideoFrameSink,
     ICaptureFormRecordService
 {
-    private const int FrameQueueCapacity = 90;
+    private const int MaximumFrameQueueCapacity = 90;
+    private const int MinimumFrameQueueCapacity = 6;
+    private const long FrameQueueMemoryBudgetBytes = 384L * 1024 * 1024;
 
     private readonly ICaptureRecordingRepository repository;
     private readonly ILoggingService logger;
@@ -32,6 +34,7 @@ internal sealed class CaptureMediaRecorder :
     private CaptureTimingState? currentTiming;
     private string? videoPath;
     private string? pendingAudioPath;
+    private CameraCaptureProfileSnapshot? configuredCaptureProfile;
     private int queuedFrameCount;
     private int isRecordingFlag;
     private Task finalizationTask = Task.CompletedTask;
@@ -61,6 +64,18 @@ internal sealed class CaptureMediaRecorder :
     public string? CurrentModuleName => currentSession?.ModuleName;
 
     public CaptureSessionInfo? CurrentSession => currentSession;
+
+    public void ConfigureCaptureProfile(CameraCaptureProfileSnapshot profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        lock (recordingLock)
+        {
+            configuredCaptureProfile = profile;
+            // 摄像头打开后约5秒才能得到真实源帧率；若模块已经开始录制，
+            // 仍需把实测结果补入本次录制快照和最终事件，而不是只留驱动属性值。
+            currentTiming?.RecordCameraProfile(profile);
+        }
+    }
 
     public async Task<CaptureSessionInfo> StartAsync(CaptureRecordingRequest request, CancellationToken cancellationToken = default)
     {
@@ -97,7 +112,10 @@ internal sealed class CaptureMediaRecorder :
         var mergedVideoPath = Path.Combine(sessionDirectory, $"{request.ModuleCode}.mp4");
         var recordStartedAt = DateTimeOffset.Now;
 
-        logger.Info($"开始采集录制：module={request.ModuleCode}, session={request.SessionKey}, output={sessionDirectory}");
+        var frameQueueCapacity = CalculateFrameQueueCapacity(configuredCaptureProfile);
+        logger.Info(
+            $"开始采集录制：module={request.ModuleCode}, session={request.SessionKey}, "
+            + $"output={sessionDirectory}, frameQueueCapacity={frameQueueCapacity}");
 
         CaptureSessionInfo session;
         session = await repository.CreateModuleSessionAsync(
@@ -113,14 +131,14 @@ internal sealed class CaptureMediaRecorder :
             mergedVideoPath,
             cancellationToken);
 
-        var newQueue = new BlockingCollection<Mat>(FrameQueueCapacity);
+        var newQueue = new BlockingCollection<Mat>(frameQueueCapacity);
         var timing = new CaptureTimingState(recordStartedAt);
         timing.RecordRawVideoPath(rawVideoPath);
+        timing.RecordCameraProfile(configuredCaptureProfile);
         var newWriterTask = Task.Run(() => videoFrameWriter.WriteAsync(
             rawVideoPath,
             newQueue,
-            timing,
-            writtenAt => StartAudioRecordingAfterFirstVideoFrame(timing, writtenAt)));
+            timing));
 
         lock (recordingLock)
         {
@@ -142,40 +160,52 @@ internal sealed class CaptureMediaRecorder :
                 request.AssessmentAttemptId,
                 request.ModuleCode,
                 request.ModuleName,
-                request.CameraName
+                request.CameraName,
+                cameraProfile = timing.CameraProfile,
+                videoEncoding = new
+                {
+                    rawCodec = "MJPG",
+                    finalCodec = "H.264",
+                    finalCrf = 20
+                }
             }));
         return session;
     }
 
     public int RecordFrame(Mat frame)
     {
-        BlockingCollection<Mat>? queue;
+        var frameAt = DateTimeOffset.Now;
+        var clonedFrame = frame.Clone();
+        CaptureTimingState? timing;
+        int count;
         lock (recordingLock)
         {
             if (!IsRecording || frameQueue is null)
             {
+                clonedFrame.Dispose();
                 return Volatile.Read(ref queuedFrameCount);
             }
 
-            queue = frameQueue;
-        }
-
-        var frameAt = DateTimeOffset.Now;
-        var clonedFrame = frame.Clone();
-        if (queue.TryAdd(clonedFrame))
-        {
-            var count = Interlocked.Increment(ref queuedFrameCount);
-            lock (recordingLock)
+            timing = currentTiming;
+            timing?.RecordFrameAttempt(frameQueue.Count);
+            if (!frameQueue.TryAdd(clonedFrame))
             {
-                currentTiming?.RecordFrame(frameAt, count);
+                timing?.RecordFrameDropped(frameQueue.Count);
+                clonedFrame.Dispose();
+                return Volatile.Read(ref queuedFrameCount);
             }
 
-            return count;
+            count = Interlocked.Increment(ref queuedFrameCount);
+            timing?.RecordFrame(frameAt, count);
+            if (timing is not null
+                && !audioRecorder.IsActive
+                && !string.IsNullOrWhiteSpace(pendingAudioPath))
+            {
+                StartAudioRecordingAfterFirstVideoFrameLocked(timing, frameAt);
+            }
         }
 
-        // 队列满时丢弃当前帧，优先保证 UI 不被磁盘写入拖慢。
-        clonedFrame.Dispose();
-        return Volatile.Read(ref queuedFrameCount);
+        return count;
     }
 
     public async Task RecordModuleEventAsync(
@@ -251,9 +281,9 @@ internal sealed class CaptureMediaRecorder :
     {
         CaptureSessionInfo? session;
         Task<int>? writerTask;
+        Task audioStopTask;
         BlockingCollection<Mat>? queue;
         CaptureTimingState? timing;
-        var stopAudioAfterVideoWriter = status == "completed";
 
         lock (recordingLock)
         {
@@ -277,23 +307,36 @@ internal sealed class CaptureMediaRecorder :
             currentTiming = null;
         }
 
+        // 在模块结束边界立即向麦克风发出停止请求，但不在 UI 线程等待驱动回调。
+        // 视频写入线程随后只负责清空此前已入队的帧，因此不会引入额外音频尾巴。
+        audioStopTask = audioRecorder.StopAsync(timing);
         queue?.CompleteAdding();
-        logger.Info($"停止采集录制：session={session?.SessionKey}, status={status}, queuedFrames={Volatile.Read(ref queuedFrameCount)}");
-
-        if (!stopAudioAfterVideoWriter)
+        logger.Info(
+            $"停止采集录制：session={session?.SessionKey}, status={status}, "
+            + $"attemptedFrames={timing?.AttemptedFrameCount ?? 0}, "
+            + $"queuedFrames={timing?.QueuedFrameCount ?? Volatile.Read(ref queuedFrameCount)}, "
+            + $"droppedFrames={timing?.DroppedFrameCount ?? 0}, "
+            + $"dropRate={timing?.DroppedFrameRate ?? 0:P2}, "
+            + $"maxQueueDepth={timing?.MaximumQueueDepth ?? 0}");
+        if (timing is { DroppedFrameRate: > 0.02 })
         {
-            audioRecorder.Stop(timing);
+            logger.Warning(
+                $"视频录制丢帧率超过 2%：session={session?.SessionKey}, "
+                + $"dropRate={timing.DroppedFrameRate:P2}");
         }
 
         if (session is not null)
         {
-            var task = CompleteRecordingSafelyAsync(
+            var finalTiming = timing ?? new CaptureTimingState(DateTimeOffset.Now);
+            // 文件就绪检查、驱动停止等待、FFmpeg/ffprobe 与数据库收尾都不得从
+            // Dispatcher 回调内联执行，否则倒计时和摄像头预览会一起假死。
+            var task = Task.Run(() => CompleteRecordingSafelyAsync(
                 session,
                 writerTask,
-                timing ?? new CaptureTimingState(DateTimeOffset.Now),
+                audioStopTask,
+                finalTiming,
                 status,
-                message,
-                stopAudioAfterVideoWriter);
+                message));
             lock (recordingLock)
             {
                 finalizationTask = task;
@@ -315,21 +358,23 @@ internal sealed class CaptureMediaRecorder :
     private async Task CompleteRecordingSafelyAsync(
         CaptureSessionInfo session,
         Task<int>? writerTask,
+        Task audioStopTask,
         CaptureTimingState timing,
         string status,
-        string message,
-        bool stopAudioAfterVideoWriter)
+        string message)
     {
         try
         {
-            await CompleteRecordingAsync(session, writerTask, timing, status, message, stopAudioAfterVideoWriter);
+            await CompleteRecordingAsync(session, writerTask, audioStopTask, timing, status, message)
+                .ConfigureAwait(false);
         }
         catch (Exception exception)
         {
             logger.Error($"采集录制收尾发生未处理错误：session={session.SessionKey}", exception);
             try
             {
-                await repository.CompleteSessionAsync(session, "finalize_failed", exception.Message);
+                await repository.CompleteSessionAsync(session, "finalize_failed", exception.Message)
+                    .ConfigureAwait(false);
             }
             catch (Exception repositoryException)
             {
@@ -339,7 +384,8 @@ internal sealed class CaptureMediaRecorder :
             await TryRecordTimelineEventAsync(
                 "module_recording_finalize_failed",
                 session.ModuleName,
-                JsonSerializer.Serialize(new { session.ModuleCode, error = exception.Message }));
+                JsonSerializer.Serialize(new { session.ModuleCode, error = exception.Message }))
+                .ConfigureAwait(false);
             RecordingCompleted?.Invoke(
                 this,
                 new CaptureRecordingCompletedEventArgs(
@@ -349,33 +395,30 @@ internal sealed class CaptureMediaRecorder :
         }
     }
 
-    private void StartAudioRecordingAfterFirstVideoFrame(CaptureTimingState timing, DateTimeOffset firstFrameWrittenAt)
+    private void StartAudioRecordingAfterFirstVideoFrameLocked(
+        CaptureTimingState timing,
+        DateTimeOffset firstFrameAt)
     {
-        string? audioPath;
-        lock (recordingLock)
+        if (!IsRecording || string.IsNullOrWhiteSpace(pendingAudioPath) || audioRecorder.IsActive)
         {
-            if (!IsRecording || string.IsNullOrWhiteSpace(pendingAudioPath) || audioRecorder.IsActive)
-            {
-                return;
-            }
-
-            audioPath = pendingAudioPath;
-            pendingAudioPath = null;
+            return;
         }
 
-        // 音频从视频第一帧落盘后启动，减少“音频先开始、视频后开始”造成的整体偏移。
+        var audioPath = pendingAudioPath;
+        // 第一帧成功进入录像队列即启动音频，不等待磁盘写入，避免队列负载造成开头偏移。
         audioRecorder.Start(audioPath);
-        timing.RecordAudioStarted(DateTimeOffset.Now, firstFrameWrittenAt, "after_first_video_frame_written");
+        pendingAudioPath = null;
+        timing.RecordAudioStarted(DateTimeOffset.Now, firstFrameAt, "after_first_video_frame_queued");
         logger.Info($"音频录制已启动：audioPath={audioPath}");
     }
 
     private async Task CompleteRecordingAsync(
         CaptureSessionInfo session,
         Task<int>? writerTask,
+        Task audioStopTask,
         CaptureTimingState timing,
         string status,
-        string message,
-        bool stopAudioAfterVideoWriter)
+        string message)
     {
         var finalStatus = status;
         var finalMessage = message;
@@ -383,9 +426,20 @@ internal sealed class CaptureMediaRecorder :
 
         try
         {
+            await audioStopTask.ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            finalStatus = "audio_write_failed";
+            finalMessage = $"音频录制停止失败：{exception.Message}";
+            logger.Error($"音频录制停止失败：session={session.SessionKey}", exception);
+        }
+
+        try
+        {
             if (writerTask is not null)
             {
-                writtenFrameCount = await writerTask;
+                writtenFrameCount = await writerTask.ConfigureAwait(false);
                 logger.Info($"视频帧写入完成：session={session.SessionKey}, writtenFrames={writtenFrameCount}");
             }
         }
@@ -394,11 +448,6 @@ internal sealed class CaptureMediaRecorder :
             finalStatus = "video_write_failed";
             finalMessage = $"视频帧写入失败：{exception.Message}";
             logger.Error($"视频帧写入失败：session={session.SessionKey}", exception);
-        }
-
-        if (stopAudioAfterVideoWriter)
-        {
-            audioRecorder.Stop(timing);
         }
 
         if (finalStatus == "completed")
@@ -413,12 +462,15 @@ internal sealed class CaptureMediaRecorder :
                         var rawVideoPath = timing.RawVideoPath ?? session.RawVideoPath;
                         mediaEncoder.WaitForFileReady(rawVideoPath);
                         mediaEncoder.WaitForFileReady(session.AudioPath);
-                        var adjustedFrameRate = await mediaEncoder.CalculateAdjustedFrameRateAsync(session.AudioPath, writtenFrameCount);
+                        var adjustedFrameRate = await mediaEncoder.CalculateAdjustedFrameRateAsync(session.AudioPath, writtenFrameCount)
+                            .ConfigureAwait(false);
                         timing.RecordAdjustedFrameRate(adjustedFrameRate);
                         logger.Info($"开始校正 OpenCV 视频时长：session={session.SessionKey}, adjustedFps={adjustedFrameRate?.ToString(CultureInfo.InvariantCulture) ?? "null"}, saveAttempt={saveAttempt}");
-                        await mediaEncoder.NormalizeVideoDurationAsync(rawVideoPath, session.NormalizedVideoPath, adjustedFrameRate);
+                        await mediaEncoder.NormalizeVideoDurationAsync(rawVideoPath, session.NormalizedVideoPath, adjustedFrameRate)
+                            .ConfigureAwait(false);
                         logger.Info($"开始合成音视频：session={session.SessionKey}, saveAttempt={saveAttempt}");
-                        await mediaEncoder.MergeAsync(session.NormalizedVideoPath, session.AudioPath, session.MergedVideoPath);
+                        await mediaEncoder.MergeAsync(session.NormalizedVideoPath, session.AudioPath, session.MergedVideoPath)
+                            .ConfigureAwait(false);
                         logger.Info($"音视频合成完成：session={session.SessionKey}, output={session.MergedVideoPath}, saveAttempt={saveAttempt}");
                         lastSaveException = null;
                         break;
@@ -450,8 +502,9 @@ internal sealed class CaptureMediaRecorder :
             {
                 try
                 {
-                    var syncProbe = await mediaSyncProbe.ProbeAsync(session, timing, writtenFrameCount);
-                    await RecordMediaSyncProbeAsync(session, syncProbe);
+                    var syncProbe = await mediaSyncProbe.ProbeAsync(session, timing, writtenFrameCount)
+                        .ConfigureAwait(false);
+                    await RecordMediaSyncProbeAsync(session, syncProbe).ConfigureAwait(false);
                     finalMessage = syncProbe.SyncStatus == "warning"
                         ? $"音视频合成完成，同步偏差 {syncProbe.SyncOffsetMs} ms，请复核"
                         : $"音视频合成完成，同步偏差 {syncProbe.SyncOffsetMs} ms";
@@ -472,7 +525,7 @@ internal sealed class CaptureMediaRecorder :
             mediaEncoder.DeleteDiscardedRecording(session);
         }
 
-        await repository.CompleteSessionAsync(session, finalStatus, finalMessage);
+        await repository.CompleteSessionAsync(session, finalStatus, finalMessage).ConfigureAwait(false);
         await TryRecordTimelineEventAsync(
             "module_recording_stopped",
             session.ModuleName,
@@ -482,10 +535,32 @@ internal sealed class CaptureMediaRecorder :
                 session.ModuleCode,
                 status = finalStatus,
                 message = finalMessage,
-                writtenFrameCount
-            }));
+                writtenFrameCount,
+                timing.AttemptedFrameCount,
+                timing.QueuedFrameCount,
+                timing.DroppedFrameCount,
+                timing.DroppedFrameRate,
+                timing.MaximumQueueDepth,
+                timing.CameraProfile
+            })).ConfigureAwait(false);
         logger.Info($"采集录制收尾完成：session={session.SessionKey}, status={finalStatus}, message={finalMessage}");
         RecordingCompleted?.Invoke(this, new CaptureRecordingCompletedEventArgs(session, finalStatus, finalMessage));
+    }
+
+    internal static int CalculateFrameQueueCapacity(CameraCaptureProfileSnapshot? profile)
+    {
+        if (profile is null)
+        {
+            return MaximumFrameQueueCapacity;
+        }
+
+        var bytesPerFrame = Math.Max(
+            1L,
+            (long)profile.ActualWidth * profile.ActualHeight * 3);
+        return Math.Clamp(
+            (int)(FrameQueueMemoryBudgetBytes / bytesPerFrame),
+            MinimumFrameQueueCapacity,
+            MaximumFrameQueueCapacity);
     }
 
     private async Task TryRecordTimelineEventAsync(string eventType, string message, string payloadJson)

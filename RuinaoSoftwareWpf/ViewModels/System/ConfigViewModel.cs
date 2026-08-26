@@ -15,6 +15,7 @@ public sealed class ConfigViewModel : ObservableObject
     private readonly ILoggingService logger;
     private readonly IDesktopShortcutService desktopShortcutService;
     private readonly IStartupSettingsService startupSettingsService;
+    private readonly ICameraRecordingQualitySettingsService cameraRecordingQualitySettings;
     private readonly ISessionSecurityService sessionSecurityService;
     private readonly IHardwareService hardwareService;
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
@@ -25,6 +26,8 @@ public sealed class ConfigViewModel : ObservableObject
     private readonly AsyncRelayCommand saveNavigationCommand;
     private readonly AsyncRelayCommand saveStimulationTypesCommand;
     private readonly AsyncRelayCommand saveStartupSettingsCommand;
+    private readonly AsyncRelayCommand saveCameraRecordingQualityCommand;
+    private readonly RelayCommand restoreCameraRecordingQualityCommand;
     private readonly RelayCommand restoreStartupSettingsCommand;
     private readonly AsyncRelayCommand saveSessionSecurityCommand;
     private readonly RelayCommand decreaseIdleTimeoutCommand;
@@ -36,6 +39,7 @@ public sealed class ConfigViewModel : ObservableObject
     private string navigationStatus = string.Empty;
     private string stimulationStatus = string.Empty;
     private string startupSettingsStatus = string.Empty;
+    private string cameraRecordingQualityStatus = string.Empty;
     private bool autoConnectOnStartup;
     private int idleTimeoutMinutes = ISessionSecurityService.DefaultIdleTimeoutMinutes;
     private string sessionSecurityStatus = string.Empty;
@@ -49,6 +53,7 @@ public sealed class ConfigViewModel : ObservableObject
         ILoggingService logger,
         IDesktopShortcutService desktopShortcutService,
         IStartupSettingsService startupSettingsService,
+        ICameraRecordingQualitySettingsService cameraRecordingQualitySettings,
         ISessionSecurityService sessionSecurityService,
         IHardwareService hardwareService,
         IDebugHardwareSimulationService debugHardwareSimulation,
@@ -63,6 +68,7 @@ public sealed class ConfigViewModel : ObservableObject
         this.logger = logger;
         this.desktopShortcutService = desktopShortcutService;
         this.startupSettingsService = startupSettingsService;
+        this.cameraRecordingQualitySettings = cameraRecordingQualitySettings;
         this.sessionSecurityService = sessionSecurityService;
         this.hardwareService = hardwareService;
         this.debugHardwareSimulation = debugHardwareSimulation;
@@ -75,6 +81,12 @@ public sealed class ConfigViewModel : ObservableObject
             FeatureCatalog.Navigation.Select((item, index) => CreateNavigationOption(item, index)));
         StimulationTypeOptions = new ObservableCollection<FeatureVisibilityOptionViewModel>(
             FeatureCatalog.StimulationTypes.Select((item, index) => CreateStimulationOption(item, index)));
+        CameraRecordingQualityOptions = new ObservableCollection<CameraRecordingQualityOptionViewModel>(
+            CameraRecordingQualityCatalog.All.Select(mode => new CameraRecordingQualityOptionViewModel(mode)));
+        foreach (var option in CameraRecordingQualityOptions)
+        {
+            option.PropertyChanged += OnCameraRecordingQualityOptionChanged;
+        }
 
         saveNavigationCommand = new AsyncRelayCommand(
             SaveNavigationAsync,
@@ -88,6 +100,13 @@ public sealed class ConfigViewModel : ObservableObject
             SaveStartupSettingsAsync,
             () => IsAdmin,
             onError: HandleStartupSettingsSaveError);
+        saveCameraRecordingQualityCommand = new AsyncRelayCommand(
+            SaveCameraRecordingQualityAsync,
+            () => IsAdmin && StimulationSettingsRevealed && CameraRecordingQualityOptions.Any(item => item.IsSelected),
+            onError: HandleCameraRecordingQualitySaveError);
+        restoreCameraRecordingQualityCommand = new RelayCommand(
+            _ => RestoreCameraRecordingQualityDefaults(),
+            _ => IsAdmin && StimulationSettingsRevealed);
         restoreStartupSettingsCommand = new RelayCommand(
             _ => RestoreStartupSettingsDefaults(),
             _ => IsAdmin);
@@ -111,6 +130,8 @@ public sealed class ConfigViewModel : ObservableObject
         RestoreStimulationTypesCommand = new RelayCommand(_ => RestoreStimulationDefaults());
         CreateDesktopShortcutCommand = new RelayCommand(_ => CreateDesktopShortcut());
         SaveStartupSettingsCommand = saveStartupSettingsCommand;
+        SaveCameraRecordingQualityCommand = saveCameraRecordingQualityCommand;
+        RestoreCameraRecordingQualityCommand = restoreCameraRecordingQualityCommand;
         RestoreStartupSettingsCommand = restoreStartupSettingsCommand;
         SaveSessionSecurityCommand = saveSessionSecurityCommand;
         RestoreSessionSecurityCommand = new RelayCommand(_ => RestoreSessionSecurityDefaults());
@@ -129,6 +150,8 @@ public sealed class ConfigViewModel : ObservableObject
 
     public ObservableCollection<FeatureVisibilityOptionViewModel> StimulationTypeOptions { get; }
 
+    public ObservableCollection<CameraRecordingQualityOptionViewModel> CameraRecordingQualityOptions { get; }
+
     public ICommand SaveNavigationCommand { get; }
 
     public ICommand RestoreNavigationCommand { get; }
@@ -140,6 +163,10 @@ public sealed class ConfigViewModel : ObservableObject
     public ICommand CreateDesktopShortcutCommand { get; }
 
     public ICommand SaveStartupSettingsCommand { get; }
+
+    public ICommand SaveCameraRecordingQualityCommand { get; }
+
+    public ICommand RestoreCameraRecordingQualityCommand { get; }
 
     public ICommand RestoreStartupSettingsCommand { get; }
 
@@ -180,14 +207,21 @@ public sealed class ConfigViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(NavigationSettingsVisibility));
                 OnPropertyChanged(nameof(StimulationSettingsVisibility));
+                OnPropertyChanged(nameof(CameraRecordingQualitySettingsVisibility));
                 OnPropertyChanged(nameof(DebugSimulationVisibility));
                 saveStimulationTypesCommand.RaiseCanExecuteChanged();
+                saveCameraRecordingQualityCommand.RaiseCanExecuteChanged();
+                restoreCameraRecordingQualityCommand.RaiseCanExecuteChanged();
                 connectDebugSimulationCommand.RaiseCanExecuteChanged();
             }
         }
     }
 
     public Visibility StimulationSettingsVisibility => IsAdmin && StimulationSettingsRevealed
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility CameraRecordingQualitySettingsVisibility => IsAdmin && StimulationSettingsRevealed
         ? Visibility.Visible
         : Visibility.Collapsed;
 
@@ -223,6 +257,12 @@ public sealed class ConfigViewModel : ObservableObject
     {
         get => startupSettingsStatus;
         private set => SetProperty(ref startupSettingsStatus, value);
+    }
+
+    public string CameraRecordingQualityStatus
+    {
+        get => cameraRecordingQualityStatus;
+        private set => SetProperty(ref cameraRecordingQualityStatus, value);
     }
 
     public int IdleTimeoutMinutes
@@ -264,9 +304,11 @@ public sealed class ConfigViewModel : ObservableObject
     {
         await featureVisibilityService.InitializeAsync(cancellationToken);
         await startupSettingsService.InitializeAsync(cancellationToken);
+        await cameraRecordingQualitySettings.InitializeAsync(cancellationToken);
         await sessionSecurityService.InitializeAsync(cancellationToken);
         ApplyPersistedVisibility();
         AutoConnectOnStartup = startupSettingsService.AutoConnectOnStartup;
+        SelectCameraRecordingQuality(cameraRecordingQualitySettings.SelectedMode);
         IdleTimeoutMinutes = sessionSecurityService.IdleTimeoutMinutes;
         await TryRefreshReleaseIntegrityStatusAsync(cancellationToken);
     }
@@ -441,6 +483,7 @@ public sealed class ConfigViewModel : ObservableObject
         NavigationStatus = string.Empty;
         StimulationStatus = string.Empty;
         StartupSettingsStatus = string.Empty;
+        CameraRecordingQualityStatus = string.Empty;
         SessionSecurityStatus = string.Empty;
     }
 
@@ -543,6 +586,14 @@ public sealed class ConfigViewModel : ObservableObject
         StartupSettingsStatus = "启动设置已保存，下次启动时生效";
     }
 
+    private async Task SaveCameraRecordingQualityAsync(CancellationToken cancellationToken)
+    {
+        var selected = CameraRecordingQualityOptions.Single(item => item.IsSelected);
+        await cameraRecordingQualitySettings.SaveAsync(selected.Mode, cancellationToken);
+        CameraRecordingQualityStatus =
+            $"正式录像质量已保存：{selected.DisplayName}（{selected.Specification}），下次打开摄像头时生效";
+    }
+
     private async Task SaveSessionSecurityAsync(CancellationToken cancellationToken)
     {
         await sessionSecurityService.SaveIdleTimeoutAsync(IdleTimeoutMinutes, cancellationToken);
@@ -573,6 +624,43 @@ public sealed class ConfigViewModel : ObservableObject
     {
         AutoConnectOnStartup = false;
         StartupSettingsStatus = "已恢复默认，点击保存后生效";
+    }
+
+    private void RestoreCameraRecordingQualityDefaults()
+    {
+        SelectCameraRecordingQuality(CameraRecordingQualityMode.Balanced);
+        CameraRecordingQualityStatus = "已恢复均衡模式，点击保存后生效";
+    }
+
+    private void SelectCameraRecordingQuality(CameraRecordingQualityMode mode)
+    {
+        foreach (var option in CameraRecordingQualityOptions)
+        {
+            option.IsSelected = option.Mode == mode;
+        }
+
+        saveCameraRecordingQualityCommand.RaiseCanExecuteChanged();
+        restoreCameraRecordingQualityCommand.RaiseCanExecuteChanged();
+    }
+
+    private void OnCameraRecordingQualityOptionChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(CameraRecordingQualityOptionViewModel.IsSelected)
+            || sender is not CameraRecordingQualityOptionViewModel { IsSelected: true } selected)
+        {
+            return;
+        }
+
+        foreach (var option in CameraRecordingQualityOptions)
+        {
+            if (!ReferenceEquals(option, selected))
+            {
+                option.IsSelected = false;
+            }
+        }
+
+        CameraRecordingQualityStatus = string.Empty;
+        saveCameraRecordingQualityCommand.RaiseCanExecuteChanged();
     }
 
     private void RestoreSessionSecurityDefaults()
@@ -622,10 +710,13 @@ public sealed class ConfigViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAdmin));
         OnPropertyChanged(nameof(NavigationSettingsVisibility));
         OnPropertyChanged(nameof(StimulationSettingsVisibility));
+        OnPropertyChanged(nameof(CameraRecordingQualitySettingsVisibility));
         OnPropertyChanged(nameof(DebugSimulationVisibility));
         saveNavigationCommand.RaiseCanExecuteChanged();
         saveStimulationTypesCommand.RaiseCanExecuteChanged();
         saveStartupSettingsCommand.RaiseCanExecuteChanged();
+        saveCameraRecordingQualityCommand.RaiseCanExecuteChanged();
+        restoreCameraRecordingQualityCommand.RaiseCanExecuteChanged();
         restoreStartupSettingsCommand.RaiseCanExecuteChanged();
         saveSessionSecurityCommand.RaiseCanExecuteChanged();
         decreaseIdleTimeoutCommand.RaiseCanExecuteChanged();
@@ -656,6 +747,12 @@ public sealed class ConfigViewModel : ObservableObject
     {
         logger.Error("保存启动设置失败", exception);
         StartupSettingsStatus = exception.Message;
+    }
+
+    private void HandleCameraRecordingQualitySaveError(Exception exception)
+    {
+        logger.Error("保存摄像头录像质量设置失败", exception);
+        CameraRecordingQualityStatus = exception.Message;
     }
 
     private void HandleSessionSecuritySaveError(Exception exception)

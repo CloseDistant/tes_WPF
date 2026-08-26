@@ -19,6 +19,20 @@ public sealed class CameraCapturePipelineTests
     }
 
     [Fact]
+    public void FixedIntervalFrameSampler_ToleranceKeepsNominalThirtyFpsFramesWithSmallJitter()
+    {
+        var sampler = new FixedIntervalFrameSampler(
+            TimeSpan.FromSeconds(1d / 30d),
+            1000,
+            earlyToleranceRatio: 0.15);
+
+        Assert.True(sampler.ShouldSample(0));
+        Assert.True(sampler.ShouldSample(33));
+        Assert.True(sampler.ShouldSample(66));
+        Assert.True(sampler.ShouldSample(99));
+    }
+
+    [Fact]
     public void ReplacingDisposableSlot_AlwaysKeepsLatestValueAndDisposesReplacedValue()
     {
         var slot = new ReplacingDisposableSlot<TestDisposable>();
@@ -45,6 +59,37 @@ public sealed class CameraCapturePipelineTests
 
         Assert.True(pending.IsDisposed);
         Assert.Null(slot.Take());
+    }
+
+    [Fact]
+    public void CameraSourceFrameRateTracker_ReportsMeasuredRateAndLargestGap()
+    {
+        var tracker = new CameraSourceFrameRateTracker(TimeSpan.FromSeconds(1), 1000);
+        CameraSourceFrameRateMeasurement? measurement = null;
+
+        for (var timestamp = 0; timestamp <= 1023; timestamp += 33)
+        {
+            measurement = tracker.Observe(timestamp) ?? measurement;
+        }
+
+        Assert.NotNull(measurement);
+        Assert.InRange(measurement!.FramesPerSecond, 30.2, 30.4);
+        Assert.Equal(33, measurement.MaximumFrameGapMilliseconds);
+    }
+
+    [Fact]
+    public void CameraSourceFrameRateTracker_DoesNotUseConfiguredDriverRate()
+    {
+        var tracker = new CameraSourceFrameRateTracker(TimeSpan.FromSeconds(1), 1000);
+        CameraSourceFrameRateMeasurement? measurement = null;
+
+        for (var timestamp = 0; timestamp <= 1100; timestamp += 100)
+        {
+            measurement = tracker.Observe(timestamp) ?? measurement;
+        }
+
+        Assert.NotNull(measurement);
+        Assert.Equal(10, measurement!.FramesPerSecond, 3);
     }
 
     private sealed class TestDisposable : IDisposable

@@ -26,12 +26,16 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private readonly ApplicationContracts.IAssessmentModule assessmentModuleLifecycle;
     private readonly IPatientService patientService;
     private readonly IToastService toastService;
+    private readonly TimeProvider timeProvider;
     private readonly AssessmentWorkbenchCoordinator workbenchCoordinator;
     private readonly ICameraCaptureService cameraCaptureService;
     private readonly ICaptureMediaService captureMediaService;
     private readonly ICaptureFormRecordService captureFormRecordService;
     private readonly FaceConditionMonitor faceConditionMonitor = new(
         TimeSpan.FromSeconds(3),
+        Stopwatch.Frequency);
+    private readonly FaceReadinessMonitor faceReadinessMonitor = new(
+        TimeSpan.FromSeconds(1.5),
         Stopwatch.Frequency);
     private readonly DispatcherTimer calibrationTimer = new();
     private readonly DispatcherTimer pictureBrowseTimer = new();
@@ -47,6 +51,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private static readonly Brush InactiveStepBrush = new SolidColorBrush(Color.FromRgb(48, 54, 69));
     private static readonly Brush ActiveTextBrush = new SolidColorBrush(Color.FromRgb(228, 232, 239));
     private static readonly Brush InactiveTextBrush = new SolidColorBrush(Color.FromRgb(142, 150, 168));
+    private static readonly Brush FaceNotReadyBrush = new SolidColorBrush(Color.FromRgb(240, 93, 94));
+    private static readonly Brush FaceStabilizingBrush = new SolidColorBrush(Color.FromRgb(217, 154, 58));
+    private static readonly Brush FaceReadyBrush = new SolidColorBrush(Color.FromRgb(85, 217, 139));
     private CaptureWorkbenchStep currentStep
     {
         get => (CaptureWorkbenchStep)workbenchCoordinator.CurrentStepIndex;
@@ -71,7 +78,11 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
             return;
         }
 
-        currentStep = step;
+        if (currentStep != step)
+        {
+            ResetFaceReadiness();
+            currentStep = step;
+        }
     }
     private bool isDemoCompleted;
     private bool isDemoPlaying;
@@ -94,6 +105,10 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private string frameSaveStatusText = string.Empty;
     private string frameOutputDirectory = string.Empty;
     private string stageNoticeText = string.Empty;
+    private FaceReadinessState faceReadinessState = FaceReadinessState.NotReady;
+    private double faceReadinessProgressPercent;
+    private double faceReadinessRemainingSeconds = 1.5;
+    private string faceReadinessReasonText = string.Empty;
     private string pictureBrowseImagePath = string.Empty;
     private string pictureBrowseStatusText = "待开始";
     private string pictureBrowseRestText = string.Empty;
@@ -173,7 +188,8 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         ApplicationContracts.IAssessmentModule assessmentModuleLifecycle,
         IPatientService patientService,
         IToastService toastService,
-        AssessmentWorkbenchCoordinator workbenchCoordinator)
+        AssessmentWorkbenchCoordinator workbenchCoordinator,
+        TimeProvider timeProvider)
     {
         this.captureMediaService = captureMediaService;
         this.captureFormRecordService = captureFormRecordService;
@@ -186,6 +202,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         this.patientService = patientService;
         this.toastService = toastService;
         this.workbenchCoordinator = workbenchCoordinator;
+        this.timeProvider = timeProvider;
         calibrationSequenceFactory = new EyeCalibrationSequenceFactory(new Random());
         this.localization.LanguageChanged += (_, _) =>
         {
@@ -246,15 +263,23 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     internal Task<bool> OpenCameraAsync(
         int preferredIndex,
+        bool forceReopen = false,
         CancellationToken cancellationToken = default)
     {
-        return cameraCaptureService.OpenAsync(preferredIndex, cancellationToken);
+        return cameraCaptureService.OpenAsync(
+            preferredIndex,
+            SelectedCameraDevice,
+            forceReopen,
+            cancellationToken);
     }
 
     internal bool TryTakeLatestCameraPreview(out CameraPreviewSnapshot snapshot)
     {
         return cameraCaptureService.TryTakeLatestPreview(out snapshot);
     }
+
+    internal string CameraOpenFailureMessage => cameraCaptureService.LastOpenFailureMessage
+        ?? T("CaptureWorkspaceCameraOpenFailed");
 
     internal Task CloseCameraAsync(CancellationToken cancellationToken = default)
     {
@@ -766,7 +791,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         ? "本模块结果未生效，不能进入下一模块。请从本模块第 1 步重新完成。"
         : "正在整理音视频并写入本次评估记录，请勿切换患者或关闭软件。";
 
-    public bool IsGenericFallbackStage => IsFallbackStage && !IsCompletionStage;
+    public bool IsGenericFallbackStage => IsFallbackStage && !IsCompletionStage && !IsFaceStep;
 
     public bool ShowDemoPlayAction => IsDemoStep && !isDemoPlaying && !isDemoCompleted;
 
@@ -779,7 +804,36 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public bool ShowFaceCheckAction => IsDemoStep && isDemoCompleted && !IsFormModule;
 
-    public bool ShowModuleStartAction => IsFaceStep && !IsFormModule;
+    public string FaceReadinessTitleText => T("CaptureWorkspaceFaceReadinessTitle");
+
+    public bool IsFaceReady => faceReadinessState == FaceReadinessState.Ready;
+
+    public double FaceReadinessProgressPercent => faceReadinessProgressPercent;
+
+    public string FaceReadinessBadgeText => faceReadinessState switch
+    {
+        FaceReadinessState.Stabilizing => T("CaptureWorkspaceFaceReadinessBadgeStabilizing"),
+        FaceReadinessState.Ready => T("CaptureWorkspaceFaceReadinessBadgeReady"),
+        _ => T("CaptureWorkspaceFaceReadinessBadgeWaiting")
+    };
+
+    public string FaceReadinessStatusText => faceReadinessState switch
+    {
+        FaceReadinessState.Stabilizing => T(
+            "CaptureWorkspaceFaceReadinessStabilizing",
+            faceReadinessRemainingSeconds),
+        FaceReadinessState.Ready => T("CaptureWorkspaceFaceReadinessReady"),
+        _ => string.IsNullOrWhiteSpace(faceReadinessReasonText)
+            ? T("CaptureWorkspaceFaceReadinessWaiting")
+            : faceReadinessReasonText
+    };
+
+    public Brush FaceReadinessAccentBrush => faceReadinessState switch
+    {
+        FaceReadinessState.Stabilizing => FaceStabilizingBrush,
+        FaceReadinessState.Ready => FaceReadyBrush,
+        _ => FaceNotReadyBrush
+    };
 
     public bool ShowSyncTestStartAction => IsSyncTestStage && !isSyncTestRunning && syncTestRemainingSeconds == SyncTestDurationSeconds;
 
@@ -787,7 +841,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public bool IsSyncTestRecordingActive => IsSyncTestStage && isSyncTestRunning;
 
-    public bool CanStartCalibration => isDemoCompleted && (currentStep is CaptureWorkbenchStep.Demo or CaptureWorkbenchStep.FaceCheck);
+    public bool CanStartCalibration => isDemoCompleted
+        && (currentStep == CaptureWorkbenchStep.Demo
+            || currentStep == CaptureWorkbenchStep.FaceCheck && IsFaceReady);
 
     public bool HasStageNotice => !string.IsNullOrWhiteSpace(stageNoticeText);
 
@@ -1215,7 +1271,8 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     public string StartButtonStateText => currentStep switch
     {
         CaptureWorkbenchStep.Demo when isDemoCompleted => T("CaptureWorkspaceStartButtonToFace"),
-        CaptureWorkbenchStep.FaceCheck => T("CaptureWorkspaceStartButtonToExecution"),
+        CaptureWorkbenchStep.FaceCheck when IsFaceReady => T("CaptureWorkspaceStartButtonAvailable"),
+        CaptureWorkbenchStep.FaceCheck => T("CaptureWorkspaceStartButtonLocked"),
         _ => CanStartCalibration ? T("CaptureWorkspaceStartButtonAvailable") : T("CaptureWorkspaceStartButtonLocked")
     };
 
@@ -1344,6 +1401,67 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     }
 
     internal void ResetFaceConditionMonitoring() => faceConditionMonitor.Reset();
+
+    internal FaceReadinessUpdate ObserveFaceReadiness(
+        CameraFaceState state,
+        bool isPrimaryFaceInsideGuide,
+        long timestamp)
+    {
+        if (!IsFaceStep)
+        {
+            ResetFaceReadiness();
+            return new FaceReadinessUpdate(
+                FaceReadinessState.NotReady,
+                TimeSpan.Zero,
+                TimeSpan.FromSeconds(1.5),
+                0);
+        }
+
+        var meetsRequirements = state == CameraFaceState.Normal && isPrimaryFaceInsideGuide;
+        var update = faceReadinessMonitor.Observe(meetsRequirements, timestamp);
+        var reasonText = state == CameraFaceState.Normal && !isPrimaryFaceInsideGuide
+            ? T("CaptureWorkspaceMoveFaceIntoFrame")
+            : FaceStateReasonText(state);
+        ApplyFaceReadinessUpdate(update, reasonText);
+        return update;
+    }
+
+    internal void ResetFaceReadiness()
+    {
+        faceReadinessMonitor.Reset();
+        ApplyFaceReadinessUpdate(
+            new FaceReadinessUpdate(
+                FaceReadinessState.NotReady,
+                TimeSpan.Zero,
+                TimeSpan.FromSeconds(1.5),
+                0),
+            string.Empty);
+    }
+
+    private void ApplyFaceReadinessUpdate(FaceReadinessUpdate update, string reasonText)
+    {
+        var stateChanged = faceReadinessState != update.State;
+        var progressChanged = Math.Abs(faceReadinessProgressPercent - update.ProgressPercent) > 0.01;
+        var remainingSeconds = Math.Max(0, update.RemainingDuration.TotalSeconds);
+        var remainingChanged = Math.Abs(faceReadinessRemainingSeconds - remainingSeconds) > 0.01;
+        var reasonChanged = !string.Equals(faceReadinessReasonText, reasonText, StringComparison.Ordinal);
+        if (!stateChanged && !progressChanged && !remainingChanged && !reasonChanged)
+        {
+            return;
+        }
+
+        faceReadinessState = update.State;
+        faceReadinessProgressPercent = update.ProgressPercent;
+        faceReadinessRemainingSeconds = remainingSeconds;
+        faceReadinessReasonText = reasonText;
+        OnPropertyChanged(nameof(IsFaceReady));
+        OnPropertyChanged(nameof(FaceReadinessProgressPercent));
+        OnPropertyChanged(nameof(FaceReadinessBadgeText));
+        OnPropertyChanged(nameof(FaceReadinessStatusText));
+        OnPropertyChanged(nameof(FaceReadinessAccentBrush));
+        OnPropertyChanged(nameof(CanStartCalibration));
+        OnPropertyChanged(nameof(StartButtonStateText));
+    }
 
     private string FaceStateReasonText(CameraFaceState state) => state switch
     {
@@ -2369,7 +2487,12 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(ShowDemoPlayAction));
         OnPropertyChanged(nameof(ShowDevelopmentSkipDemoAction));
         OnPropertyChanged(nameof(ShowFaceCheckAction));
-        OnPropertyChanged(nameof(ShowModuleStartAction));
+        OnPropertyChanged(nameof(FaceReadinessTitleText));
+        OnPropertyChanged(nameof(IsFaceReady));
+        OnPropertyChanged(nameof(FaceReadinessProgressPercent));
+        OnPropertyChanged(nameof(FaceReadinessBadgeText));
+        OnPropertyChanged(nameof(FaceReadinessStatusText));
+        OnPropertyChanged(nameof(FaceReadinessAccentBrush));
         OnPropertyChanged(nameof(ShowSyncTestStartAction));
         OnPropertyChanged(nameof(ShowSyncTestRunning));
         OnPropertyChanged(nameof(IsSyncTestRecordingActive));
@@ -2425,6 +2548,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(ShortTextReadingPassageText));
         OnPropertyChanged(nameof(EmotionQuestionTitleText));
         OnPropertyChanged(nameof(EmotionQuestionStartButtonText));
+        OnPropertyChanged(nameof(EmotionQuestionSubmitButtonText));
+        OnPropertyChanged(nameof(EmotionQuestionSubmitHintText));
+        OnPropertyChanged(nameof(CanCompleteEmotionQuestionAnswer));
         OnPropertyChanged(nameof(EmotionQuestionProgressText));
         OnPropertyChanged(nameof(EmotionQuestionText));
         OnPropertyChanged(nameof(RestTitleText));

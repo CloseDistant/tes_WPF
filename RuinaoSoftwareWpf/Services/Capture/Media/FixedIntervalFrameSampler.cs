@@ -6,13 +6,20 @@ namespace RuinaoSoftwareWpf;
 internal sealed class FixedIntervalFrameSampler
 {
     private readonly long intervalTicks;
+    private readonly long earlyToleranceTicks;
     private long nextSampleTimestamp = long.MinValue;
 
-    public FixedIntervalFrameSampler(TimeSpan interval, long timestampFrequency)
+    public FixedIntervalFrameSampler(
+        TimeSpan interval,
+        long timestampFrequency,
+        double earlyToleranceRatio = 0)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(interval, TimeSpan.Zero);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timestampFrequency, 0);
+        ArgumentOutOfRangeException.ThrowIfNegative(earlyToleranceRatio);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(earlyToleranceRatio, 0.49);
         intervalTicks = Math.Max(1, (long)Math.Round(interval.TotalSeconds * timestampFrequency));
+        earlyToleranceTicks = (long)Math.Round(intervalTicks * earlyToleranceRatio);
     }
 
     public bool ShouldSample(long timestamp)
@@ -23,12 +30,14 @@ internal sealed class FixedIntervalFrameSampler
             return true;
         }
 
-        if (timestamp < nextSampleTimestamp)
+        if (timestamp + earlyToleranceTicks < nextSampleTimestamp)
         {
             return false;
         }
 
-        var elapsedIntervals = (timestamp - nextSampleTimestamp) / intervalTicks + 1;
+        var elapsedIntervals = timestamp < nextSampleTimestamp
+            ? 1
+            : (timestamp - nextSampleTimestamp) / intervalTicks + 1;
         nextSampleTimestamp = checked(nextSampleTimestamp + elapsedIntervals * intervalTicks);
         return true;
     }

@@ -8,5 +8,7 @@ using OpenCvSharp;
 /// </summary>
 public interface ICaptureVideoFrameSink
 {
+    void ConfigureCaptureProfile(CameraCaptureProfileSnapshot profile);
+
     int RecordFrame(Mat frame);
 }

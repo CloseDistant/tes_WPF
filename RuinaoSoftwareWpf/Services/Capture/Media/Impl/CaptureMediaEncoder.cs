@@ -79,7 +79,7 @@ internal sealed class CaptureMediaEncoder : ICaptureMediaEncoder
         foreach (var argument in new[]
         {
             "-y", "-i", videoPath, "-i", audioPath, "-map", "0:v:0", "-map", "1:a:0",
-            "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", outputPath
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", outputPath
         })
         {
             startInfo.ArgumentList.Add(argument);

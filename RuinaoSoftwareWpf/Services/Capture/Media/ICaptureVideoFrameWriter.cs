@@ -8,6 +8,5 @@ internal interface ICaptureVideoFrameWriter
     Task<int> WriteAsync(
         string targetVideoPath,
         BlockingCollection<Mat> queue,
-        CaptureTimingState timing,
-        Action<DateTimeOffset> firstFrameWritten);
+        CaptureTimingState timing);
 }

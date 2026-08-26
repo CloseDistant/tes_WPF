@@ -4,5 +4,5 @@ internal interface ICaptureAudioRecorder
 {
     bool IsActive { get; }
     void Start(string audioPath);
-    void Stop(CaptureTimingState? timing = null);
+    Task StopAsync(CaptureTimingState? timing = null);
 }

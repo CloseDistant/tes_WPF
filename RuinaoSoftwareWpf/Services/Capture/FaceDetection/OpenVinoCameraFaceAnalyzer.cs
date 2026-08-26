@@ -14,7 +14,7 @@ using System.IO;
 public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
 {
     private const double FaceDetectionConfidence = 0.65;
-    private const double ModelInputPaddingRatio = 0.12;
+    private const double PoseInputPaddingRatio = 0.12;
     private static readonly Size FaceDetectorInputSize = new(300, 300);
     private static readonly Size LandmarkInputSize = new(64, 64);
     private static readonly Size HeadPoseInputSize = new(60, 60);
@@ -22,6 +22,7 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
 
     private readonly ILoggingService logger;
     private readonly FaceQualityEvaluator qualityEvaluator;
+    private readonly AdaptiveEyeOpennessBaseline eyeOpennessBaseline = new();
     private OVCore? inferenceCore;
     private ModelRunner? faceDetector;
     private ModelRunner? landmarkDetector;
@@ -35,6 +36,8 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
         this.logger = logger;
         qualityEvaluator = new FaceQualityEvaluator();
     }
+
+    public void Reset() => eyeOpennessBaseline.Reset();
 
     public CameraFaceAnalysis Analyze(
         Mat frame,
@@ -69,11 +72,15 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
             }
 
             var primary = detectedFaces.MaxBy(static item => item.Bounds.Width * item.Bounds.Height);
-            var modelInputBounds = ExpandAndClamp(
+            var landmarkInputBounds = CalculateLandmarkInputBounds(
+                primary.Bounds,
+                frame.Width,
+                frame.Height);
+            var poseInputBounds = ExpandAndClamp(
                 primary.Bounds,
                 frame.Width,
                 frame.Height,
-                ModelInputPaddingRatio);
+                PoseInputPaddingRatio);
             if (detectedFaces.Count > 1)
             {
                 return new CameraFaceAnalysis(
@@ -82,16 +89,25 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
                     capturedAt,
                     CameraFaceState.MultipleFaces,
                     detectedFaces.Count,
-                    Normalize(primary.Bounds, frame.Width, frame.Height));
+                    Normalize(primary.Bounds, frame.Width, frame.Height),
+                    DetectorFaceBounds: Normalize(primary.Bounds, frame.Width, frame.Height),
+                    LandmarkInputBounds: Normalize(landmarkInputBounds, frame.Width, frame.Height));
             }
 
-            var landmarks = DetectLandmarks(frame, modelInputBounds);
-            var pose = EstimateHeadPose(frame, modelInputBounds);
-            var evaluation = qualityEvaluator.Evaluate(new FaceQualityObservation(
+            var landmarks = DetectLandmarks(frame, landmarkInputBounds);
+            var pose = EstimateHeadPose(frame, poseInputBounds);
+            var observation = new FaceQualityObservation(
                 landmarks,
                 pose.Yaw,
                 pose.Pitch,
-                pose.Roll));
+                pose.Roll);
+            var evaluation = qualityEvaluator.Evaluate(
+                observation,
+                eyeOpennessBaseline.ClosedEyeThreshold);
+            eyeOpennessBaseline.Observe(evaluation);
+            evaluation = qualityEvaluator.Evaluate(
+                observation,
+                eyeOpennessBaseline.ClosedEyeThreshold);
             var detectedFaceBounds = CalculateDetectedFaceBounds(
                 primary.Bounds,
                 landmarks,
@@ -110,7 +126,12 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
                 pose.Pitch,
                 pose.Roll,
                 evaluation.LeftEyeAspectRatio,
-                evaluation.RightEyeAspectRatio);
+                evaluation.RightEyeAspectRatio,
+                Normalize(primary.Bounds, frame.Width, frame.Height),
+                Normalize(landmarkInputBounds, frame.Width, frame.Height),
+                NormalizeLandmarks(landmarks, frame.Width, frame.Height),
+                eyeOpennessBaseline.OpenEyeBaseline,
+                evaluation.ClosedEyeThreshold);
         }
         catch (Exception exception)
         {
@@ -290,6 +311,22 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
             height);
     }
 
+    internal static Rect CalculateLandmarkInputBounds(
+        Rect detectorBounds,
+        int frameWidth,
+        int frameHeight)
+    {
+        // 98点模型按官方定义接收已经检测出的人脸区域并缩放到64×64。
+        // 不再人为扩大或下移输入框，避免脸部在模型输入中缩小、偏移后把下巴预测到嘴部附近。
+        return ClampRect(
+            detectorBounds.Left,
+            detectorBounds.Top,
+            detectorBounds.Right,
+            detectorBounds.Bottom,
+            frameWidth,
+            frameHeight);
+    }
+
     internal static Rect CalculateDetectedFaceBounds(
         Rect detectorBounds,
         IReadOnlyList<FaceLandmarkPoint> landmarks,
@@ -300,10 +337,11 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
         FaceLandmarkPoint? previous = null;
         var minimumX = (double)detectorBounds.Left;
         var maximumX = (double)detectorBounds.Right;
-        var maximumY = (double)detectorBounds.Bottom;
         var spacingTotal = 0d;
         var spacingCount = 0;
         var reliablePointCount = 0;
+        var reliableChinPointCount = 0;
+        var detectedChinBottom = double.MinValue;
 
         foreach (var landmarkIndex in FaceLandmarkIndices.FaceContour)
         {
@@ -317,8 +355,13 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
             var current = landmarks[landmarkIndex];
             minimumX = Math.Min(minimumX, current.X);
             maximumX = Math.Max(maximumX, current.X);
-            maximumY = Math.Max(maximumY, current.Y);
             reliablePointCount++;
+
+            if (FaceLandmarkIndices.ChinCenter.Contains(landmarkIndex))
+            {
+                detectedChinBottom = Math.Max(detectedChinBottom, current.Y);
+                reliableChinPointCount++;
+            }
 
             if (previous is { } adjacent)
             {
@@ -329,7 +372,8 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
             previous = current;
         }
 
-        if (reliablePointCount == 0)
+        if (reliablePointCount == 0
+            || reliableChinPointCount < FaceLandmarkIndices.MinimumReliableChinCenterPointCount)
         {
             return detectorBounds;
         }
@@ -341,7 +385,7 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
             Math.Min(detectorBounds.Left, (int)Math.Floor(minimumX) - contourMargin),
             detectorBounds.Top,
             Math.Max(detectorBounds.Right, (int)Math.Ceiling(maximumX) + contourMargin),
-            Math.Max(detectorBounds.Bottom, (int)Math.Ceiling(maximumY) + contourMargin),
+            (int)Math.Ceiling(detectedChinBottom) + contourMargin,
             frameWidth,
             frameHeight);
     }
@@ -367,6 +411,17 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
         rect.Y / (double)height,
         rect.Width / (double)width,
         rect.Height / (double)height);
+
+    private static IReadOnlyList<NormalizedCameraLandmark> NormalizeLandmarks(
+        IReadOnlyList<FaceLandmarkPoint> landmarks,
+        int width,
+        int height) => landmarks
+        .Select((point, index) => new NormalizedCameraLandmark(
+            index,
+            point.X / width,
+            point.Y / height,
+            point.Confidence))
+        .ToArray();
 
     private sealed class ModelRunner : IDisposable
     {

@@ -83,7 +83,7 @@ public sealed partial class AssessmentCaptureViewModel
     /// 采集工作台统一强制休息时间。
     /// 图片浏览、视频浏览以及后续新增采集模块的休息阶段均固定 12 秒，不允许用户手动跳过。
     /// </summary>
-    private const int CaptureWorkbenchForcedRestSeconds = 12;
+    internal const int CaptureWorkbenchForcedRestSeconds = 12;
 
     /// <summary>
     /// 视频浏览真实视频之间的固定间隔。
@@ -106,8 +106,6 @@ public sealed partial class AssessmentCaptureViewModel
     private const int WordReadingGroupSeconds = 15;
 
     private const int ShortTextReadingPassageSeconds = 30;
-
-    private const int EmotionQuestionAnswerSeconds = 30;
 
     private static readonly CaptureWorkbenchModule[] CaptureWorkbenchModules =
     [
@@ -209,7 +207,8 @@ public sealed partial class AssessmentCaptureViewModel
     {
         Idle,
         WaitingToStart,
-        Answering,
+        AnsweringMinimum,
+        AnsweringSubmittable,
         Resting,
         Completed
     }

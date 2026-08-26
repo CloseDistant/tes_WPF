@@ -4,6 +4,7 @@ public enum AppPermission
 {
     DeletePrescription,
     ManageStartupSettings,
+    ManageCameraSettings,
     ManagePatients,
     ManageBackupRestore
 }

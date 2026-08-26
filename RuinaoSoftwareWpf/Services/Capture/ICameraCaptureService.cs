@@ -6,7 +6,15 @@ public interface ICameraCaptureService : IAsyncDisposable
 
     int RecordedFrameCount { get; }
 
-    Task<bool> OpenAsync(int preferredIndex, CancellationToken cancellationToken = default);
+    CameraCaptureProfileSnapshot? ActiveProfile { get; }
+
+    string? LastOpenFailureMessage { get; }
+
+    Task<bool> OpenAsync(
+        int preferredIndex,
+        string deviceKey,
+        bool forceReopen = false,
+        CancellationToken cancellationToken = default);
 
     bool TryTakeLatestPreview(out CameraPreviewSnapshot snapshot);
 

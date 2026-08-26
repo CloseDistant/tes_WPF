@@ -25,13 +25,11 @@ public partial class AssessmentCaptureView : UserControl
 
     private readonly DispatcherTimer cameraTimer = new()
     {
-        Interval = TimeSpan.FromMilliseconds(80)
+        Interval = TimeSpan.FromMilliseconds(33)
     };
 
     private readonly SemaphoreSlim cameraLifecycleGate = new(1, 1);
     private bool cameraPreviewHasFrame;
-    private bool faceInGuideFrame;
-    private long faceReadySinceTimestamp;
     private DateTime lastRecordingStatusUpdateAt = DateTime.MinValue;
     private DateTimeOffset lastCameraPreviewCapturedAt = DateTimeOffset.MinValue;
     private CameraPreviewOverlayState? latestCameraOverlay;
@@ -57,6 +55,10 @@ public partial class AssessmentCaptureView : UserControl
         // 如果用户离开演示播放页后又返回，MediaElement 不会自动恢复画面。
         // 这里兜底清理“播放中但没有播放器上下文”的状态，让用户重新完整观看演示。
         ViewModel?.CancelDemoPlaybackForNavigation();
+
+        // 摄像头冷启动通常需要数秒。进入页面后立即开始预热，并与患者评估上下文
+        // 加载并行执行，避免先加载评估、再串行等待摄像头造成额外延迟。
+        var cameraPreviewTask = StartCameraPreviewAsync();
         if (ViewModel is { } viewModel)
         {
             try
@@ -69,7 +71,7 @@ public partial class AssessmentCaptureView : UserControl
             }
         }
 
-        await StartCameraPreviewAsync();
+        await cameraPreviewTask;
     }
 
     private async void AssessmentCaptureView_Unloaded(object sender, RoutedEventArgs e)
@@ -261,7 +263,7 @@ public partial class AssessmentCaptureView : UserControl
             return;
         }
 
-        if (!faceInGuideFrame)
+        if (!viewModel.IsFaceReady)
         {
             viewModel.ShowStageNotice(viewModel.Localize("CaptureWorkspaceFaceNotReadyStageNotice"));
             return;
@@ -343,7 +345,7 @@ public partial class AssessmentCaptureView : UserControl
 
     private async void RefreshCameraButton_Click(object sender, RoutedEventArgs e)
     {
-        await StartCameraPreviewAsync();
+        await StartCameraPreviewAsync(forceReopen: true);
     }
 
     private async void CameraComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -388,27 +390,32 @@ public partial class AssessmentCaptureView : UserControl
         ViewModel?.UpdatePlaybackTime(DemoMedia.Position, duration);
     }
 
-    private async Task StartCameraPreviewAsync()
+    private async Task StartCameraPreviewAsync(bool forceReopen = false)
     {
         await cameraLifecycleGate.WaitAsync();
         try
         {
-            // 切换摄像头或重新进入页面时，先释放旧预览，避免设备被重复占用。
-            await StopCameraPreviewCoreAsync();
-
             var viewModel = ViewModel;
             if (viewModel is null || !viewModel.HasSelectedCamera)
             {
+                await StopCameraPreviewCoreAsync();
                 CameraPreviewStatusText.Text = viewModel?.Localize("CaptureWorkspaceNoCameraSelected")
                     ?? string.Empty;
                 return;
             }
 
+            cameraTimer.Stop();
+            if (viewModel.IsMediaRecording)
+            {
+                StopRecordingForPreviewStop();
+            }
+
             var cameraIndex = CameraComboBox.SelectedIndex < 0 ? 0 : CameraComboBox.SelectedIndex;
             CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceOpeningCamera");
-            if (!await viewModel.OpenCameraAsync(cameraIndex))
+            if (!await viewModel.OpenCameraAsync(cameraIndex, forceReopen))
             {
-                CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceCameraOpenFailed");
+                ResetCameraPreviewDisplay();
+                CameraPreviewStatusText.Text = viewModel.CameraOpenFailureMessage;
                 return;
             }
 
@@ -457,9 +464,8 @@ public partial class AssessmentCaptureView : UserControl
         CameraGuideRectangle.Visibility = Visibility.Collapsed;
         CameraFaceRectangle.Visibility = Visibility.Collapsed;
         cameraPreviewHasFrame = false;
-        faceInGuideFrame = false;
         latestCameraOverlay = null;
-        faceReadySinceTimestamp = 0;
+        (DataContext as AssessmentCaptureViewModel)?.ResetFaceReadiness();
         (DataContext as AssessmentCaptureViewModel)?.ResetFaceConditionMonitoring();
         lastCameraPreviewCapturedAt = DateTimeOffset.MinValue;
         lastRecordingStatusUpdateAt = DateTime.MinValue;
@@ -499,7 +505,7 @@ public partial class AssessmentCaptureView : UserControl
             if (!cameraPreviewHasFrame
                 || DateTimeOffset.Now - lastCameraPreviewCapturedAt > TimeSpan.FromSeconds(1))
             {
-                faceInGuideFrame = false;
+                viewModel.ResetFaceReadiness();
                 CameraFaceRectangle.Visibility = Visibility.Collapsed;
                 CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceNoFrameRead");
             }
@@ -511,7 +517,7 @@ public partial class AssessmentCaptureView : UserControl
         {
             if (DateTimeOffset.Now - snapshot.CapturedAt > TimeSpan.FromSeconds(1))
             {
-                faceInGuideFrame = false;
+                viewModel.ResetFaceReadiness();
                 CameraFaceRectangle.Visibility = Visibility.Collapsed;
                 CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceNoFrameRead");
                 return;
@@ -548,21 +554,10 @@ public partial class AssessmentCaptureView : UserControl
 
             cameraPreviewHasFrame = true;
             var nowTimestamp = Stopwatch.GetTimestamp();
-            var isNormalAndInsideGuide = snapshot.FaceState == CameraFaceState.Normal
-                && snapshot.IsPrimaryFaceInsideGuide;
-            if (isNormalAndInsideGuide)
-            {
-                faceReadySinceTimestamp = faceReadySinceTimestamp == 0
-                    ? nowTimestamp
-                    : faceReadySinceTimestamp;
-                faceInGuideFrame = Stopwatch.GetElapsedTime(faceReadySinceTimestamp, nowTimestamp)
-                    >= TimeSpan.FromSeconds(1.5);
-            }
-            else
-            {
-                faceReadySinceTimestamp = 0;
-                faceInGuideFrame = false;
-            }
+            viewModel.ObserveFaceReadiness(
+                snapshot.FaceState,
+                snapshot.IsPrimaryFaceInsideGuide,
+                nowTimestamp);
 
             var faceStatusText = FaceStateText(viewModel, snapshot.FaceState);
             if (snapshot.FaceState == CameraFaceState.Normal && !snapshot.IsPrimaryFaceInsideGuide)

@@ -29,9 +29,12 @@ internal sealed class CaptureMediaSyncProbe : ICaptureMediaSyncProbe
             timing.FirstFrameAt?.ToUnixTimeMilliseconds(), timing.LastFrameAt?.ToUnixTimeMilliseconds(),
             timing.FirstFrameWrittenAt?.ToUnixTimeMilliseconds(), timing.LastFrameWrittenAt?.ToUnixTimeMilliseconds(),
             timing.AudioStartedAt?.ToUnixTimeMilliseconds(), timing.AudioStoppedAt?.ToUnixTimeMilliseconds(),
-            timing.AudioStartReason, timing.AudioStartDelayFromRecordMs, timing.AudioStartDelayFromFirstFrameWrittenMs,
+            timing.AudioStartReason, timing.AudioStartDelayFromRecordMs, timing.AudioStartDelayFromFirstFrameMs,
+            timing.AudioStartDelayFromFirstFrameWrittenMs,
             timing.AudioTailAfterLastFrameWrittenMs, timing.AdjustedVideoFrameRate, rawContainerDurationOffsetMs,
             timing.QueuedFrameCount, timing.WrittenFrameCount, writtenFrameCount,
+            timing.AttemptedFrameCount, timing.DroppedFrameCount, timing.DroppedFrameRate,
+            timing.MaximumQueueDepth, timing.CameraProfile,
             FileSize(session.RawVideoPath), FileSize(session.NormalizedVideoPath), FileSize(session.AudioPath), FileSize(session.MergedVideoPath));
     }
 

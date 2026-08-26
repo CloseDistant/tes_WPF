@@ -6,7 +6,7 @@ public static class AuthorizationPolicy
     {
         return permission switch
         {
-            AppPermission.DeletePrescription or AppPermission.ManageStartupSettings or AppPermission.ManageBackupRestore =>
+            AppPermission.DeletePrescription or AppPermission.ManageStartupSettings or AppPermission.ManageCameraSettings or AppPermission.ManageBackupRestore =>
                 roleId == AccountRoles.Admin,
             AppPermission.ManagePatients =>
                 roleId is AccountRoles.Admin or AccountRoles.Doctor,

@@ -229,6 +229,97 @@
                 </CheckBox>
             </Border>
         </DataTemplate>
+
+        <Style x:Key="CameraQualityRadioButton" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Card"
+                                MinHeight="72"
+                                Margin="0,0,0,10"
+                                Padding="14,11"
+                                Background="#343A49"
+                                BorderBrush="#414859"
+                                BorderThickness="1"
+                                CornerRadius="3">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="28" />
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter VerticalAlignment="Center" />
+                                <Border x:Name="RadioRing"
+                                        Grid.Column="1"
+                                        Width="18"
+                                        Height="18"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Background="#252A36"
+                                        BorderBrush="#687386"
+                                        BorderThickness="1"
+                                        CornerRadius="9">
+                                    <Ellipse x:Name="RadioDot"
+                                             Width="8"
+                                             Height="8"
+                                             Fill="#171B24"
+                                             Visibility="Collapsed" />
+                                </Border>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Card" Property="Background" Value="#3A3E49" />
+                                <Setter TargetName="Card" Property="BorderBrush" Value="#D0903E" />
+                                <Setter TargetName="RadioRing" Property="Background" Value="#D0903E" />
+                                <Setter TargetName="RadioRing" Property="BorderBrush" Value="#D0903E" />
+                                <Setter TargetName="RadioDot" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="#E1A34D" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="CameraQualityOptionTemplate">
+            <RadioButton GroupName="CameraRecordingQuality"
+                         IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                         Style="{StaticResource CameraQualityRadioButton}">
+                <StackPanel>
+                    <Grid>
+                        <TextBlock Text="{Binding DisplayName}"
+                                   Foreground="#E7EBF2"
+                                   FontSize="13"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Specification}"
+                                   HorizontalAlignment="Right"
+                                   Foreground="#D7A45F"
+                                   FontSize="12" />
+                    </Grid>
+                    <Grid Margin="0,7,28,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Description}"
+                                   Foreground="#929DAF"
+                                   FontSize="11"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding PerformanceNote}"
+                                   Foreground="#D7A45F"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   HorizontalAlignment="Right"
+                                   Margin="18,0,0,0" />
+                    </Grid>
+                </StackPanel>
+            </RadioButton>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid Background="{StaticResource Bg}">
@@ -466,6 +557,56 @@
                                 Style="{StaticResource SettingsActionButton}" />
                         <Button Content="保存设置"
                                 Command="{Binding SaveNavigationCommand}"
+                                Style="{StaticResource SettingsActionButton}"
+                                Background="#1CA756"
+                                BorderBrush="#1CA756"
+                                Foreground="White"
+                                FontWeight="SemiBold"
+                                Margin="10,0,0,0" />
+                    </StackPanel>
+                </StackPanel>
+
+                <Border Height="1"
+                        Background="#3A3C45"
+                        Visibility="{Binding CameraRecordingQualitySettingsVisibility}" />
+
+                <StackPanel Margin="24,24,24,20"
+                            Visibility="{Binding CameraRecordingQualitySettingsVisibility}">
+                    <TextBlock Text="数字表型采集设置"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,8" />
+                    <TextBlock Text="正式录像质量"
+                               Foreground="#D4DAE4"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,6" />
+                    <TextBlock Text="选择下一次打开摄像头时使用的录像分辨率和帧率；预览与人脸分析仍保持独立低负载运行"
+                               Foreground="#AAB4C5"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,14" />
+                    <ItemsControl ItemsSource="{Binding CameraRecordingQualityOptions}"
+                                  ItemTemplate="{StaticResource CameraQualityOptionTemplate}" />
+                    <TextBlock Text="摄像头不支持所选档位时将明确提示，不会静默降到低分辨率"
+                               Foreground="#929DAF"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               Margin="0,2,0,0" />
+                    <TextBlock Text="{Binding CameraRecordingQualityStatus}"
+                               Foreground="#5DDA77"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               MinHeight="18"
+                               Margin="0,8,0,0" />
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                Margin="0,8,0,0">
+                        <Button Content="恢复默认"
+                                Command="{Binding RestoreCameraRecordingQualityCommand}"
+                                Style="{StaticResource SettingsActionButton}" />
+                        <Button Content="保存设置"
+                                Command="{Binding SaveCameraRecordingQualityCommand}"
                                 Style="{StaticResource SettingsActionButton}"
                                 Background="#1CA756"
                                 BorderBrush="#1CA756"

@@ -24,7 +24,12 @@ public sealed record CameraFaceAnalysis(
     double? PitchDegrees = null,
     double? RollDegrees = null,
     double? LeftEyeAspectRatio = null,
-    double? RightEyeAspectRatio = null)
+    double? RightEyeAspectRatio = null,
+    NormalizedCameraRect? DetectorFaceBounds = null,
+    NormalizedCameraRect? LandmarkInputBounds = null,
+    IReadOnlyList<NormalizedCameraLandmark>? Landmarks = null,
+    double? OpenEyeBaseline = null,
+    double? ClosedEyeThreshold = null)
 {
     public static CameraFaceAnalysis Unavailable(
         long sequence,
@@ -43,10 +48,18 @@ public readonly record struct FaceLandmarkPoint(
     double Y,
     double Confidence);
 
+public readonly record struct NormalizedCameraLandmark(
+    int Index,
+    double X,
+    double Y,
+    double Confidence);
+
 internal static class FaceLandmarkIndices
 {
     public static IReadOnlyList<int> FaceContour { get; } = Enumerable.Range(0, 33).ToArray();
     public static IReadOnlyList<int> Chin { get; } = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
+    public static IReadOnlyList<int> ChinCenter { get; } = [15, 16, 17];
+    public const int MinimumReliableChinCenterPointCount = 2;
 }
 
 public sealed record FaceQualityObservation(
@@ -77,7 +90,8 @@ public sealed record FaceQualityThresholds(
 public readonly record struct FaceQualityEvaluation(
     CameraFaceState State,
     double LeftEyeAspectRatio,
-    double RightEyeAspectRatio);
+    double RightEyeAspectRatio,
+    double ClosedEyeThreshold);
 
 /// <summary>
 /// 将 98 点关键点和头部姿态转换为统一面部质量状态。
@@ -103,12 +117,19 @@ public sealed class FaceQualityEvaluator
         this.thresholds = thresholds ?? FaceQualityThresholds.Default;
     }
 
-    public FaceQualityEvaluation Evaluate(FaceQualityObservation observation)
+    public FaceQualityEvaluation Evaluate(
+        FaceQualityObservation observation,
+        double? closedEyeThreshold = null)
     {
         ArgumentNullException.ThrowIfNull(observation);
+        var effectiveClosedEyeThreshold = closedEyeThreshold ?? thresholds.ClosedEyeAspectRatio;
         if (observation.Landmarks.Count < 98)
         {
-            return new FaceQualityEvaluation(CameraFaceState.FaceOccluded, 0, 0);
+            return new FaceQualityEvaluation(
+                CameraFaceState.FaceOccluded,
+                0,
+                0,
+                effectiveClosedEyeThreshold);
         }
 
         var leftEyeAspectRatio = CalculateEyeAspectRatio(observation.Landmarks, LeftEyeIndices);
@@ -119,7 +140,8 @@ public sealed class FaceQualityEvaluator
             return new FaceQualityEvaluation(
                 CameraFaceState.FaceOccluded,
                 leftEyeAspectRatio,
-                rightEyeAspectRatio);
+                rightEyeAspectRatio,
+                effectiveClosedEyeThreshold);
         }
 
         if (VisibleRatio(observation.Landmarks, FaceLandmarkIndices.Chin) < thresholds.FeatureVisibleRatio)
@@ -127,7 +149,18 @@ public sealed class FaceQualityEvaluator
             return new FaceQualityEvaluation(
                 CameraFaceState.FaceOccluded,
                 leftEyeAspectRatio,
-                rightEyeAspectRatio);
+                rightEyeAspectRatio,
+                effectiveClosedEyeThreshold);
+        }
+
+        if (VisibleCount(observation.Landmarks, FaceLandmarkIndices.ChinCenter)
+            < FaceLandmarkIndices.MinimumReliableChinCenterPointCount)
+        {
+            return new FaceQualityEvaluation(
+                CameraFaceState.FaceOccluded,
+                leftEyeAspectRatio,
+                rightEyeAspectRatio,
+                effectiveClosedEyeThreshold);
         }
 
         if (VisibleRatio(observation.Landmarks, LeftEyeIndices) < thresholds.FeatureVisibleRatio
@@ -136,7 +169,8 @@ public sealed class FaceQualityEvaluator
             return new FaceQualityEvaluation(
                 CameraFaceState.EyesNotVisible,
                 leftEyeAspectRatio,
-                rightEyeAspectRatio);
+                rightEyeAspectRatio,
+                effectiveClosedEyeThreshold);
         }
 
         if (VisibleRatio(observation.Landmarks, MouthIndices) < thresholds.FeatureVisibleRatio)
@@ -144,16 +178,18 @@ public sealed class FaceQualityEvaluator
             return new FaceQualityEvaluation(
                 CameraFaceState.MouthNotVisible,
                 leftEyeAspectRatio,
-                rightEyeAspectRatio);
+                rightEyeAspectRatio,
+                effectiveClosedEyeThreshold);
         }
 
-        if (leftEyeAspectRatio < thresholds.ClosedEyeAspectRatio
-            && rightEyeAspectRatio < thresholds.ClosedEyeAspectRatio)
+        if (leftEyeAspectRatio < effectiveClosedEyeThreshold
+            && rightEyeAspectRatio < effectiveClosedEyeThreshold)
         {
             return new FaceQualityEvaluation(
                 CameraFaceState.EyesClosed,
                 leftEyeAspectRatio,
-                rightEyeAspectRatio);
+                rightEyeAspectRatio,
+                effectiveClosedEyeThreshold);
         }
 
         if (Math.Abs(observation.YawDegrees) > thresholds.MaximumYawDegrees
@@ -163,16 +199,23 @@ public sealed class FaceQualityEvaluator
             return new FaceQualityEvaluation(
                 CameraFaceState.HeadPoseInvalid,
                 leftEyeAspectRatio,
-                rightEyeAspectRatio);
+                rightEyeAspectRatio,
+                effectiveClosedEyeThreshold);
         }
 
         return new FaceQualityEvaluation(
             CameraFaceState.Normal,
             leftEyeAspectRatio,
-            rightEyeAspectRatio);
+            rightEyeAspectRatio,
+            effectiveClosedEyeThreshold);
     }
 
     private double VisibleRatio(IReadOnlyList<FaceLandmarkPoint> landmarks, IReadOnlyList<int> indices)
+    {
+        return VisibleCount(landmarks, indices) / (double)indices.Count;
+    }
+
+    private int VisibleCount(IReadOnlyList<FaceLandmarkPoint> landmarks, IReadOnlyList<int> indices)
     {
         var visible = 0;
         for (var index = 0; index < indices.Count; index++)
@@ -183,7 +226,7 @@ public sealed class FaceQualityEvaluator
             }
         }
 
-        return visible / (double)indices.Count;
+        return visible;
     }
 
     private static double CalculateEyeAspectRatio(

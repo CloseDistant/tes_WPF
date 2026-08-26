@@ -8,6 +8,7 @@ internal sealed class CaptureAudioRecorder : ICaptureAudioRecorder
     private readonly ILoggingService logger;
     private WaveInEvent? capture;
     private WaveFileWriter? writer;
+    private TaskCompletionSource<bool>? recordingStoppedSignal;
 
     public CaptureAudioRecorder(ILoggingService logger)
     {
@@ -37,6 +38,8 @@ internal sealed class CaptureAudioRecorder : ICaptureAudioRecorder
                     BufferMilliseconds = 100
                 };
                 writer = new WaveFileWriter(audioPath, capture.WaveFormat);
+                recordingStoppedSignal = new TaskCompletionSource<bool>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
                 capture.DataAvailable += OnDataAvailable;
                 capture.RecordingStopped += OnRecordingStopped;
                 capture.StartRecording();
@@ -50,14 +53,26 @@ internal sealed class CaptureAudioRecorder : ICaptureAudioRecorder
         }
     }
 
-    public void Stop(CaptureTimingState? timing = null)
+    public async Task StopAsync(CaptureTimingState? timing = null)
     {
         timing?.RecordAudioStopped(DateTimeOffset.Now);
         WaveInEvent? activeCapture;
-        lock (syncRoot) { activeCapture = capture; }
+        TaskCompletionSource<bool>? stoppedSignal;
+        lock (syncRoot)
+        {
+            activeCapture = capture;
+            stoppedSignal = recordingStoppedSignal;
+        }
+
         try
         {
             activeCapture?.StopRecording();
+            if (activeCapture is not null
+                && stoppedSignal is not null
+                && !await WaitForRecordingStoppedAsync(stoppedSignal.Task).ConfigureAwait(false))
+            {
+                logger.Warning("等待麦克风停止回调超时，将强制释放录音资源。");
+            }
         }
         finally
         {
@@ -65,6 +80,19 @@ internal sealed class CaptureAudioRecorder : ICaptureAudioRecorder
         }
 
         logger.Info("音频录制已停止");
+    }
+
+    private static async Task<bool> WaitForRecordingStoppedAsync(Task stoppedTask)
+    {
+        try
+        {
+            await stoppedTask.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
     }
 
     private void OnDataAvailable(object? sender, WaveInEventArgs args)
@@ -76,7 +104,17 @@ internal sealed class CaptureAudioRecorder : ICaptureAudioRecorder
         }
     }
 
-    private void OnRecordingStopped(object? sender, StoppedEventArgs args) => DisposeResources();
+    private void OnRecordingStopped(object? sender, StoppedEventArgs args)
+    {
+        TaskCompletionSource<bool>? stoppedSignal;
+        lock (syncRoot)
+        {
+            stoppedSignal = recordingStoppedSignal;
+        }
+
+        DisposeResources();
+        stoppedSignal?.TrySetResult(true);
+    }
 
     private void DisposeResources()
     {
@@ -92,6 +130,7 @@ internal sealed class CaptureAudioRecorder : ICaptureAudioRecorder
             writer = null;
             capture?.Dispose();
             capture = null;
+            recordingStoppedSignal = null;
         }
     }
 }

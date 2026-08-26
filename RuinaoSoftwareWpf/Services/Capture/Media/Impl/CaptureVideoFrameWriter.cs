@@ -17,8 +17,7 @@ internal sealed class CaptureVideoFrameWriter : ICaptureVideoFrameWriter
     public async Task<int> WriteAsync(
         string targetVideoPath,
         BlockingCollection<Mat> queue,
-        CaptureTimingState timing,
-        Action<DateTimeOffset> firstFrameWritten)
+        CaptureTimingState timing)
     {
         VideoWriter? writer = null;
         var writtenCount = 0;
@@ -29,7 +28,12 @@ internal sealed class CaptureVideoFrameWriter : ICaptureVideoFrameWriter
             {
                 using (frame)
                 {
-                    writer ??= new VideoWriter(targetVideoPath, FourCC.MJPG, 12.5, new Size(frame.Width, frame.Height));
+                    var targetFrameRate = timing.CameraProfile?.RecordingFramesPerSecond ?? 30d;
+                    writer ??= new VideoWriter(
+                        targetVideoPath,
+                        FourCC.MJPG,
+                        targetFrameRate,
+                        new Size(frame.Width, frame.Height));
                     if (!writer.IsOpened())
                     {
                         continue;
@@ -44,7 +48,6 @@ internal sealed class CaptureVideoFrameWriter : ICaptureVideoFrameWriter
                     if (writtenCount == 1)
                     {
                         logger.Info($"第一帧视频已写入：target={targetVideoPath}");
-                        firstFrameWritten(writtenAt);
                     }
                 }
             }

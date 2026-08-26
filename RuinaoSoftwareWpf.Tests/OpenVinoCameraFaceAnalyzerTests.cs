@@ -6,6 +6,19 @@ using Xunit;
 public sealed class OpenVinoCameraFaceAnalyzerTests
 {
     [Fact]
+    public void CalculateLandmarkInputBounds_UsesDetectedFaceWithoutSyntheticExtension()
+    {
+        var detectorBounds = new Rect(100, 50, 100, 100);
+
+        var result = OpenVinoCameraFaceAnalyzer.CalculateLandmarkInputBounds(
+            detectorBounds,
+            frameWidth: 640,
+            frameHeight: 480);
+
+        Assert.Equal(detectorBounds, result);
+    }
+
+    [Fact]
     public void CalculateDetectedFaceBounds_ExtendsBottomToDetectedChin()
     {
         var detectorBounds = new Rect(100, 50, 100, 100);
@@ -26,6 +39,51 @@ public sealed class OpenVinoCameraFaceAnalyzerTests
 
         Assert.True(result.Bottom > 170);
         Assert.True(result.Bottom > detectorBounds.Bottom);
+    }
+
+    [Fact]
+    public void CalculateDetectedFaceBounds_DoesNotUseDetectorBottomAsFixedExtension()
+    {
+        var detectorBounds = new Rect(100, 50, 100, 160);
+        var landmarks = Enumerable
+            .Range(0, 98)
+            .Select(_ => new FaceLandmarkPoint(0, 0, 0))
+            .ToArray();
+        landmarks[15] = new FaceLandmarkPoint(145, 160, 1);
+        landmarks[16] = new FaceLandmarkPoint(150, 170, 1);
+        landmarks[17] = new FaceLandmarkPoint(155, 160, 1);
+
+        var result = OpenVinoCameraFaceAnalyzer.CalculateDetectedFaceBounds(
+            detectorBounds,
+            landmarks,
+            frameWidth: 640,
+            frameHeight: 480,
+            minimumConfidence: 0.08);
+
+        Assert.True(result.Bottom > 170);
+        Assert.True(result.Bottom < detectorBounds.Bottom);
+    }
+
+    [Fact]
+    public void CalculateDetectedFaceBounds_RequiresReliableCentralChinPoints()
+    {
+        var detectorBounds = new Rect(100, 50, 100, 100);
+        var landmarks = Enumerable
+            .Range(0, 98)
+            .Select(_ => new FaceLandmarkPoint(0, 0, 0))
+            .ToArray();
+        landmarks[11] = new FaceLandmarkPoint(130, 140, 1);
+        landmarks[12] = new FaceLandmarkPoint(135, 145, 1);
+        landmarks[15] = new FaceLandmarkPoint(145, 165, 1);
+
+        var result = OpenVinoCameraFaceAnalyzer.CalculateDetectedFaceBounds(
+            detectorBounds,
+            landmarks,
+            frameWidth: 640,
+            frameHeight: 480,
+            minimumConfidence: 0.08);
+
+        Assert.Equal(detectorBounds, result);
     }
 
     [Fact]
@@ -72,6 +130,10 @@ public sealed class OpenVinoCameraFaceAnalyzerTests
         Assert.NotEqual(CameraFaceState.DetectorUnavailable, result.State);
         Assert.NotNull(result.YawDegrees);
         Assert.NotNull(result.LeftEyeAspectRatio);
+        Assert.NotNull(result.DetectorFaceBounds);
+        Assert.NotNull(result.LandmarkInputBounds);
+        Assert.Equal(98, result.Landmarks?.Count);
+        Assert.NotNull(result.ClosedEyeThreshold);
     }
 
     private sealed class RecordingLoggingService : ILoggingService

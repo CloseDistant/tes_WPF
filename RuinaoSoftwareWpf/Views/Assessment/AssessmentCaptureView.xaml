@@ -84,6 +84,61 @@
             </Setter>
         </Style>
 
+        <Style x:Key="EmotionQuestionSubmitButton"
+               TargetType="Button"
+               BasedOn="{StaticResource PrimaryCaptureButton}">
+            <Setter Property="Width" Value="250" />
+            <Setter Property="Height" Value="48" />
+            <Setter Property="Padding" Value="30,0" />
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#282E39" />
+                    <Setter Property="BorderBrush" Value="#414858" />
+                    <Setter Property="Foreground" Value="#7F8795" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="FaceReadinessStartButton"
+               TargetType="Button"
+               BasedOn="{StaticResource PrimaryCaptureButton}">
+            <Setter Property="Width" Value="220" />
+            <Setter Property="Height" Value="44" />
+            <Setter Property="Padding" Value="28,0" />
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#282E39" />
+                    <Setter Property="BorderBrush" Value="#414858" />
+                    <Setter Property="Foreground" Value="#7F8795" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="FaceReadinessProgressBar" TargetType="ProgressBar">
+            <Setter Property="Height" Value="5" />
+            <Setter Property="Background" Value="#303645" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid Height="{TemplateBinding Height}"
+                              ClipToBounds="True"
+                              SnapsToDevicePixels="True">
+                            <Border x:Name="PART_Track"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="2.5" />
+                            <Border x:Name="PART_Indicator"
+                                    HorizontalAlignment="Left"
+                                    Background="{TemplateBinding Foreground}"
+                                    CornerRadius="2.5" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="DevStepButton" TargetType="Button" BasedOn="{StaticResource PrimaryCaptureButton}">
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="12,8" />
@@ -973,7 +1028,17 @@
                                                                Foreground="{StaticResource SubText}"
                                                                FontSize="15"
                                                                TextAlignment="Center"
-                                                               TextWrapping="Wrap" />
+                                                               TextWrapping="Wrap"
+                                                               Margin="0,0,0,22" />
+                                                    <Button Content="{Binding EmotionQuestionSubmitButtonText}"
+                                                            Command="{Binding CompleteEmotionQuestionAnswerCommand}"
+                                                            Style="{StaticResource EmotionQuestionSubmitButton}" />
+                                                    <TextBlock Text="{Binding EmotionQuestionSubmitHintText}"
+                                                               Foreground="#7F8897"
+                                                               FontSize="13"
+                                                               TextAlignment="Center"
+                                                               TextWrapping="Wrap"
+                                                               Margin="0,10,0,0" />
                                                 </StackPanel>
 
                                                 <StackPanel HorizontalAlignment="Center"
@@ -1593,6 +1658,77 @@
                                                        HorizontalAlignment="Center"
                                                        VerticalAlignment="Center"
                                                        Visibility="{Binding IsGenericFallbackStage, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                            <Border HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Width="560"
+                                                    Background="#171B25"
+                                                    BorderBrush="{StaticResource Line}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="8"
+                                                    Padding="28,24"
+                                                    Visibility="{Binding IsFaceStep, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <StackPanel>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Border Width="10"
+                                                                Height="10"
+                                                                Margin="0,0,12,0"
+                                                                VerticalAlignment="Center"
+                                                                Background="{Binding FaceReadinessAccentBrush}"
+                                                                CornerRadius="5" />
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{Binding FaceReadinessTitleText}"
+                                                                   Foreground="{StaticResource Text}"
+                                                                   FontSize="18"
+                                                                   FontWeight="SemiBold"
+                                                                   VerticalAlignment="Center" />
+                                                        <Border Grid.Column="2"
+                                                                Background="#242A36"
+                                                                BorderBrush="#343C4D"
+                                                                BorderThickness="1"
+                                                                CornerRadius="11"
+                                                                Padding="11,4">
+                                                            <TextBlock Text="{Binding FaceReadinessBadgeText}"
+                                                                       Foreground="{Binding FaceReadinessAccentBrush}"
+                                                                       FontSize="12"
+                                                                       FontWeight="SemiBold" />
+                                                        </Border>
+                                                    </Grid>
+
+                                                    <Border Margin="0,22,0,0"
+                                                            Background="#111620"
+                                                            BorderBrush="#293140"
+                                                            BorderThickness="1"
+                                                            CornerRadius="6"
+                                                            Padding="18,16">
+                                                        <TextBlock Text="{Binding FaceReadinessStatusText}"
+                                                                   Foreground="{StaticResource Text}"
+                                                                   FontSize="17"
+                                                                   FontWeight="SemiBold"
+                                                                   LineHeight="26"
+                                                                   TextAlignment="Center"
+                                                                   TextWrapping="Wrap" />
+                                                    </Border>
+
+                                                    <ProgressBar Margin="0,18,0,0"
+                                                                 Minimum="0"
+                                                                 Maximum="100"
+                                                                 Value="{Binding FaceReadinessProgressPercent, Mode=OneWay}"
+                                                                 Foreground="{Binding FaceReadinessAccentBrush}"
+                                                                 Style="{StaticResource FaceReadinessProgressBar}" />
+
+                                                    <Button Content="{Binding SecondaryActionText}"
+                                                            Margin="0,24,0,0"
+                                                            HorizontalAlignment="Center"
+                                                            IsEnabled="{Binding IsFaceReady}"
+                                                            Click="StartCalibrationButton_Click"
+                                                            Style="{StaticResource FaceReadinessStartButton}" />
+                                                </StackPanel>
+                                            </Border>
                                             <StackPanel HorizontalAlignment="Center"
                                                         VerticalAlignment="Center"
                                                         Width="460"
@@ -1681,12 +1817,6 @@
                                                         Padding="28,10"
                                                         Click="StartCalibrationButton_Click"
                                                         Visibility="{Binding ShowFaceCheckAction, Converter={StaticResource BoolToVisibilityConverter}}" />
-                                                <Button Content="{Binding SecondaryActionText}"
-                                                        Style="{StaticResource PrimaryCaptureButton}"
-                                                        MinWidth="180"
-                                                        Padding="28,10"
-                                                        Click="StartCalibrationButton_Click"
-                                                        Visibility="{Binding ShowModuleStartAction, Converter={StaticResource BoolToVisibilityConverter}}" />
                                             </StackPanel>
                                         </Grid>
                                     </Border>
