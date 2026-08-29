@@ -391,12 +391,14 @@ public partial class MainWindow
             && hasOnlineBoard
             && !productTpcsRunning
             && !productDirectCurrentRunning
+            && !productTacsRunning
             && !productMtpcsRunning;
         ProductTpcsStartButton.IsEnabled =
             canUseHardware
             && productTpcsConfigurationSent
             && !productTpcsRunning
             && !productDirectCurrentRunning
+            && !productTacsRunning
             && !productMtpcsRunning
             && ProductTpcsTestLoadCheckBox.IsChecked == true;
         ProductTpcsStartChannelButton.IsEnabled = ProductTpcsStartButton.IsEnabled;

@@ -43,6 +43,8 @@ public partial class MainWindow
             (ImpedanceBoardComboBox.SelectedItem as BoardAddressOption)?.Value;
         var previousTdcsAddress =
             (ProductTdcsBoardAddressComboBox.SelectedItem as BoardAddressOption)?.Value;
+        var previousTacsAddress =
+            (ProductTacsBoardAddressComboBox.SelectedItem as BoardAddressOption)?.Value;
         var previousMtpcsAddress =
             (ProductMtpcsBoardAddressComboBox.SelectedItem as BoardAddressOption)?.Value;
         var previousTpcsAddress =
@@ -57,10 +59,13 @@ public partial class MainWindow
 
         ImpedanceBoardComboBox.SelectedItem = FindOnlineBoard(previousImpedanceAddress);
         ProductTdcsBoardAddressComboBox.SelectedItem = FindOnlineBoard(previousTdcsAddress);
+        ProductTacsBoardAddressComboBox.SelectedItem = FindOnlineBoard(previousTacsAddress);
         ProductMtpcsBoardAddressComboBox.SelectedItem = FindOnlineBoard(previousMtpcsAddress);
         ProductTpcsBoardAddressComboBox.SelectedItem = FindOnlineBoard(previousTpcsAddress);
         InvalidateProductDirectCurrentConfiguration(
             "拓扑已更新，原产品tDCS配置状态已失效，请重新生成并下发。");
+        InvalidateProductTacsConfiguration(
+            "拓扑已更新，原产品tACS配置状态已失效，请重新生成并下发。");
         InvalidateProductMtpcsConfiguration(
             "拓扑已更新，原产品M-tPCS配置状态已失效，请重新生成并下发。");
         InvalidateProductTpcsConfiguration(

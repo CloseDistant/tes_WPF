@@ -548,6 +548,253 @@
                 </ScrollViewer>
             </TabItem>
 
+            <TabItem Header="产品 tACS">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="18">
+                        <TextBlock Text="产品参数经颅交流电刺激（tACS）"
+                                   FontSize="17"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Margin="0,6,0,16"
+                                   Foreground="#B36200"
+                                   TextWrapping="Wrap"
+                                   Text="当前仅支持连续模式。渐升和渐降分别转换为2段严格等时正弦波，最多5段；软件电流、波形和硬件映射均为设定预览，不是实测结果。仅允许连接测试负载。" />
+
+                        <WrapPanel>
+                            <StackPanel Width="150" Margin="0,0,12,12">
+                                <TextBlock Text="在线电刺激板槽位" Foreground="{StaticResource MutedBrush}" />
+                                <ComboBox x:Name="ProductTacsBoardAddressComboBox"
+                                          ItemsSource="{Binding OnlineStimulationBoardOptions}"
+                                          DisplayMemberPath="Display"
+                                          SelectedIndex="0"
+                                          SelectionChanged="ProductTacsInput_Changed" />
+                            </StackPanel>
+                            <StackPanel Width="120" Margin="0,0,12,12">
+                                <TextBlock Text="刺激通道" Foreground="{StaticResource MutedBrush}" />
+                                <ComboBox x:Name="ProductTacsChannelComboBox"
+                                          ItemsSource="{Binding StimulationChannels}"
+                                          SelectedIndex="0"
+                                          SelectionChanged="ProductTacsInput_Changed" />
+                            </StackPanel>
+                            <StackPanel Width="150" Margin="0,0,12,12">
+                                <TextBlock Text="幅值（单边峰值）mA" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox x:Name="ProductTacsCurrentTextBox"
+                                         Text="0.010"
+                                         FontFamily="Consolas"
+                                         Tag="PeakCurrentMilliampere"
+                                         TextChanged="ProductTacsInput_Changed"
+                                         LostFocus="ProductTacsInput_LostFocus" />
+                            </StackPanel>
+                            <StackPanel Width="150" Margin="0,0,12,12">
+                                <TextBlock Text="渐升时间 s" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox x:Name="ProductTacsRampUpTextBox"
+                                         Text="0.5"
+                                         FontFamily="Consolas"
+                                         Tag="RampUpSeconds"
+                                         TextChanged="ProductTacsInput_Changed"
+                                         LostFocus="ProductTacsInput_LostFocus" />
+                            </StackPanel>
+                            <StackPanel Width="150" Margin="0,0,12,12">
+                                <TextBlock Text="渐降时间 s" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox x:Name="ProductTacsRampDownTextBox"
+                                         Text="0.5"
+                                         FontFamily="Consolas"
+                                         Tag="RampDownSeconds"
+                                         TextChanged="ProductTacsInput_Changed"
+                                         LostFocus="ProductTacsInput_LostFocus" />
+                            </StackPanel>
+                            <StackPanel Width="150" Margin="0,0,12,12">
+                                <TextBlock Text="载波频率 Hz" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox x:Name="ProductTacsFrequencyTextBox"
+                                         Text="1000"
+                                         FontFamily="Consolas"
+                                         Tag="FrequencyHz"
+                                         TextChanged="ProductTacsInput_Changed"
+                                         LostFocus="ProductTacsInput_LostFocus" />
+                            </StackPanel>
+                            <StackPanel Width="170" Margin="0,0,12,12">
+                                <TextBlock Text="刺激时间（总时间）s" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox x:Name="ProductTacsDurationTextBox"
+                                         Text="1200.0"
+                                         FontFamily="Consolas"
+                                         Tag="TotalDurationSeconds"
+                                         TextChanged="ProductTacsInput_Changed"
+                                         LostFocus="ProductTacsInput_LostFocus" />
+                            </StackPanel>
+                        </WrapPanel>
+
+                        <Border Margin="0,4,0,14"
+                                Padding="14"
+                                Background="#F6F8FC"
+                                BorderBrush="#DDE3EC"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                            <StackPanel>
+                                <TextBlock Text="DLL硬件映射预览（类型2正弦）"
+                                           FontWeight="SemiBold" />
+                                <TextBlock x:Name="ProductTacsHardwarePreviewText"
+                                           Margin="0,8,0,0"
+                                           FontFamily="Consolas"
+                                           TextWrapping="Wrap"
+                                           Text="参数尚未形成有效的tACS硬件配置。" />
+                            </StackPanel>
+                        </Border>
+
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="14" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="14" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Padding="14" Background="#151B28" CornerRadius="8">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="模拟实时电流（非实测）" Foreground="#AAB4C8" />
+                                    <TextBlock x:Name="ProductTacsSimulatedCurrentText"
+                                               Text="0.000 mA"
+                                               Margin="0,6,0,0"
+                                               Foreground="#FFD04A"
+                                               FontFamily="Consolas"
+                                               FontWeight="Bold"
+                                               FontSize="22" />
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="2" Padding="14" Background="#151B28" CornerRadius="8">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="阶梯包络峰值" Foreground="#AAB4C8" />
+                                    <TextBlock x:Name="ProductTacsEnvelopeText"
+                                               Text="0.000 mA"
+                                               Margin="0,6,0,0"
+                                               Foreground="#57D57A"
+                                               FontFamily="Consolas"
+                                               FontWeight="Bold"
+                                               FontSize="22" />
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="4" Padding="14" Background="#151B28" CornerRadius="8">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="预计剩余时间" Foreground="#AAB4C8" />
+                                    <TextBlock x:Name="ProductTacsRemainingTimeText"
+                                               Text="00:00:00.0"
+                                               Margin="0,6,0,0"
+                                               Foreground="White"
+                                               FontFamily="Consolas"
+                                               FontWeight="Bold"
+                                               FontSize="22" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Border Margin="0,0,0,14"
+                                Padding="16"
+                                Background="#111722"
+                                BorderBrush="#2B3648"
+                                BorderThickness="1"
+                                CornerRadius="10">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="220" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid>
+                                    <TextBlock Text="软件设定波形预览"
+                                               Foreground="White"
+                                               FontWeight="SemiBold" />
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button x:Name="ProductTacsFullViewButton"
+                                                Content="全程包络"
+                                                MinHeight="28"
+                                                Padding="12,3"
+                                                Background="#33415A"
+                                                Foreground="White"
+                                                Click="ProductTacsFullViewButton_Click" />
+                                        <Button x:Name="ProductTacsDetailViewButton"
+                                                Content="载波细节"
+                                                MinHeight="28"
+                                                Padding="12,3"
+                                                Background="#33415A"
+                                                Foreground="White"
+                                                Click="ProductTacsDetailViewButton_Click" />
+                                    </StackPanel>
+                                </Grid>
+                                <Border Grid.Row="1"
+                                        Margin="0,10,0,0"
+                                        BorderBrush="#2B3648"
+                                        BorderThickness="1"
+                                        Background="#0D1420">
+                                    <Canvas x:Name="ProductTacsWaveformCanvas"
+                                            ClipToBounds="True"
+                                            SizeChanged="ProductTacsWaveformCanvas_SizeChanged">
+                                        <Line x:Name="ProductTacsZeroLine"
+                                              Stroke="#40506A"
+                                              StrokeThickness="1" />
+                                        <Polyline x:Name="ProductTacsPositiveEnvelopeLine"
+                                                  Stroke="#57D57A"
+                                                  StrokeThickness="2" />
+                                        <Polyline x:Name="ProductTacsNegativeEnvelopeLine"
+                                                  Stroke="#57D57A"
+                                                  StrokeThickness="2" />
+                                        <Polyline x:Name="ProductTacsCarrierLine"
+                                                  Stroke="#42A5F5"
+                                                  StrokeThickness="1.5" />
+                                    </Canvas>
+                                </Border>
+                                <TextBlock x:Name="ProductTacsWaveformCaption"
+                                           Grid.Row="2"
+                                           Margin="0,8,0,0"
+                                           Foreground="#AAB4C8"
+                                           TextWrapping="Wrap"
+                                           Text="全程包络：显示严格等时阶梯设定；不是实测电流。" />
+                            </Grid>
+                        </Border>
+
+                        <CheckBox x:Name="ProductTacsTestLoadCheckBox"
+                                  Content="已确认连接测试负载，不连接人体"
+                                  Foreground="#9A3A00"
+                                  FontWeight="SemiBold"
+                                  Checked="ProductTacsTestLoad_Changed"
+                                  Unchecked="ProductTacsTestLoad_Changed" />
+
+                        <WrapPanel Margin="0,12,0,0">
+                            <Button x:Name="ProductTacsPreviewButton"
+                                    Content="生成映射预览"
+                                    Click="ProductTacsPreviewButton_Click" />
+                            <Button x:Name="ProductTacsConfigureButton"
+                                    Content="1. 下发分段配置"
+                                    Click="ProductTacsConfigureButton_Click"
+                                    Background="#FFF1DD" />
+                            <Button x:Name="ProductTacsStartButton"
+                                    Content="业务板开始（值0）"
+                                    Click="ProductTacsStartButton_Click"
+                                    Background="#DDF6EA" />
+                            <Button x:Name="ProductTacsStartChannelButton"
+                                    Content="2. 指定通道开始"
+                                    Click="ProductTacsStartChannelButton_Click"
+                                    Background="#DDF6EA" />
+                            <Button x:Name="ProductTacsStopChannelButton"
+                                    Content="指定通道停止"
+                                    Click="ProductTacsStopChannelButton_Click"
+                                    Background="#FFE3E3" />
+                            <Button x:Name="ProductTacsStopButton"
+                                    Content="业务板手动停止（值0）"
+                                    Click="ProductTacsStopButton_Click"
+                                    Background="#FFE3E3" />
+                        </WrapPanel>
+
+                        <TextBlock x:Name="ProductTacsStatusText"
+                                   Margin="0,12,0,0"
+                                   Text="参数尚未下发。"
+                                   FontFamily="Consolas"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   TextWrapping="Wrap"
+                                   Text="配置成功只表示硬件接受命令，不表示波形已经实测验证；工程师软件不会在总时间结束后自动发送停止。" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem Header="产品 M-tPCS">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="18">

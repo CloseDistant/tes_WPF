@@ -333,12 +333,14 @@ public partial class MainWindow
             && hasOnlineBoard
             && !productMtpcsRunning
             && !productDirectCurrentRunning
+            && !productTacsRunning
             && !productTpcsRunning;
         ProductMtpcsStartButton.IsEnabled =
             canUseHardware
             && productMtpcsConfigurationSent
             && !productMtpcsRunning
             && !productDirectCurrentRunning
+            && !productTacsRunning
             && !productTpcsRunning
             && ProductMtpcsTestLoadCheckBox.IsChecked == true;
         ProductMtpcsStartChannelButton.IsEnabled =
@@ -346,6 +348,7 @@ public partial class MainWindow
             && productMtpcsConfigurationSent
             && !productMtpcsRunning
             && !productDirectCurrentRunning
+            && !productTacsRunning
             && !productTpcsRunning
             && ProductMtpcsTestLoadCheckBox.IsChecked == true;
         var safetyCommandsAvailable =
