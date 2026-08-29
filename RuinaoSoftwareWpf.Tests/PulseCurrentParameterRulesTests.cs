@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf.Tests;
+﻿namespace RuinaoSoftwareWpf.Tests;
 
 using Xunit;
 
@@ -51,11 +51,10 @@ public sealed class PulseCurrentParameterRulesTests
     }
 
     [Fact]
-    public void CalculatePlannedTotalCount_RiseOccursOnlyOnceAndLastIntervalIsOmitted()
+    public void CalculatePlannedTotalCount_LastIntervalIsOmitted()
     {
         var count = PulseCurrentParameterRules.CalculatePlannedTotalCount(
             treatmentDurationSeconds: 1,
-            riseWidthMilliseconds: 100,
             pulseWidthMilliseconds: 100,
             intervalWidthMilliseconds: 100);
 

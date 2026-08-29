@@ -278,7 +278,9 @@ public sealed class HardwareService : IHardwareService
                     ? StartDirectCurrentGroupOnHardwareBridgeAsync(group, token)
                     : IsMonophasicPulseCurrent(parameterRecord.StimulationType)
                         ? StartMonophasicPulseCurrentGroupOnHardwareBridgeAsync(group, token)
-                    : StartGroupOnProtocolBridgeAsync(group, token),
+                        : IsPulseCurrent(parameterRecord.StimulationType)
+                            ? StartPulseCurrentGroupOnHardwareBridgeAsync(group, token)
+                            : StartGroupOnProtocolBridgeAsync(group, token),
                 cancellationToken);
         }
 
@@ -299,7 +301,9 @@ public sealed class HardwareService : IHardwareService
                             ? StopDirectCurrentGroupOnHardwareBridgeAsync(group, token)
                             : IsMonophasicPulseCurrent(parameterRecord.StimulationType)
                                 ? StopMonophasicPulseCurrentGroupOnHardwareBridgeAsync(group, token)
-                            : StopGroupOnHardwareBridgeAsync(group, token),
+                                : IsPulseCurrent(parameterRecord.StimulationType)
+                                    ? StopPulseCurrentGroupOnHardwareBridgeAsync(group, token)
+                                    : StopGroupOnHardwareBridgeAsync(group, token),
                         CancellationToken.None);
                 }
                 catch (Exception stopException)
@@ -342,7 +346,9 @@ public sealed class HardwareService : IHardwareService
                     ? StopDirectCurrentGroupOnHardwareBridgeAsync(group, token)
                     : IsMonophasicPulseCurrent(stimulationType)
                         ? StopMonophasicPulseCurrentGroupOnHardwareBridgeAsync(group, token)
-                    : StopGroupOnHardwareBridgeAsync(group, token),
+                        : IsPulseCurrent(stimulationType)
+                            ? StopPulseCurrentGroupOnHardwareBridgeAsync(group, token)
+                            : StopGroupOnHardwareBridgeAsync(group, token),
                 cancellationToken);
         }
 
@@ -382,7 +388,9 @@ public sealed class HardwareService : IHardwareService
                     ? hardwareBridge.EmergencyStopBackplaneAsync(token)
                     : IsMonophasicPulseCurrent(stimulationType)
                         ? hardwareBridge.EmergencyStopMonophasicPulseCurrentBackplaneAsync(token)
-                    : EmergencyStopGroupOnProtocolBridgeAsync(group, token),
+                        : IsPulseCurrent(stimulationType)
+                            ? hardwareBridge.EmergencyStopPulseCurrentBackplaneAsync(token)
+                            : EmergencyStopGroupOnProtocolBridgeAsync(group, token),
                 cancellationToken);
         }
 
@@ -423,7 +431,9 @@ public sealed class HardwareService : IHardwareService
                     ? StopDirectCurrentGroupOnHardwareBridgeAsync(group, token)
                     : IsMonophasicPulseCurrent(stimulationType)
                         ? StopMonophasicPulseCurrentGroupOnHardwareBridgeAsync(group, token)
-                    : StopGroupOnHardwareBridgeAsync(group, token),
+                        : IsPulseCurrent(stimulationType)
+                            ? StopPulseCurrentGroupOnHardwareBridgeAsync(group, token)
+                            : StopGroupOnHardwareBridgeAsync(group, token),
                 cancellationToken);
         }
 
@@ -694,6 +704,135 @@ public sealed class HardwareService : IHardwareService
         }
     }
 
+    /// <summary>tPCS 与 tDCS 使用相同板卡映射和掩码启停，配置统一交给共享 DLL。</summary>
+    private async Task StartPulseCurrentGroupOnHardwareBridgeAsync(
+        TiGroup group,
+        CancellationToken cancellationToken)
+    {
+        var bindings = CreatePulseCurrentBindings(group);
+        foreach (var binding in bindings)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await hardwareBridge.ConfigurePulseCurrentAsync(binding.Parameters, cancellationToken);
+        }
+
+        var startedBoardCount = 0;
+        try
+        {
+            foreach (var board in bindings.GroupBy(binding => binding.BoardAddress))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await hardwareBridge.StartPulseCurrentChannelsAsync(
+                    board.Key,
+                    CombinePulseCurrentChannelMask(board),
+                    cancellationToken);
+                startedBoardCount++;
+            }
+        }
+        catch (Exception startException)
+        {
+            var failedBoard = bindings.GroupBy(binding => binding.BoardAddress)
+                .Skip(startedBoardCount)
+                .FirstOrDefault();
+            try
+            {
+                if (startedBoardCount > 0)
+                {
+                    await hardwareBridge.EmergencyStopPulseCurrentBackplaneAsync(CancellationToken.None);
+                }
+                else if (failedBoard is not null)
+                {
+                    await hardwareBridge.StopPulseCurrentChannelsAsync(
+                        failedBoard.Key,
+                        CombinePulseCurrentChannelMask(failedBoard),
+                        CancellationToken.None);
+                }
+            }
+            catch (Exception safetyStopException)
+            {
+                throw new InvalidOperationException(
+                    "tPCS启动未确认，随后安全停止命令也未确认。请立即人工检查设备并使用紧急停止。",
+                    new AggregateException(startException, safetyStopException));
+            }
+
+            if (startException is OperationCanceledException)
+            {
+                throw;
+            }
+
+            throw new InvalidOperationException(
+                startedBoardCount > 0
+                    ? "tPCS多板启动过程中发生失败，已向背板发送紧急停止。"
+                    : "tPCS启动回复未确认，已向对应业务板补发指定通道停止。",
+                startException);
+        }
+    }
+
+    private async Task StopPulseCurrentGroupOnHardwareBridgeAsync(
+        TiGroup group,
+        CancellationToken cancellationToken)
+    {
+        var bindings = CreatePulseCurrentBindings(group);
+        foreach (var board in bindings.GroupBy(binding => binding.BoardAddress))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await hardwareBridge.StopPulseCurrentChannelsAsync(
+                board.Key,
+                CombinePulseCurrentChannelMask(board),
+                cancellationToken);
+        }
+    }
+
+    private IReadOnlyList<PulseCurrentChannelBinding> CreatePulseCurrentBindings(TiGroup group)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+        if (group.Channels.Count == 0)
+        {
+            throw new InvalidOperationException("tPCS操作至少需要一个通道。");
+        }
+
+        var boards = CurrentDeviceTopology?.Slots
+            .Where(slot => slot.IsInserted
+                && slot.IsOnline
+                && slot.BoardKind == DeviceBoardKind.Stimulation)
+            .OrderBy(slot => slot.SlotIndex)
+            .ThenBy(slot => slot.Address)
+            .Take(2)
+            .ToArray()
+            ?? [];
+        var bindings = new List<PulseCurrentChannelBinding>(group.Channels.Count);
+        foreach (var channel in group.Channels)
+        {
+            var logicalChannel = ParseLogicalChannelNumber(channel.Name);
+            var boardIndex = (logicalChannel - 1) / 8;
+            if (boardIndex >= boards.Length)
+            {
+                throw new InvalidOperationException($"{channel.Name}没有映射到在线电刺激业务板。");
+            }
+
+            var physicalChannel = (logicalChannel - 1) % 8 + 1;
+            var boardAddress = boards[boardIndex].Address;
+            bindings.Add(new PulseCurrentChannelBinding(
+                boardAddress,
+                physicalChannel,
+                new PulseCurrentHardwareParameters(
+                    boardAddress,
+                    physicalChannel,
+                    ParseDecimal(channel.CurrentMA, channel.Name, "幅值"),
+                    ParseDecimal(channel.PulseRiseWidthMilliseconds, channel.Name, "上升宽度"),
+                    ParseDecimal(channel.PulseWidthMilliseconds, channel.Name, "脉冲宽度"),
+                    ParseDecimal(channel.PulseIntervalWidthMilliseconds, channel.Name, "间隔宽度"),
+                    ParseDecimal(channel.DurationS, channel.Name, "治疗时间"),
+                    string.Equals(channel.Polarity, "调转", StringComparison.Ordinal))));
+        }
+
+        return bindings;
+    }
+
+    private static uint CombinePulseCurrentChannelMask(
+        IEnumerable<PulseCurrentChannelBinding> bindings) =>
+        bindings.Aggregate(0U, (mask, binding) => mask | (1U << (binding.PhysicalChannelNumber - 1)));
+
     private IReadOnlyList<MonophasicPulseCurrentChannelBinding> CreateMonophasicPulseCurrentBindings(
         TiGroup group)
     {
@@ -830,6 +969,12 @@ public sealed class HardwareService : IHardwareService
             StimulationModeCodes.MonophasicPulseCurrent,
             StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsPulseCurrent(string stimulationType) =>
+        string.Equals(
+            stimulationType,
+            StimulationModeCodes.PulseCurrent,
+            StringComparison.OrdinalIgnoreCase);
+
     private sealed record DirectCurrentChannelBinding(
         byte BoardAddress,
         int PhysicalChannelNumber,
@@ -839,6 +984,11 @@ public sealed class HardwareService : IHardwareService
         byte BoardAddress,
         int PhysicalChannelNumber,
         MonophasicPulseCurrentHardwareParameters Parameters);
+
+    private sealed record PulseCurrentChannelBinding(
+        byte BoardAddress,
+        int PhysicalChannelNumber,
+        PulseCurrentHardwareParameters Parameters);
 
     private bool ShouldUseDebugStimulationMock()
     {

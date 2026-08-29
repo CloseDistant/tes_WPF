@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using System.Globalization;
 using System.Text.Json;
@@ -47,7 +47,8 @@ public static class StimulationRecordParameters
                     snapshot.CurrentMilliamp,
                     snapshot.PlannedDurationSeconds,
                     snapshot.Polarity,
-                    JsonSerializer.Serialize(snapshot));
+                    JsonSerializer.Serialize(snapshot),
+                    snapshot.PlannedTotalCount);
             })
             .ToArray();
         return new StimulationRunStartRequest(
@@ -55,76 +56,6 @@ public static class StimulationRecordParameters
             reusableParameters.StimulationType,
             reusableParameters.Name,
             channels);
-    }
-
-    public static StimulationRunStartRequest CreatePulseRunStartRequest(
-        IReadOnlyDictionary<PulseCurrentChannelConfig, PulseCurrentParameters> channels,
-        string prescriptionName,
-        string groupTitle)
-    {
-        ArgumentNullException.ThrowIfNull(channels);
-        if (channels.Count == 0)
-        {
-            throw new InvalidOperationException("启动刺激时至少需要一个通道。");
-        }
-
-        var channelRequests = channels.Select(pair =>
-        {
-            var channel = pair.Key;
-            var parameters = pair.Value;
-            var reusableParameters = new PrescriptionDefinition(
-                $"REC_{Guid.NewGuid():N}",
-                string.IsNullOrWhiteSpace(prescriptionName) ? "手动设置" : prescriptionName,
-                "电刺激实际参数",
-                PrescriptionDefinition.PulseCurrentStimulationType,
-                parameters.CurrentMilliamp,
-                PrescriptionDeliveryModes.Interval,
-                Math.Max(1, (int)Math.Round(parameters.TreatmentDurationSeconds / 60d, MidpointRounding.AwayFromZero)),
-                null,
-                null,
-                channel.Name,
-                0,
-                0,
-                "实际电刺激记录",
-                false,
-                PulseTreatmentDurationSeconds: (int)Math.Round(parameters.TreatmentDurationSeconds, MidpointRounding.AwayFromZero),
-                PulseWidthMilliseconds: parameters.PulseWidthMilliseconds,
-                PulseRiseWidthMilliseconds: parameters.RiseWidthMilliseconds,
-                PulseIntervalWidthMilliseconds: parameters.IntervalWidthMilliseconds,
-                PulseTreatmentDurationSecondsValue: parameters.TreatmentDurationSeconds);
-            var snapshot = new ChannelParameterSnapshot(
-                CurrentSnapshotSchemaVersion,
-                channel.Name,
-                string.Empty,
-                string.Empty,
-                parameters.CurrentMilliamp,
-                parameters.RiseWidthMilliseconds / 1000d,
-                0,
-                parameters.TreatmentDurationSeconds,
-                parameters.IntervalWidthMilliseconds / 1000d,
-                parameters.PulseWidthMilliseconds / 1000d,
-                null,
-                parameters.Polarity,
-                PrescriptionDeliveryModes.Interval,
-                reusableParameters,
-                parameters.PulseWidthMilliseconds,
-                parameters.RiseWidthMilliseconds,
-                parameters.IntervalWidthMilliseconds,
-                parameters.PlannedTotalCount);
-            return new StimulationChannelStartRequest(
-                channel.Name,
-                parameters.CurrentMilliamp,
-                parameters.TreatmentDurationSeconds,
-                parameters.Polarity,
-                JsonSerializer.Serialize(snapshot),
-                parameters.PlannedTotalCount);
-        }).ToArray();
-
-        return new StimulationRunStartRequest(
-            string.IsNullOrWhiteSpace(groupTitle) ? "tPCS" : groupTitle,
-            PrescriptionDefinition.PulseCurrentStimulationType,
-            string.IsNullOrWhiteSpace(prescriptionName) ? "手动设置" : prescriptionName,
-            channelRequests);
     }
 
     public static PrescriptionDefinition? PrescriptionFromSnapshotJson(string? json)
@@ -163,6 +94,37 @@ public static class StimulationRecordParameters
         string prescriptionName)
     {
         return CreatePrescription(group, prescriptionName, StimulationModeCodes.MonophasicPulseCurrent);
+    }
+
+    public static PrescriptionDefinition CreatePulseCurrentPrescription(
+        TiGroup group,
+        string prescriptionName)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+        var channel = group.Channels.FirstOrDefault();
+        var treatmentSeconds = ParseDouble(channel?.DurationS) ?? 0;
+        var currentMilliamp = ParseDouble(channel?.CurrentMA) ?? 0;
+        return new PrescriptionDefinition(
+            $"REC_{Guid.NewGuid():N}",
+            string.IsNullOrWhiteSpace(prescriptionName) ? group.Title : prescriptionName,
+            "电刺激实验实际参数",
+            StimulationModeCodes.PulseCurrent,
+            currentMilliamp,
+            PrescriptionDeliveryModes.Interval,
+            treatmentSeconds <= 0 ? 0 : Math.Max(1, (int)Math.Round(treatmentSeconds / 60d, MidpointRounding.AwayFromZero)),
+            null,
+            null,
+            BuildCourse(group),
+            0,
+            0,
+            "实际电刺激记录",
+            false,
+            group.Channels.Select(item => string.Equals(item.Polarity, "调转", StringComparison.Ordinal) ? "调转" : "不掉转").ToArray(),
+            PulseTreatmentDurationSeconds: (int)Math.Round(treatmentSeconds, MidpointRounding.AwayFromZero),
+            PulseWidthMilliseconds: ParseInt(channel?.PulseWidthMilliseconds),
+            PulseRiseWidthMilliseconds: ParseInt(channel?.PulseRiseWidthMilliseconds),
+            PulseIntervalWidthMilliseconds: ParseInt(channel?.PulseIntervalWidthMilliseconds),
+            PulseTreatmentDurationSecondsValue: treatmentSeconds);
     }
 
     private static PrescriptionDefinition CreatePrescription(
@@ -224,8 +186,20 @@ public static class StimulationRecordParameters
             DirectCurrentIntervalSecondsValue = intervalSeconds,
             DirectCurrentSingleDurationSecondsValue = singleDurationSeconds,
             DirectCurrentRampUpSecondsValue = rampUpSeconds,
-            DirectCurrentRampDownSecondsValue = rampDownSeconds
+            DirectCurrentRampDownSecondsValue = rampDownSeconds,
+            PulseTreatmentDurationSecondsValue = durationSeconds,
+            PulseWidthMilliseconds = ParseInt(channel.PulseWidthMilliseconds),
+            PulseRiseWidthMilliseconds = ParseInt(channel.PulseRiseWidthMilliseconds),
+            PulseIntervalWidthMilliseconds = ParseInt(channel.PulseIntervalWidthMilliseconds)
         };
+
+        var plannedPulseCount = long.TryParse(
+            channel.PlannedPulseCount,
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var parsedCount)
+            ? parsedCount
+            : (long?)null;
 
         return new ChannelParameterSnapshot(
             CurrentSnapshotSchemaVersion,
@@ -241,7 +215,11 @@ public static class StimulationRecordParameters
             frequencyHz,
             polarity,
             channel.StimulationMode,
-            reusableChannelParameters);
+            reusableChannelParameters,
+            ParseInt(channel.PulseWidthMilliseconds),
+            ParseInt(channel.PulseRiseWidthMilliseconds),
+            ParseInt(channel.PulseIntervalWidthMilliseconds),
+            plannedPulseCount);
     }
 
     public static PrescriptionDefinition CreateFallbackRecord(

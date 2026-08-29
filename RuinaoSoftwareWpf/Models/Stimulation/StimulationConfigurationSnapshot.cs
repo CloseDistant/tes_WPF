@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 public sealed record StimulationConfigurationSnapshot(
     string Title,
@@ -22,7 +22,11 @@ public sealed record StimulationConfigurationSnapshot(
                 channel.SingleDurationS,
                 channel.FrequencyHz,
                 channel.Polarity,
-                channel.StimulationMode)).ToArray());
+                channel.StimulationMode,
+                channel.PulseWidthMilliseconds,
+                channel.PulseRiseWidthMilliseconds,
+                channel.PulseIntervalWidthMilliseconds,
+                channel.PlannedPulseCount)).ToArray());
     }
 
     public TiGroup ToMutableGroup()
@@ -43,7 +47,11 @@ public sealed record StimulationConfigurationSnapshot(
                 SingleDurationS = channel.SingleDurationS,
                 FrequencyHz = channel.FrequencyHz,
                 Polarity = channel.Polarity,
-                StimulationMode = channel.StimulationMode
+                StimulationMode = channel.StimulationMode,
+                PulseWidthMilliseconds = channel.PulseWidthMilliseconds,
+                PulseRiseWidthMilliseconds = channel.PulseRiseWidthMilliseconds,
+                PulseIntervalWidthMilliseconds = channel.PulseIntervalWidthMilliseconds,
+                PlannedPulseCount = channel.PlannedPulseCount
             });
         }
 

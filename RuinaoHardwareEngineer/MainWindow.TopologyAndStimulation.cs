@@ -768,6 +768,7 @@ public partial class MainWindow
         UpdateStimulationImpedanceButtons(canUseHardware);
         UpdateProductDirectCurrentButtons(canUseHardware);
         UpdateProductMtpcsButtons(canUseHardware);
+        UpdateProductTpcsButtons(canUseHardware);
     }
 
     public sealed class BoardSlotItem

@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -63,6 +63,8 @@ public partial class MainWindow
             "拓扑已更新，原产品tDCS配置状态已失效，请重新生成并下发。");
         InvalidateProductMtpcsConfiguration(
             "拓扑已更新，原产品M-tPCS配置状态已失效，请重新生成并下发。");
+        InvalidateProductTpcsConfiguration(
+            "拓扑已更新，原产品tPCS配置状态已失效，请重新生成并下发。");
         ImpedanceStatusText.Text = OnlineStimulationBoardOptions.Count == 0
             ? "拓扑中没有在线业务板，请先确认硬件连接并重新扫描。"
             : $"已关联{OnlineStimulationBoardOptions.Count}个在线电刺激业务板槽位；请选择后读取CH1～CH8。";

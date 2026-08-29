@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
@@ -61,7 +61,7 @@ public sealed class PulseCurrentWaveformSurface : FrameworkElement
 
         var parameters = state.Parameters;
         var scale = CreateYScale(parameters);
-        var elapsed = Math.Clamp(state.ElapsedSeconds, 0, parameters.TreatmentDurationSeconds);
+        var elapsed = Math.Clamp(state.ElapsedSeconds, 0, parameters.TotalRuntimeSeconds);
         var (windowStart, windowEnd) = GetTimeWindow(state, parameters, elapsed);
 
         DrawGrid(drawingContext, plot, scale.DivisionCount);
@@ -84,7 +84,7 @@ public sealed class PulseCurrentWaveformSurface : FrameworkElement
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(parameters);
-        var elapsed = Math.Clamp(elapsedSeconds, 0, parameters.TreatmentDurationSeconds);
+        var elapsed = Math.Clamp(elapsedSeconds, 0, parameters.TotalRuntimeSeconds);
         if (state.IsGlobalView)
         {
             // 全程模式只压缩已经实际运行的部分，急停后固定在急停时刻。
@@ -217,8 +217,8 @@ public sealed class PulseCurrentWaveformSurface : FrameworkElement
         double visibleEnd,
         double plotWidth)
     {
-        visibleStart = Math.Clamp(visibleStart, 0, parameters.TreatmentDurationSeconds);
-        visibleEnd = Math.Clamp(visibleEnd, visibleStart, parameters.TreatmentDurationSeconds);
+        visibleStart = Math.Clamp(visibleStart, 0, parameters.TotalRuntimeSeconds);
+        visibleEnd = Math.Clamp(visibleEnd, visibleStart, parameters.TotalRuntimeSeconds);
         if (visibleEnd <= visibleStart)
         {
             return [];
@@ -227,11 +227,10 @@ public sealed class PulseCurrentWaveformSurface : FrameworkElement
         var rise = parameters.RiseWidthMilliseconds / 1000d;
         var pulse = parameters.PulseWidthMilliseconds / 1000d;
         var interval = parameters.IntervalWidthMilliseconds / 1000d;
-        var firstPulseEnd = rise + pulse;
         var cycle = pulse + interval;
         var estimatedVisiblePulses = cycle <= 0
             ? 0
-            : Math.Max(0, (long)Math.Ceiling((visibleEnd - Math.Max(visibleStart, firstPulseEnd)) / cycle)) + 1;
+            : Math.Max(0, (long)Math.Ceiling((visibleEnd - Math.Max(visibleStart, rise)) / cycle)) + 1;
         if (estimatedVisiblePulses > 700)
         {
             return CreateBoundedSample(parameters, visibleStart, visibleEnd, plotWidth);
@@ -245,27 +244,20 @@ public sealed class PulseCurrentWaveformSurface : FrameworkElement
             : parameters.CurrentMilliamp;
         var points = new List<WaveformPoint>((int)Math.Min(estimatedVisiblePulses * 5 + 8, 3508));
 
-        AddFirstPulseSegment(
-            points,
-            visibleStart,
-            visibleEnd,
-            rise,
-            firstPulseEnd,
-            amplitude);
+        AddRampSegment(points, visibleStart, visibleEnd, rise, amplitude);
 
-        if (parameters.PlannedTotalCount > 1)
+        if (parameters.PlannedTotalCount > 0)
         {
-            var firstSubsequentStart = firstPulseEnd + interval;
             var firstVisibleIndex = cycle <= 0
-                ? 1
+                ? 0
                 : Math.Max(
-                    1,
-                    (long)Math.Floor((visibleStart - firstSubsequentStart) / cycle) + 1);
+                    0,
+                    (long)Math.Floor((visibleStart - rise) / cycle));
             for (var pulseIndex = firstVisibleIndex;
                  pulseIndex < parameters.PlannedTotalCount;
                  pulseIndex++)
             {
-                var start = firstSubsequentStart + (pulseIndex - 1) * cycle;
+                var start = rise + pulseIndex * cycle;
                 if (start > visibleEnd)
                 {
                     break;
@@ -284,32 +276,29 @@ public sealed class PulseCurrentWaveformSurface : FrameworkElement
         return points;
     }
 
-    private static void AddFirstPulseSegment(
+    private static void AddRampSegment(
         List<WaveformPoint> points,
         double visibleStart,
         double visibleEnd,
         double riseSeconds,
-        double pulseEnd,
         double amplitude)
     {
+        if (riseSeconds <= 0)
+        {
+            return;
+        }
+
         var segmentStart = Math.Max(visibleStart, 0);
-        var segmentEnd = Math.Min(visibleEnd, pulseEnd);
+        var segmentEnd = Math.Min(visibleEnd, riseSeconds);
         if (segmentEnd < segmentStart)
         {
             return;
         }
 
         AddBreak(points);
-        var startCurrent = riseSeconds > 0 && segmentStart < riseSeconds
-            ? amplitude * segmentStart / riseSeconds
-            : amplitude;
+        var startCurrent = amplitude * segmentStart / riseSeconds;
         AddPoint(points, segmentStart, startCurrent);
-        if (riseSeconds > segmentStart && riseSeconds < segmentEnd)
-        {
-            AddPoint(points, riseSeconds, amplitude);
-        }
-
-        AddPoint(points, segmentEnd, amplitude);
+        AddPoint(points, segmentEnd, amplitude * segmentEnd / riseSeconds);
     }
 
     private static void AddConstantSegment(

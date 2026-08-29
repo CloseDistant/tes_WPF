@@ -141,6 +141,54 @@ public sealed class RuinaoTesHardwareBridge
             cancellationToken);
     }
 
+    internal async Task ConfigurePulseCurrentAsync(
+        PulseCurrentHardwareParameters parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        _ = await hardwareClient.ConfigurePulseCurrentAsync(
+            new PulseCurrentStimulationParameters(
+                parameters.BoardAddress,
+                parameters.PhysicalChannelNumber,
+                parameters.CurrentMilliampere,
+                parameters.RampWidthMilliseconds,
+                parameters.PulseWidthMilliseconds,
+                parameters.IntervalWidthMilliseconds,
+                parameters.TreatmentDurationSeconds,
+                parameters.ReversePolarity
+                    ? PulseCurrentPolarity.Reversed
+                    : PulseCurrentPolarity.Normal),
+            cancellationToken);
+    }
+
+    internal async Task StartPulseCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await hardwareClient.StartPulseCurrentChannelsAsync(
+            boardAddress,
+            channelMask,
+            cancellationToken);
+    }
+
+    internal async Task StopPulseCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await hardwareClient.StopPulseCurrentChannelsAsync(
+            boardAddress,
+            channelMask,
+            cancellationToken);
+    }
+
+    internal async Task EmergencyStopPulseCurrentBackplaneAsync(
+        CancellationToken cancellationToken = default)
+    {
+        _ = await hardwareClient.EmergencyStopPulseCurrentBackplaneAsync(cancellationToken);
+    }
+
     /// <summary>只发送背板0x0003=0；不遍历业务板，不执行通道拉低。</summary>
     internal async Task EmergencyStopBackplaneAsync(
         CancellationToken cancellationToken = default)

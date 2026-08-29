@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 /// <summary>
 /// 单个 tPCS 通道的轻量模拟波形状态。仅保存参数快照和时间，不缓存历史采样点。
@@ -98,7 +98,7 @@ public sealed class PulseCurrentWaveformState : ObservableObject
             return;
         }
 
-        ElapsedSeconds = Math.Clamp(elapsed, 0, Parameters.TreatmentDurationSeconds);
+        ElapsedSeconds = Math.Clamp(elapsed, 0, Parameters.TotalRuntimeSeconds);
     }
 
     public void Complete()
@@ -108,7 +108,7 @@ public sealed class PulseCurrentWaveformState : ObservableObject
             return;
         }
 
-        ElapsedSeconds = Parameters.TreatmentDurationSeconds;
+        ElapsedSeconds = Parameters.TotalRuntimeSeconds;
         RunState = PulseCurrentWaveformRunState.Completed;
     }
 
@@ -119,7 +119,7 @@ public sealed class PulseCurrentWaveformState : ObservableObject
             return;
         }
 
-        ElapsedSeconds = Math.Clamp(elapsed, 0, Parameters.TreatmentDurationSeconds);
+        ElapsedSeconds = Math.Clamp(elapsed, 0, Parameters.TotalRuntimeSeconds);
         RunState = PulseCurrentWaveformRunState.EmergencyStopped;
     }
 

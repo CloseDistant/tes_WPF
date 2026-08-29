@@ -392,18 +392,21 @@ public partial class MainWindow
             canUseHardware
             && hasOnlineBoard
             && !productDirectCurrentRunning
-            && !productMtpcsRunning;
+            && !productMtpcsRunning
+            && !productTpcsRunning;
         ProductTdcsStartButton.IsEnabled =
             canUseHardware
             && productDirectCurrentConfigurationSent
             && !productDirectCurrentRunning
             && !productMtpcsRunning
+            && !productTpcsRunning
             && ProductTdcsTestLoadCheckBox.IsChecked == true;
         ProductTdcsStartChannelButton.IsEnabled =
             canUseHardware
             && productDirectCurrentConfigurationSent
             && !productDirectCurrentRunning
             && !productMtpcsRunning
+            && !productTpcsRunning
             && ProductTdcsTestLoadCheckBox.IsChecked == true;
         ProductTdcsStopButton.IsEnabled =
             !isBusy

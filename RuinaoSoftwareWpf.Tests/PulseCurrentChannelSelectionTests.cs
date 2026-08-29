@@ -185,6 +185,8 @@ public sealed class PulseCurrentChannelSelectionTests
     private static PulseCurrentControlViewModel CreateViewModel()
     {
         var viewModel = new PulseCurrentControlViewModel(
+            new SuccessfulStimulationEngine(),
+            new DisconnectedHardwareConnectionState(),
             new ConnectedDebugSimulation(),
             new LocalizationViewModel(new AppLocalizationService()),
             new NoopToastService(),
@@ -196,6 +198,70 @@ public sealed class PulseCurrentChannelSelectionTests
         }
 
         return viewModel;
+    }
+
+    private sealed class DisconnectedHardwareConnectionState : IHardwareConnectionState
+    {
+        public event EventHandler<HardwareConnectionChangedEventArgs>? ConnectionChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public bool IsConnected => false;
+    }
+
+    private sealed class SuccessfulStimulationEngine : IStimulationEngine
+    {
+        public StimulationExecutionState CurrentState => StimulationExecutionState.Idle;
+
+        public Task<HardwareOperationResult> StartTiGroupAsync(
+            TiGroup group,
+            string selectedChannelNames,
+            string prescriptionName,
+            CancellationToken cancellationToken = default) => Success();
+
+        public Task<HardwareOperationResult> StartDirectCurrentGroupAsync(
+            TiGroup group,
+            string selectedChannelNames,
+            string prescriptionName,
+            CancellationToken cancellationToken = default) => Success();
+
+        public Task<HardwareOperationResult> StartPulseCurrentGroupAsync(
+            TiGroup group,
+            string selectedChannelNames,
+            string prescriptionName,
+            CancellationToken cancellationToken = default) => Success();
+
+        public Task<HardwareOperationResult> StopGroupAsync(
+            TiGroup group,
+            string selectedChannelNames,
+            string stimulationType,
+            CancellationToken cancellationToken = default) => Success();
+
+        public Task<HardwareOperationResult> EmergencyStopTiGroupAsync(
+            TiGroup group,
+            string reason,
+            CancellationToken cancellationToken = default) => Success();
+
+        public Task<HardwareOperationResult> EmergencyStopDirectCurrentGroupAsync(
+            TiGroup group,
+            string reason,
+            CancellationToken cancellationToken = default) => Success();
+
+        public Task<HardwareOperationResult> EmergencyStopPulseCurrentGroupAsync(
+            TiGroup group,
+            string reason,
+            CancellationToken cancellationToken = default) => Success();
+
+        public Task<HardwareOperationResult> CompleteGroupAsync(
+            TiGroup group,
+            string selectedChannelNames,
+            string stimulationType,
+            CancellationToken cancellationToken = default) => Success();
+
+        private static Task<HardwareOperationResult> Success() =>
+            Task.FromResult(new HardwareOperationResult(true, "测试成功"));
     }
 
     private static void ConfigureValidPulseParameters(

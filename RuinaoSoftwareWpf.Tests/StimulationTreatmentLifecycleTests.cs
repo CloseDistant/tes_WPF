@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf.Tests;
+﻿namespace RuinaoSoftwareWpf.Tests;
 
 using System.Text.Json;
 using Xunit;
@@ -80,28 +80,27 @@ public sealed class StimulationTreatmentLifecycleTests
     }
 
     [Fact]
-    public void CreatePulseRunStartRequest_PreservesPlannedCountAndPulseParameters()
+    public void CreateRunStartRequest_PreservesPulseCurrentCountAndParameters()
     {
-        var channel = new PulseCurrentChannelConfig { Name = "CH 1" };
-        var parameters = new PulseCurrentParameters(
-            2,
-            10,
-            5,
-            20,
-            1200,
-            PulseCurrentPolarities.NotReversed,
-            34286);
+        var group = new TiGroup { Title = "经颅脉冲电流刺激" };
+        group.Channels.Add(new ChannelConfig
+        {
+            Name = "CH 1",
+            CurrentMA = "2.00",
+            DurationS = "1200.0",
+            Polarity = PulseCurrentPolarities.NotReversed,
+            StimulationMode = PrescriptionDeliveryModes.Interval,
+            PulseWidthMilliseconds = "10",
+            PulseRiseWidthMilliseconds = "5",
+            PulseIntervalWidthMilliseconds = "20",
+            PlannedPulseCount = "40000"
+        });
+        var reusable = StimulationRecordParameters.CreatePulseCurrentPrescription(group, "脉冲处方");
 
-        var request = StimulationRecordParameters.CreatePulseRunStartRequest(
-            new Dictionary<PulseCurrentChannelConfig, PulseCurrentParameters>
-            {
-                [channel] = parameters
-            },
-            "脉冲处方",
-            channel.Name);
+        var request = StimulationRecordParameters.CreateRunStartRequest(group, reusable);
 
         var savedChannel = Assert.Single(request.Channels);
-        Assert.Equal(34286, savedChannel.PlannedTotalCount);
+        Assert.Equal(40000, savedChannel.PlannedTotalCount);
         var snapshot = JsonSerializer.Deserialize<ChannelParameterSnapshot>(
             savedChannel.ParameterSnapshotJson);
         Assert.Equal(10, snapshot?.PulseWidthMilliseconds);

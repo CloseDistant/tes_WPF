@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 /// <summary>
 /// 已校验的 tPCS 参数快照。最后一次脉冲之后不计算间隔宽度。
@@ -16,6 +16,9 @@ public sealed record PulseCurrentParameters(
     public const int MaxPulseWidthMilliseconds = PulseCurrentParameterRules.MaximumPulseWidthMilliseconds;
     public const int MaxRiseWidthMilliseconds = PulseCurrentParameterRules.MaximumRiseWidthMilliseconds;
     public const int MaxIntervalWidthMilliseconds = PulseCurrentParameterRules.MaximumIntervalWidthMilliseconds;
+
+    /// <summary>硬件总运行时间；治疗时间 T 不包含仅执行一次的渐升 R。</summary>
+    public double TotalRuntimeSeconds => TreatmentDurationSeconds + RiseWidthMilliseconds / 1000d;
 
     public static bool TryCreate(
         PulseCurrentChannelConfig channel,
@@ -81,7 +84,6 @@ public sealed record PulseCurrentParameters(
 
         var totalCount = PulseCurrentParameterRules.CalculatePlannedTotalCount(
             treatmentDuration,
-            riseWidth,
             pulseWidth,
             intervalWidth);
         if (totalCount < 1)

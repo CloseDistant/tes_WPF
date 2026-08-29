@@ -29,12 +29,14 @@ public sealed class TesHardwareDeviceClient
     private readonly BackplaneClient backplaneClient;
     private readonly DirectCurrentStimulationClient directCurrentClient;
     private readonly MonophasicPulseCurrentStimulationClient monophasicPulseCurrentClient;
+    private readonly PulseCurrentStimulationClient pulseCurrentClient;
 
     public TesHardwareDeviceClient(BackplaneClient backplaneClient)
     {
         this.backplaneClient = backplaneClient;
         directCurrentClient = new DirectCurrentStimulationClient(backplaneClient);
         monophasicPulseCurrentClient = new MonophasicPulseCurrentStimulationClient(backplaneClient);
+        pulseCurrentClient = new PulseCurrentStimulationClient(backplaneClient);
     }
 
     public BackplaneConnectionState State => backplaneClient.State;
@@ -171,6 +173,39 @@ public sealed class TesHardwareDeviceClient
     public Task<StimulationHardwareCommandResult> EmergencyStopMonophasicPulseCurrentBackplaneAsync(
         CancellationToken cancellationToken = default) =>
         monophasicPulseCurrentClient.EmergencyStopBackplaneAsync(DefaultOptions, cancellationToken);
+
+    /// <summary>下发一个物理通道的tPCS Type 6首次渐升和Type 8间隔脉冲配置。</summary>
+    public Task<PulseCurrentStimulationConfigurationResult> ConfigurePulseCurrentAsync(
+        PulseCurrentStimulationParameters parameters,
+        CancellationToken cancellationToken = default) =>
+        pulseCurrentClient.ConfigureAsync(parameters, DefaultOptions, cancellationToken);
+
+    /// <summary>按低8位掩码启动指定业务板的tPCS刺激通道。</summary>
+    public Task<StimulationHardwareCommandResult> StartPulseCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default) =>
+        pulseCurrentClient.StartChannelsAsync(
+            boardAddress,
+            channelMask,
+            DefaultOptions,
+            cancellationToken);
+
+    /// <summary>按低8位掩码停止指定业务板的tPCS刺激通道。</summary>
+    public Task<StimulationHardwareCommandResult> StopPulseCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default) =>
+        pulseCurrentClient.StopChannelsAsync(
+            boardAddress,
+            channelMask,
+            DefaultOptions,
+            cancellationToken);
+
+    /// <summary>通过tPCS产品API发送背板级全机紧急停止。</summary>
+    public Task<StimulationHardwareCommandResult> EmergencyStopPulseCurrentBackplaneAsync(
+        CancellationToken cancellationToken = default) =>
+        pulseCurrentClient.EmergencyStopBackplaneAsync(DefaultOptions, cancellationToken);
 
     /// <summary>
     /// 一次读取指定电刺激业务板的8个通道阻抗寄存器（0x1001～0x1008）。

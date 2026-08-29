@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace RuinaoSoftwareWpf.Tests;
 
@@ -58,7 +58,7 @@ public sealed class StimulationModeRegistryTests
             Assert.False(string.IsNullOrWhiteSpace(definition.FooterStatus));
         });
         Assert.Equal(
-            StimulationModeExecutionAvailability.HardwareIntegrationPending,
+            StimulationModeExecutionAvailability.Hardware,
             FeatureCatalog.GetStimulationType(StimulationModeCodes.PulseCurrent)
                 .ExecutionAvailability);
     }

@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using System.Globalization;
 
@@ -85,13 +85,11 @@ public static class PulseCurrentParameterRules
 
     public static long CalculatePlannedTotalCount(
         double treatmentDurationSeconds,
-        int riseWidthMilliseconds,
         int pulseWidthMilliseconds,
         int intervalWidthMilliseconds)
     {
         if (!double.IsFinite(treatmentDurationSeconds)
             || treatmentDurationSeconds <= 0
-            || riseWidthMilliseconds < 0
             || pulseWidthMilliseconds <= 0
             || intervalWidthMilliseconds <= 0)
         {
@@ -99,14 +97,13 @@ public static class PulseCurrentParameterRules
         }
 
         var treatmentMilliseconds = (decimal)treatmentDurationSeconds * 1000m;
-        var firstPulseEnd = riseWidthMilliseconds + pulseWidthMilliseconds;
-        if (treatmentMilliseconds < firstPulseEnd)
+        if (treatmentMilliseconds < pulseWidthMilliseconds)
         {
             return 0;
         }
 
         var count = decimal.Floor(
-            (treatmentMilliseconds - riseWidthMilliseconds + intervalWidthMilliseconds)
+            (treatmentMilliseconds + intervalWidthMilliseconds)
             / (pulseWidthMilliseconds + intervalWidthMilliseconds));
         return count > long.MaxValue ? long.MaxValue : decimal.ToInt64(count);
     }

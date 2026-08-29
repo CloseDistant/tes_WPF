@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -688,6 +688,7 @@ public partial class MainWindow : Window
                 UpdateImpedanceBoardOptions(Array.Empty<Features.DeviceTopology.EngineerBoardSlot>());
                 InvalidateProductDirectCurrentConfiguration("硬件连接已断开，产品tDCS配置状态已失效。");
                 InvalidateProductMtpcsConfiguration("硬件连接已断开，产品M-tPCS配置状态已失效。");
+                InvalidateProductTpcsConfiguration("硬件连接已断开，产品tPCS配置状态已失效。");
             }
 
             UpdateConnectionStateBadge();

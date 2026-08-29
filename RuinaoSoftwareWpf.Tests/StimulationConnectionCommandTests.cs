@@ -179,6 +179,8 @@ public sealed class StimulationConnectionCommandTests
     {
         var simulation = new MutableDebugHardwareSimulation();
         var viewModel = new PulseCurrentControlViewModel(
+            new NoopStimulationEngine(),
+            new MutableHardwareConnectionState(),
             simulation,
             new LocalizationViewModel(new AppLocalizationService()),
             new NoopToastService(),
@@ -189,6 +191,10 @@ public sealed class StimulationConnectionCommandTests
         Assert.False(viewModel.StartChannelCommand.CanExecute(viewModel.Channels[0]));
 
         var simulationResult = simulation.Connect(realHardwareConnected: false);
+        foreach (var channel in viewModel.Channels)
+        {
+            channel.UpdateImpedance(500m);
+        }
 
         Assert.True(simulationResult.Succeeded);
         Assert.True(viewModel.SynchronizedStartCommand.CanExecute(null));

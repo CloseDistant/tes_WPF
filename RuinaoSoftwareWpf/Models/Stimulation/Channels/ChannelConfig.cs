@@ -23,6 +23,10 @@ public sealed class ChannelConfig : ObservableObject, IStimulationImpedanceChann
     private string frequencyHz = string.Empty;
     private string polarity = "不掉转";
     private string stimulationMode = "间隔";
+    private string pulseWidthMilliseconds = string.Empty;
+    private string pulseRiseWidthMilliseconds = string.Empty;
+    private string pulseIntervalWidthMilliseconds = string.Empty;
+    private string plannedPulseCount = string.Empty;
     private string remainingTime = "00:00:00";
     private Brush accentBrush = Brushes.White;
     private bool isParameterEditingEnabled = true;
@@ -110,6 +114,18 @@ public sealed class ChannelConfig : ObservableObject, IStimulationImpedanceChann
 
     /// <summary>载波频率，单位 Hz。</summary>
     public string FrequencyHz { get => frequencyHz; set => SetProperty(ref frequencyHz, value); }
+
+    /// <summary>tPCS 脉冲平台宽度，单位毫秒。</summary>
+    public string PulseWidthMilliseconds { get => pulseWidthMilliseconds; set => SetProperty(ref pulseWidthMilliseconds, value); }
+
+    /// <summary>tPCS 仅首次执行的渐升宽度，单位毫秒。</summary>
+    public string PulseRiseWidthMilliseconds { get => pulseRiseWidthMilliseconds; set => SetProperty(ref pulseRiseWidthMilliseconds, value); }
+
+    /// <summary>tPCS 相邻完整脉冲之间的零输出宽度，单位毫秒。</summary>
+    public string PulseIntervalWidthMilliseconds { get => pulseIntervalWidthMilliseconds; set => SetProperty(ref pulseIntervalWidthMilliseconds, value); }
+
+    /// <summary>tPCS 按治疗时间可完整发送的脉冲总数。</summary>
+    public string PlannedPulseCount { get => plannedPulseCount; set => SetProperty(ref plannedPulseCount, value); }
 
     /// <summary>刺激期间是否调转极性："不掉转" 或 "调转"。</summary>
     public string Polarity { get => polarity; set => SetProperty(ref polarity, value); }

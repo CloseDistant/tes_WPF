@@ -736,10 +736,6 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="18">
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Text="产品参数脉冲电刺激（tPCS）"
                                            FontSize="17"
@@ -747,17 +743,8 @@
                                 <TextBlock Margin="0,6,0,0"
                                            Foreground="{StaticResource MutedBrush}"
                                            TextWrapping="Wrap"
-                                           Text="第一段为类型8渐升，第二段为类型10脉冲循环；当前只完成产品界面、参数校验和软件模拟，不向硬件下发。" />
+                                           Text="第一段为类型6首次渐升，第二段为类型8间隔脉冲；参数转换、配置和启停均通过RuinaoTesHardware.dll执行。" />
                             </StackPanel>
-                            <Border Grid.Column="1"
-                                    Padding="12,6"
-                                    Background="#FFF4D6"
-                                    CornerRadius="14"
-                                    VerticalAlignment="Top">
-                                <TextBlock Text="设计确认中 · 禁止硬件下发"
-                                           Foreground="#8A5200"
-                                           FontWeight="SemiBold" />
-                            </Border>
                         </Grid>
 
                         <Border Margin="0,16,0,0"
@@ -794,7 +781,7 @@
                                         <StackPanel Width="150" Margin="0,0,12,12">
                                             <TextBlock Text="极性" Foreground="{StaticResource MutedBrush}" />
                                             <ComboBox x:Name="ProductTpcsPolarityComboBox"
-                                                      ItemsSource="{Binding DirectCurrentPolarityOptions}"
+                                                      ItemsSource="{Binding PulseCurrentPolarityOptions}"
                                                       DisplayMemberPath="Display"
                                                       SelectedValuePath="Value"
                                                       SelectionChanged="ProductTpcsInput_Changed" />
@@ -885,25 +872,14 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="12" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="12" />
-                                <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <Border Padding="14" Background="#151B28" CornerRadius="8">
                                 <StackPanel HorizontalAlignment="Center">
-                                    <TextBlock Text="当前阶段（软件模拟）" Foreground="#AAB4C8" />
-                                    <TextBlock x:Name="ProductTpcsStageText"
-                                               Text="尚未运行"
-                                               Margin="0,6,0,0"
-                                               Foreground="#FFD04A"
-                                               FontWeight="Bold"
-                                               FontSize="18" />
-                                </StackPanel>
-                            </Border>
-                            <Border Grid.Column="2" Padding="14" Background="#151B28" CornerRadius="8">
-                                <StackPanel HorizontalAlignment="Center">
-                                    <TextBlock Text="目标脉冲电流" Foreground="#AAB4C8" />
-                                    <TextBlock x:Name="ProductTpcsTargetCurrentText"
-                                               Text="+0.010 mA"
+                                    <TextBlock Text="模拟实时电流"
+                                               Foreground="#AAB4C8"
+                                               ToolTip="按当前参数和软件时间轴计算，不代表硬件实测值。" />
+                                    <TextBlock x:Name="ProductTpcsSimulatedCurrentText"
+                                               Text="0.000 mA"
                                                Margin="0,6,0,0"
                                                Foreground="#FFD04A"
                                                FontFamily="Consolas"
@@ -911,9 +887,9 @@
                                                FontSize="18" />
                                 </StackPanel>
                             </Border>
-                            <Border Grid.Column="4" Padding="14" Background="#151B28" CornerRadius="8">
+                            <Border Grid.Column="2" Padding="14" Background="#151B28" CornerRadius="8">
                                 <StackPanel HorizontalAlignment="Center">
-                                    <TextBlock Text="当前次数（软件模拟）" Foreground="#AAB4C8" />
+                                    <TextBlock Text="预计完成脉冲" Foreground="#AAB4C8" />
                                     <TextBlock x:Name="ProductTpcsCurrentCountText"
                                                Text="0 / —"
                                                Margin="0,6,0,0"
@@ -923,7 +899,7 @@
                                                FontSize="18" />
                                 </StackPanel>
                             </Border>
-                            <Border Grid.Column="6" Padding="14" Background="#151B28" CornerRadius="8">
+                            <Border Grid.Column="4" Padding="14" Background="#151B28" CornerRadius="8">
                                 <StackPanel HorizontalAlignment="Center">
                                     <TextBlock Text="预计剩余时间" Foreground="#AAB4C8" />
                                     <TextBlock x:Name="ProductTpcsRemainingTimeText"
@@ -949,7 +925,7 @@
                                     <RowDefinition Height="210" />
                                 </Grid.RowDefinitions>
                                 <Grid>
-                                    <TextBlock Text="组合波形预览（软件模拟，非下位机实测）"
+                                    <TextBlock Text="组合波形预览"
                                                Foreground="White"
                                                FontWeight="SemiBold" />
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -992,7 +968,7 @@
                                         </Canvas>
                                         <TextBlock Grid.Row="1"
                                                    x:Name="ProductTpcsWaveformCaption"
-                                                   Text="细节视图：第一次脉冲包含渐升，后续脉冲直接进入目标幅值。"
+                                                   Text="细节视图：首次渐升只执行一次，随后为有间隔的同方向矩形脉冲。"
                                                    Foreground="#AAB4C8"
                                                    TextWrapping="Wrap" />
                                     </Grid>
@@ -1021,29 +997,45 @@
                                   Margin="0,14,0,0"
                                   Content="已确认连接测试负载，不连接人体"
                                   Foreground="#9A3A00"
-                                  FontWeight="SemiBold" />
+                                  FontWeight="SemiBold"
+                                  Checked="ProductTpcsTestLoad_Changed"
+                                  Unchecked="ProductTpcsTestLoad_Changed" />
                         <WrapPanel Margin="0,12,0,0">
-                            <Button Content="生成产品预览"
+                            <Button x:Name="ProductTpcsPreviewButton"
+                                    Content="生成转换预览"
                                     Click="ProductTpcsPreviewButton_Click" />
-                            <Button Content="1. 下发配置（待确认）"
-                                    IsEnabled="False"
+                            <Button x:Name="ProductTpcsConfigureButton"
+                                    Content="1. 下发配置"
+                                    Click="ProductTpcsConfigureButton_Click"
                                     Background="#FFF1DD"
-                                    ToolTip="脉冲硬件语义确认并实现共享DLL后开放。" />
-                            <Button Content="2. 开始刺激（待确认）"
-                                    IsEnabled="False"
-                                    Background="#DDF6EA"
-                                    ToolTip="当前界面不会发送任何tPCS硬件命令。" />
-                            <Button Content="手动停止"
-                                    IsEnabled="False"
-                                    Background="#FFE3E3"
-                                    ToolTip="tPCS硬件API尚未实现。" />
+                                    ToolTip="按Type 6、Type 8、总控制的顺序下发。" />
+                            <Button x:Name="ProductTpcsStartButton"
+                                    Content="业务板开始（值0）"
+                                    Click="ProductTpcsStartButton_Click"
+                                    Background="#DDF6EA" />
+                            <Button x:Name="ProductTpcsStartChannelButton"
+                                    Content="2. 指定通道开始"
+                                    Click="ProductTpcsStartChannelButton_Click"
+                                    Background="#DDF6EA" />
+                            <Button x:Name="ProductTpcsStopChannelButton"
+                                    Content="指定通道停止"
+                                    Click="ProductTpcsStopChannelButton_Click"
+                                    Background="#FFE3E3" />
+                            <Button x:Name="ProductTpcsStopButton"
+                                    Content="业务板手动停止（值0）"
+                                    Click="ProductTpcsStopButton_Click"
+                                    Background="#FFE3E3" />
                         </WrapPanel>
                         <TextBlock x:Name="ProductTpcsStatusText"
                                    Margin="0,12,0,0"
-                                   Text="界面设计阶段：不会向硬件发送tPCS配置或开始命令。"
+                                   Text="参数尚未下发。"
                                    FontFamily="Consolas"
                                    Foreground="#8A5200"
                                    TextWrapping="Wrap" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   TextWrapping="Wrap"
+                                   Text="治疗时间T不含首次渐升R；硬件总运行时间为R+T。工程师软件不在总时间结束后追加停止或全通道拉低。" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

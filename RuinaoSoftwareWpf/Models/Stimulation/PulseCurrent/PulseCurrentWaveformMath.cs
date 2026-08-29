@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 /// <summary>tPCS 参数波形的确定性计算规则。</summary>
 public static class PulseCurrentWaveformMath
@@ -6,7 +6,7 @@ public static class PulseCurrentWaveformMath
     public static double GetSimulatedCurrent(PulseCurrentParameters parameters, double seconds)
     {
         ArgumentNullException.ThrowIfNull(parameters);
-        if (seconds < 0 || seconds > parameters.TreatmentDurationSeconds)
+        if (seconds < 0 || seconds > parameters.TotalRuntimeSeconds)
         {
             return 0;
         }
@@ -14,9 +14,8 @@ public static class PulseCurrentWaveformMath
         var riseSeconds = parameters.RiseWidthMilliseconds / 1000d;
         var pulseSeconds = parameters.PulseWidthMilliseconds / 1000d;
         var intervalSeconds = parameters.IntervalWidthMilliseconds / 1000d;
-        var firstPulseEnd = riseSeconds + pulseSeconds;
-        var subsequentCycleSeconds = pulseSeconds + intervalSeconds;
-        if (pulseSeconds <= 0 || subsequentCycleSeconds <= 0)
+        var cycleSeconds = pulseSeconds + intervalSeconds;
+        if (pulseSeconds <= 0 || cycleSeconds <= 0)
         {
             return 0;
         }
@@ -29,24 +28,19 @@ public static class PulseCurrentWaveformMath
             return signedCurrent * seconds / riseSeconds;
         }
 
-        if (seconds < firstPulseEnd)
-        {
-            return signedCurrent;
-        }
-
-        if (parameters.PlannedTotalCount <= 1 || seconds < firstPulseEnd + intervalSeconds)
+        var treatmentElapsed = seconds - riseSeconds;
+        if (treatmentElapsed < 0)
         {
             return 0;
         }
 
-        var subsequentElapsed = seconds - firstPulseEnd - intervalSeconds;
-        var subsequentPulseIndex = (long)Math.Floor(subsequentElapsed / subsequentCycleSeconds) + 1;
-        if (subsequentPulseIndex >= parameters.PlannedTotalCount)
+        var pulseIndex = (long)Math.Floor(treatmentElapsed / cycleSeconds);
+        if (pulseIndex >= parameters.PlannedTotalCount)
         {
             return 0;
         }
 
-        return subsequentElapsed % subsequentCycleSeconds < pulseSeconds ? signedCurrent : 0;
+        return treatmentElapsed % cycleSeconds < pulseSeconds ? signedCurrent : 0;
     }
 
     public static long GetCompletedPulseCount(PulseCurrentParameters parameters, double elapsedSeconds)
@@ -56,18 +50,13 @@ public static class PulseCurrentWaveformMath
         var pulseSeconds = parameters.PulseWidthMilliseconds / 1000d;
         var intervalSeconds = parameters.IntervalWidthMilliseconds / 1000d;
         var firstPulseEnd = riseSeconds + pulseSeconds;
-        var subsequentCycleSeconds = pulseSeconds + intervalSeconds;
-        if (elapsedSeconds < firstPulseEnd || subsequentCycleSeconds <= 0)
+        var cycleSeconds = pulseSeconds + intervalSeconds;
+        if (elapsedSeconds < firstPulseEnd || cycleSeconds <= 0)
         {
             return 0;
         }
 
-        var completed = 1L;
-        var secondPulseEnd = firstPulseEnd + intervalSeconds + pulseSeconds;
-        if (elapsedSeconds >= secondPulseEnd)
-        {
-            completed += (long)Math.Floor((elapsedSeconds - secondPulseEnd) / subsequentCycleSeconds) + 1;
-        }
+        var completed = (long)Math.Floor((elapsedSeconds - firstPulseEnd) / cycleSeconds) + 1;
 
         return Math.Clamp(completed, 0, parameters.PlannedTotalCount);
     }

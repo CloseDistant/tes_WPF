@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 using RuinaoTesHardware;
@@ -332,18 +332,21 @@ public partial class MainWindow
             canUseHardware
             && hasOnlineBoard
             && !productMtpcsRunning
-            && !productDirectCurrentRunning;
+            && !productDirectCurrentRunning
+            && !productTpcsRunning;
         ProductMtpcsStartButton.IsEnabled =
             canUseHardware
             && productMtpcsConfigurationSent
             && !productMtpcsRunning
             && !productDirectCurrentRunning
+            && !productTpcsRunning
             && ProductMtpcsTestLoadCheckBox.IsChecked == true;
         ProductMtpcsStartChannelButton.IsEnabled =
             canUseHardware
             && productMtpcsConfigurationSent
             && !productMtpcsRunning
             && !productDirectCurrentRunning
+            && !productTpcsRunning
             && ProductMtpcsTestLoadCheckBox.IsChecked == true;
         var safetyCommandsAvailable =
             !isBusy
