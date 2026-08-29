@@ -21,6 +21,12 @@ internal sealed class PrescriptionEntity
     public double? DirectCurrentSingleDurationSeconds { get; set; }
     public double? DirectCurrentRampUpSeconds { get; set; }
     public double? DirectCurrentRampDownSeconds { get; set; }
+    public double? TacsPeakCurrentMilliampere { get; set; }
+    public double? TacsRampUpSeconds { get; set; }
+    public double? TacsRampDownSeconds { get; set; }
+    public int? TacsFrequencyHz { get; set; }
+    public double? TacsTotalDurationSeconds { get; set; }
+    public int? TacsParameterVersion { get; set; }
     public string Course { get; set; } = string.Empty;
     public int RampUpSeconds { get; set; }
     public int RampDownSeconds { get; set; }

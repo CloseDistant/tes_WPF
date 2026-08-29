@@ -13,6 +13,7 @@ public static class FeatureKeys
     public const string NavigationRecords = "navigation.records";
     public const string StimulationTemporalInterference = "stimulation.ti";
     public const string StimulationDirectCurrent = "stimulation.tdcs";
+    public const string StimulationAlternatingCurrent = "stimulation.tacs";
     public const string StimulationPulseCurrent = "stimulation.tpcs";
     public const string StimulationMonophasicPulseCurrent = "stimulation.mtpcs";
 }

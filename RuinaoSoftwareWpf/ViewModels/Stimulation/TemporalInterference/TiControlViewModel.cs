@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace RuinaoSoftwareWpf;
 
@@ -14,15 +16,26 @@ public sealed class TiControlViewModel : ObservableObject
 {
     private readonly IStimulationEngine stimulationEngine;
     private readonly IHardwareConnectionState hardwareConnectionState;
+    private readonly IHardwareService? hardwareService;
     private readonly IDebugHardwareSimulationService debugHardwareSimulation;
+    private readonly IDebugStimulationImpedanceProvider? debugImpedanceProvider;
+    private readonly ITiWaveformPreviewFactory waveformPreviewFactory;
     private readonly ILoggingService logger;
     private readonly IToastService toastService;
+    private readonly IUserDialogService userDialogService;
     private readonly StimulationChannelCountdown countdown = new();
+    private readonly DispatcherTimer waveformTimer;
+    private readonly Dictionary<ChannelConfig, TiWaveformRuntime> activeWaveforms = [];
     private readonly AsyncRelayCommand startCommand;
     private readonly AsyncRelayCommand startChannelCommand;
     private readonly AsyncRelayCommand stopChannelCommand;
     private readonly RelayCommand usePrescriptionCommand;
     private readonly RelayCommand useChannelPrescriptionCommand;
+    private readonly RelayCommand backCommand;
+    private bool startOperationInProgress;
+    private bool isParameterDownloadVisible;
+    private double parameterDownloadPercentage;
+    private string parameterDownloadStatus = "正在准备刺激参数";
     private TiGroup? selectedGroup;
     private TiGroup? lastSelectedGroup;
     private string appliedPrescriptionName = "手动设置";
@@ -38,14 +51,26 @@ public sealed class TiControlViewModel : ObservableObject
         ILoggingService logger,
         ITiGroupFactory tiGroupFactory,
         LocalizationViewModel localization,
-        IToastService toastService)
+        IToastService toastService,
+        IUserDialogService userDialogService,
+        IDebugStimulationImpedanceProvider? debugImpedanceProvider = null,
+        ITiWaveformPreviewFactory? waveformPreviewFactory = null)
     {
         this.stimulationEngine = stimulationEngine;
         this.hardwareConnectionState = hardwareConnectionState;
+        hardwareService = hardwareConnectionState as IHardwareService;
         this.debugHardwareSimulation = debugHardwareSimulation;
+        this.debugImpedanceProvider = debugImpedanceProvider;
+        this.waveformPreviewFactory = waveformPreviewFactory ?? new TiWaveformPreviewFactory();
         this.logger = logger;
         this.toastService = toastService;
+        this.userDialogService = userDialogService;
         countdown.Completed += channel => _ = CompleteChannelAsync(channel);
+        waveformTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(50)
+        };
+        waveformTimer.Tick += OnWaveformTimerTick;
         Localization = localization;
         Groups = new ObservableCollection<TiGroup>(tiGroupFactory.CreateDemoGroups());
 
@@ -58,19 +83,24 @@ public sealed class TiControlViewModel : ObservableObject
         });
 
         startCommand = new AsyncRelayCommand(
-            (_, _) => StartAllChannelsAsync(),
-            _ => CanStartStimulation && !countdown.HasActiveChannels,
+            (_, cancellationToken) => StartAllChannelsAsync(cancellationToken),
+            _ => CanStartStimulation
+                && !countdown.HasActiveChannels
+                && Groups.SelectMany(group => group.Channels).Any(IsImpedanceEligibleForStart),
             HandleStartFailure);
         StartCommand = startCommand;
         startChannelCommand = new AsyncRelayCommand(
-            async (parameter, _) =>
+            async (parameter, cancellationToken) =>
             {
                 if (parameter is ChannelConfig channel)
                 {
-                    await StartChannelAsync(channel);
+                    await StartChannelAsync(channel, cancellationToken);
                 }
             },
-            _ => CanStartStimulation,
+            parameter => CanStartStimulation
+                && parameter is ChannelConfig channel
+                && !countdown.IsActive(channel)
+                && IsImpedanceEligibleForStart(channel),
             onError: HandleStartFailure);
         StartChannelCommand = startChannelCommand;
         stopChannelCommand = new AsyncRelayCommand(
@@ -78,31 +108,53 @@ public sealed class TiControlViewModel : ObservableObject
             {
                 if (parameter is ChannelConfig channel)
                 {
-                    await StopSimulatedChannelAsync(channel, cancellationToken);
+                    try
+                    {
+                        await StopChannelAsync(channel, cancellationToken);
+                    }
+                    catch (Exception exception)
+                    {
+                        HandleStopFailure(channel, exception);
+                    }
                 }
             },
-            parameter => debugHardwareSimulation.IsConnected
+            parameter => CanControlHardware
                 && parameter is ChannelConfig channel
-                && countdown.IsActive(channel),
-            onError: HandleStopFailure);
+                && countdown.IsActive(channel));
         StopChannelCommand = stopChannelCommand;
         EmergencyStopCommand = CreateHardwareCommand(_ => EmergencyStopAllChannelsAsync());
         usePrescriptionCommand = new RelayCommand(
             _ => RequestPrescription(StimulationPrescriptionApplyScope.AllChannels),
-            _ => !countdown.HasActiveChannels);
+            _ => !countdown.HasActiveChannels && !startOperationInProgress);
         UsePrescriptionCommand = usePrescriptionCommand;
         useChannelPrescriptionCommand = new RelayCommand(
             parameter => RequestPrescription(StimulationPrescriptionApplyScope.SingleChannel, parameter),
             parameter => parameter is ChannelConfig channel
                 && Groups.SelectMany(group => group.Channels).Contains(channel)
-                && !countdown.IsActive(channel));
+                && !countdown.IsActive(channel)
+                && !startOperationInProgress);
         UseChannelPrescriptionCommand = useChannelPrescriptionCommand;
-        BackCommand = new RelayCommand(_ => BackRequested?.Invoke(this, EventArgs.Empty));
+        ParameterValidationFailedCommand = new RelayCommand(parameter =>
+        {
+            if (parameter is string message && !string.IsNullOrWhiteSpace(message))
+            {
+                toastService.Show(ToastKind.Warning, "参数已调整", message);
+            }
+        });
+        backCommand = new RelayCommand(
+            _ => BackRequested?.Invoke(this, EventArgs.Empty),
+            _ => !HasConfirmedRunningChannels());
+        BackCommand = backCommand;
         hardwareConnectionState.ConnectionChanged += OnHardwareConnectionChanged;
+        if (hardwareService is not null)
+        {
+            hardwareService.StimulationImpedanceChanged += OnStimulationImpedanceChanged;
+        }
         debugHardwareSimulation.ConnectionChanged += OnDebugSimulationConnectionChanged;
 
         SelectedGroup = Groups.FirstOrDefault();
         lastSelectedGroup = SelectedGroup;
+        ApplyDebugImpedanceSnapshotIfAvailable();
     }
 
     /// <summary>
@@ -135,6 +187,8 @@ public sealed class TiControlViewModel : ObservableObject
     public ICommand UseChannelPrescriptionCommand { get; }
 
     public ICommand BackCommand { get; }
+
+    public ICommand ParameterValidationFailedCommand { get; }
     public string AppliedPrescriptionName { get => appliedPrescriptionName; private set => SetProperty(ref appliedPrescriptionName, value); }
     public string DeliveryMode { get => deliveryMode; private set => SetProperty(ref deliveryMode, value); }
     public int TotalDurationMinutes { get => totalDurationMinutes; private set => SetProperty(ref totalDurationMinutes, value); }
@@ -142,6 +196,32 @@ public sealed class TiControlViewModel : ObservableObject
     public int? SessionDurationMinutes { get => sessionDurationMinutes; private set => SetProperty(ref sessionDurationMinutes, value); }
 
     public bool IsStimulationRunning => stimulationEngine.CurrentState == StimulationExecutionState.Running;
+
+    public bool IsParameterDownloadVisible
+    {
+        get => isParameterDownloadVisible;
+        private set => SetProperty(ref isParameterDownloadVisible, value);
+    }
+
+    public double ParameterDownloadPercentage
+    {
+        get => parameterDownloadPercentage;
+        private set
+        {
+            if (SetProperty(ref parameterDownloadPercentage, value))
+            {
+                OnPropertyChanged(nameof(ParameterDownloadPercentageText));
+            }
+        }
+    }
+
+    public string ParameterDownloadPercentageText => $"{ParameterDownloadPercentage:0}%";
+
+    public string ParameterDownloadStatus
+    {
+        get => parameterDownloadStatus;
+        private set => SetProperty(ref parameterDownloadStatus, value);
+    }
 
     public TiGroup? SelectedGroup
     {
@@ -200,29 +280,31 @@ public sealed class TiControlViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(prescription);
         AppliedPrescriptionName = prescription.Name;
-        DeliveryMode = prescription.DeliveryMode;
+        DeliveryMode = PrescriptionDeliveryModes.Continuous;
         TotalDurationMinutes = prescription.TotalDurationMinutes;
-        IntervalMinutes = prescription.IntervalMinutes;
-        SessionDurationMinutes = prescription.SessionDurationMinutes;
-        var current = prescription.CurrentMilliamp.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
-        var durationSeconds = (prescription.TotalDurationMinutes * 60).ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var singleDurationSeconds = ((prescription.SessionDurationMinutes ?? prescription.TotalDurationMinutes) * 60)
-            .ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var intervalSeconds = ((prescription.IntervalMinutes ?? 0) * 60)
-            .ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var mode = prescription.DeliveryMode == PrescriptionDeliveryModes.Interval ? "间隔" : "连续";
+        IntervalMinutes = null;
+        SessionDurationMinutes = null;
+        var current = prescription.CurrentMilliamp.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture);
+        var durationSeconds = prescription.DirectCurrentTotalDurationSeconds
+            .ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+        var rampUpSeconds = prescription.DirectCurrentRampUpDurationSeconds
+            .ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+        var rampDownSeconds = prescription.DirectCurrentRampDownDurationSeconds
+            .ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
         foreach (var channel in targetChannels)
         {
             // TI 处方不包含载波频率；处方应用不得覆盖通道自己的 FrequencyHz。
             channel.CurrentMA = current;
-            channel.RampUpS = prescription.RampUpSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            channel.RampDownS = prescription.RampDownSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            channel.RampUpS = rampUpSeconds;
+            channel.RampDownS = rampDownSeconds;
             channel.DurationS = durationSeconds;
-            channel.IntervalS = intervalSeconds;
-            channel.SingleDurationS = singleDurationSeconds;
-            channel.StimulationMode = mode;
+            channel.IntervalS = "0.0";
+            channel.SingleDurationS = durationSeconds;
+            channel.StimulationMode = "连续";
             channel.RemainingTime = "00:00:00";
             channel.DirectCurrentWaveform.Clear();
+            channel.AlternatingCurrentWaveform.Clear();
+            activeWaveforms.Remove(channel);
             channel.RefreshBindings();
         }
 
@@ -253,31 +335,61 @@ public sealed class TiControlViewModel : ObservableObject
         logger.Error("刺激启动失败", exception);
         toastService.ShowError(
             "刺激启动失败",
-            "刺激启动命令未完成，软件未进入运行状态。具体原因已记录到运行日志。");
+            $"刺激启动命令未完成，软件未进入运行状态。{exception.Message}");
     }
 
-    private void HandleStopFailure(Exception exception)
+    private void HandleStopFailure(ChannelConfig channel, Exception exception)
     {
-        logger.Error("TI 刺激停止失败", exception);
+        RefreshStartCommandStates();
+        logger.Error($"TI 刺激停止失败：{channel.Name}", exception);
         toastService.ShowError(
             "刺激停止失败",
-            "停止命令未完成，通道仍保持运行状态，请再次点击停止或使用紧急停止。具体原因已记录到运行日志。");
+            $"{channel.Name}停止命令未确认，通道状态未知。{exception.Message}");
+        if (userDialogService.ConfirmWarning(
+                "停止失败",
+                $"{channel.Name}停止未得到有效确认，是否立即执行紧急停止？",
+                "紧急停止",
+                "暂不处理")
+            && EmergencyStopCommand.CanExecute(null))
+        {
+            EmergencyStopCommand.Execute(null);
+        }
     }
 
     private void OnHardwareConnectionChanged(
         object? sender,
         HardwareConnectionChangedEventArgs eventArgs)
     {
+        if (!eventArgs.IsConnected)
+        {
+            foreach (var channel in Groups.SelectMany(group => group.Channels).Where(countdown.IsActive))
+            {
+                channel.IsStateUnknown = true;
+            }
+        }
+
         RefreshStartCommandStatesOnUiThread();
     }
 
     private void OnDebugSimulationConnectionChanged(object? sender, EventArgs eventArgs)
     {
+        ApplyDebugImpedanceSnapshotIfAvailable();
         RefreshStartCommandStatesOnUiThread();
     }
 
     private bool CanStartStimulation =>
+        CanControlHardware && !startOperationInProgress;
+
+    private bool CanControlHardware =>
         hardwareConnectionState.IsConnected || debugHardwareSimulation.IsConnected;
+
+    private static bool IsImpedanceEligibleForStart(ChannelConfig channel) =>
+        channel.ImpedanceStatus is
+            StimulationImpedanceStatus.Normal or StimulationImpedanceStatus.Warning;
+
+    private bool HasConfirmedRunningChannels() =>
+        Groups.SelectMany(group => group.Channels)
+            .Any(channel => countdown.IsActive(channel) && !channel.IsStateUnknown);
 
     private void RefreshStartCommandStatesOnUiThread()
     {
@@ -298,59 +410,185 @@ public sealed class TiControlViewModel : ObservableObject
         stopChannelCommand.RaiseCanExecuteChanged();
         usePrescriptionCommand.RaiseCanExecuteChanged();
         useChannelPrescriptionCommand.RaiseCanExecuteChanged();
+        backCommand.RaiseCanExecuteChanged();
     }
 
-    private async Task StartAllChannelsAsync()
+    private async Task EnsureFreshImpedanceAsync(CancellationToken cancellationToken)
     {
-        var synchronizedChannels = Groups
+        if (!hardwareConnectionState.IsConnected || hardwareService is null)
+        {
+            return;
+        }
+
+        var snapshot = hardwareService.CurrentStimulationImpedance;
+        if (snapshot is not null
+            && DateTimeOffset.Now - snapshot.CapturedAt <= TimeSpan.FromSeconds(10))
+        {
+            return;
+        }
+
+        _ = await hardwareService.CheckImpedanceAsync(cancellationToken);
+        ApplyImpedanceSnapshot(hardwareService.CurrentStimulationImpedance);
+    }
+
+    private void OnStimulationImpedanceChanged(
+        object? sender,
+        StimulationImpedanceChangedEventArgs eventArgs)
+    {
+        void Apply()
+        {
+            if (!ApplyDebugImpedanceSnapshotIfAvailable())
+            {
+                ApplyImpedanceSnapshot(eventArgs.Snapshot);
+            }
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            _ = dispatcher.BeginInvoke(Apply);
+            return;
+        }
+
+        Apply();
+    }
+
+    private bool ApplyDebugImpedanceSnapshotIfAvailable()
+    {
+        if (!debugHardwareSimulation.IsConnected
+            || debugImpedanceProvider?.GetSnapshot() is not { } snapshot)
+        {
+            return false;
+        }
+
+        ApplyImpedanceSnapshot(snapshot);
+        return true;
+    }
+
+    private void ApplyImpedanceSnapshot(StimulationImpedanceSnapshot? snapshot)
+    {
+        var channels = Groups.SelectMany(group => group.Channels).ToArray();
+        var values = snapshot?.Channels.ToDictionary(
+            channel => channel.LogicalChannelNumber,
+            channel => channel.ImpedanceOhms);
+        for (var index = 0; index < channels.Length; index++)
+        {
+            channels[index].UpdateImpedance(values?.GetValueOrDefault(index + 1));
+        }
+
+        RefreshStartCommandStates();
+    }
+
+    private static bool TryValidateChannels(
+        IEnumerable<ChannelConfig> channels,
+        out string error)
+    {
+        foreach (var channel in channels)
+        {
+            if (!TiAlternatingCurrentParameters.TryCreate(channel, out _, out error))
+            {
+                return false;
+            }
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    private void SetStartOperationState(
+        IEnumerable<ChannelConfig> channels,
+        bool isStarting)
+    {
+        startOperationInProgress = isStarting;
+        foreach (var channel in channels)
+        {
+            channel.IsStarting = isStarting;
+            if (isStarting)
+            {
+                channel.IsParameterEditingEnabled = false;
+            }
+        }
+
+        RefreshStartCommandStates();
+    }
+
+    private void ShowParameterDownloadProgress()
+    {
+        ParameterDownloadPercentage = 0;
+        ParameterDownloadStatus = "正在准备刺激参数";
+        IsParameterDownloadVisible = true;
+    }
+
+    private void UpdateParameterDownloadProgress(StimulationParameterDownloadProgress progress)
+    {
+        ParameterDownloadPercentage = progress.Percentage;
+        ParameterDownloadStatus = progress.TotalCommandCount > 0
+            && progress.CompletedCommandCount >= progress.TotalCommandCount
+                ? "参数下发完成，正在同步开始刺激"
+                : "正在下发刺激参数";
+    }
+
+    private void HideParameterDownloadProgress()
+    {
+        IsParameterDownloadVisible = false;
+    }
+
+    private async Task StartAllChannelsAsync(CancellationToken cancellationToken)
+    {
+        if (countdown.HasActiveChannels)
+        {
+            toastService.ShowError("同步开始失败", "已有通道处于刺激中，不能再次执行同步开始。");
+            return;
+        }
+
+        await EnsureFreshImpedanceAsync(cancellationToken);
+        var allChannels = Groups
             .SelectMany(group => group.Channels)
             .ToArray();
-        if (synchronizedChannels.Length != 16)
+        if (allChannels.Length != 16)
         {
             toastService.ShowError("同步开始失败", "同步开始要求 16 个通道全部可用。");
             return;
         }
 
-        foreach (var channel in synchronizedChannels)
+        var synchronizedChannels = allChannels
+            .Where(IsImpedanceEligibleForStart)
+            .ToArray();
+        if (synchronizedChannels.Length == 0)
         {
-            if (!DirectCurrentWaveformParameters.TryCreate(channel, out _, out var error))
-            {
-                toastService.ShowError("参数校验失败", error);
-                return;
-            }
-
-            if (!double.TryParse(
-                    channel.FrequencyHz,
-                    System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out var frequencyHz)
-                || !double.IsFinite(frequencyHz)
-                || frequencyHz < 0)
-            {
-                toastService.ShowError("参数校验失败", $"{channel.Name}：载波频率必须是大于或等于 0 的数字。");
-                return;
-            }
+            toastService.ShowError("同步开始失败", "没有阻抗状态允许启动的通道。");
+            return;
         }
 
-        var synchronizedGroup = CreateExecutionGroup(
+        var excludedCount = allChannels.Length - synchronizedChannels.Length;
+        var confirmationMessage = excludedCount == 0
+            ? "系统将检查全部16个通道，并在参数下发完成后同步开始刺激。"
+            : $"系统将检查全部16个通道；其中{excludedCount}个通道因阻抗状态不可用，本次将启动其余{synchronizedChannels.Length}个通道。";
+        if (!userDialogService.ConfirmWarning(
+                "同步开始确认",
+                confirmationMessage,
+                "确认同步开始",
+                "取消"))
+        {
+            return;
+        }
+
+        if (!TryValidateChannels(synchronizedChannels, out var validationError))
+        {
+            toastService.ShowError("参数校验失败", validationError);
+            return;
+        }
+
+        var result = await StartChannelsAsync(
             "TI 全通道同步刺激",
-            synchronizedChannels);
-        var result = await stimulationEngine.StartTiGroupAsync(
-            synchronizedGroup,
-            string.Join(" + ", synchronizedChannels.Select(channel => channel.Name)),
-            AppliedPrescriptionName);
-        foreach (var channel in synchronizedChannels)
-        {
-            channel.IsParameterEditingEnabled = false;
-            channel.IsStimulating = true;
-            countdown.Start(channel);
-        }
-        RefreshStartCommandStates();
-
+            synchronizedChannels,
+            cancellationToken);
         HardwareOperationCompleted?.Invoke(this, result);
     }
 
-    private async Task StartChannelAsync(ChannelConfig channel)
+    private async Task StartChannelAsync(
+        ChannelConfig channel,
+        CancellationToken cancellationToken)
     {
         if (SelectedGroup is null || !SelectedGroup.Channels.Contains(channel))
         {
@@ -358,28 +596,109 @@ public sealed class TiControlViewModel : ObservableObject
             return;
         }
 
-        var singleChannelGroup = new TiGroup
+        await EnsureFreshImpedanceAsync(cancellationToken);
+        if (!IsImpedanceEligibleForStart(channel))
         {
-            Title = SelectedGroup.Title
-        };
-        singleChannelGroup.Channels.Add(channel);
+            toastService.ShowError("开始刺激失败", $"{channel.Name}当前阻抗状态不允许开始刺激。");
+            return;
+        }
 
-        var result = await stimulationEngine.StartTiGroupAsync(
-            singleChannelGroup,
-            channel.Name,
-            AppliedPrescriptionName);
-        countdown.Start(channel);
-        channel.IsParameterEditingEnabled = false;
-        channel.IsStimulating = true;
-        RefreshStartCommandStates();
+        if (!TiAlternatingCurrentParameters.TryCreate(channel, out _, out var error))
+        {
+            toastService.ShowError("参数校验失败", error);
+            return;
+        }
+
+        if (!userDialogService.ConfirmWarning(
+                "开始刺激确认",
+                $"即将开始 {channel.Name} 的刺激，是否确认继续？",
+                "确认开始",
+                "返回修改"))
+        {
+            return;
+        }
+
+        var result = await StartChannelsAsync(
+            SelectedGroup.Title,
+            [channel],
+            cancellationToken);
         HardwareOperationCompleted?.Invoke(this, result);
     }
 
-    private async Task StopSimulatedChannelAsync(
+    private async Task<HardwareOperationResult> StartChannelsAsync(
+        string title,
+        IReadOnlyList<ChannelConfig> channels,
+        CancellationToken cancellationToken)
+    {
+        if (!TryValidateChannels(channels, out var validationError))
+        {
+            throw new InvalidOperationException(validationError);
+        }
+
+        var waveformPreviews = CreateWaveformPreviews(channels);
+
+        var executionGroup = CreateExecutionGroup(title, channels);
+        var started = false;
+        SetStartOperationState(channels, true);
+        ShowParameterDownloadProgress();
+        try
+        {
+            var progress = new Progress<StimulationParameterDownloadProgress>(UpdateParameterDownloadProgress);
+            var result = await stimulationEngine.StartTiGroupAsync(
+                executionGroup,
+                string.Join(" + ", channels.Select(channel => channel.Name)),
+                AppliedPrescriptionName,
+                progress,
+                cancellationToken);
+            var startTimestamp = Stopwatch.GetTimestamp();
+            foreach (var channel in channels)
+            {
+                channel.IsStateUnknown = false;
+                channel.IsParameterEditingEnabled = false;
+                channel.IsStimulating = true;
+                channel.AlternatingCurrentWaveform.Start(waveformPreviews[channel]);
+                activeWaveforms[channel] = new TiWaveformRuntime(
+                    startTimestamp,
+                    waveformPreviews[channel]);
+                countdown.Start(channel);
+            }
+
+            if (!waveformTimer.IsEnabled)
+            {
+                waveformTimer.Start();
+            }
+
+            started = true;
+            return result;
+        }
+        finally
+        {
+            HideParameterDownloadProgress();
+            SetStartOperationState(channels, false);
+            if (!started)
+            {
+                foreach (var channel in channels.Where(channel => !countdown.IsActive(channel)))
+                {
+                    channel.IsParameterEditingEnabled = true;
+                }
+            }
+        }
+    }
+
+    private async Task StopChannelAsync(
         ChannelConfig channel,
         CancellationToken cancellationToken)
     {
-        if (!debugHardwareSimulation.IsConnected || !countdown.IsActive(channel))
+        if (!CanControlHardware || !countdown.IsActive(channel))
+        {
+            return;
+        }
+
+        if (!userDialogService.ConfirmWarning(
+                "停止刺激确认",
+                $"即将停止 {channel.Name}。",
+                "确认停止",
+                "取消"))
         {
             return;
         }
@@ -392,17 +711,27 @@ public sealed class TiControlViewModel : ObservableObject
 
         var group = new TiGroup { Title = owner.Title };
         group.Channels.Add(channel);
-        var result = await stimulationEngine.StopGroupAsync(
-            group,
-            channel.Name,
-            StimulationModeCodes.TemporalInterference,
-            cancellationToken);
-        countdown.Cancel(channel, reset: true);
-        channel.IsParameterEditingEnabled = true;
-        channel.IsStimulating = false;
-        RefreshStartCommandStates();
-        logger.Info($"TI DEBUG 模拟手动停止成功：{channel.Name}");
-        HardwareOperationCompleted?.Invoke(this, result);
+        try
+        {
+            var result = await stimulationEngine.StopGroupAsync(
+                group,
+                channel.Name,
+                StimulationModeCodes.TemporalInterference,
+                cancellationToken);
+            countdown.Cancel(channel, reset: true);
+            StopWaveform(channel, completed: false);
+            channel.IsParameterEditingEnabled = true;
+            channel.IsStimulating = false;
+            channel.IsStateUnknown = false;
+            RefreshStartCommandStates();
+            logger.Info($"TI通道手动停止成功：{channel.Name}");
+            HardwareOperationCompleted?.Invoke(this, result);
+        }
+        catch
+        {
+            channel.IsStateUnknown = true;
+            throw;
+        }
     }
 
     private async Task EmergencyStopAllChannelsAsync()
@@ -422,8 +751,10 @@ public sealed class TiControlViewModel : ObservableObject
         countdown.CancelAll(Groups.SelectMany(group => group.Channels), reset: true);
         foreach (var channel in Groups.SelectMany(group => group.Channels))
         {
+            StopWaveform(channel, completed: false);
             channel.IsParameterEditingEnabled = true;
             channel.IsStimulating = false;
+            channel.IsStateUnknown = false;
         }
         RefreshStartCommandStates();
         HardwareOperationCompleted?.Invoke(this, result);
@@ -458,8 +789,10 @@ public sealed class TiControlViewModel : ObservableObject
                 singleChannelGroup,
                 channel.Name,
                 StimulationModeCodes.TemporalInterference);
+            StopWaveform(channel, completed: true);
             channel.IsParameterEditingEnabled = true;
             channel.IsStimulating = false;
+            channel.IsStateUnknown = false;
             RefreshStartCommandStatesOnUiThread();
             HardwareOperationCompleted?.Invoke(this, result);
         }
@@ -468,4 +801,79 @@ public sealed class TiControlViewModel : ObservableObject
             logger.Error($"TI 通道 {channel.Name} 完成记录失败", ex);
         }
     }
+
+    private Dictionary<ChannelConfig, AlternatingCurrentWaveformPreview> CreateWaveformPreviews(
+        IEnumerable<ChannelConfig> channels)
+    {
+        var result = new Dictionary<ChannelConfig, AlternatingCurrentWaveformPreview>();
+        foreach (var channel in channels)
+        {
+            if (!TiAlternatingCurrentParameters.TryCreate(channel, out var parameters, out var error)
+                || parameters is null)
+            {
+                throw new InvalidOperationException(error);
+            }
+
+            result[channel] = waveformPreviewFactory.Create(parameters);
+        }
+
+        return result;
+    }
+
+    private void OnWaveformTimerTick(object? sender, EventArgs eventArgs)
+    {
+        if (activeWaveforms.Count == 0)
+        {
+            waveformTimer.Stop();
+            return;
+        }
+
+        var now = Stopwatch.GetTimestamp();
+        foreach (var pair in activeWaveforms.ToArray())
+        {
+            var elapsed = Stopwatch.GetElapsedTime(pair.Value.StartTimestamp, now).TotalSeconds;
+            pair.Key.AlternatingCurrentWaveform.UpdateElapsed(elapsed);
+            if (elapsed < pair.Value.Preview.TotalDurationSeconds)
+            {
+                continue;
+            }
+
+            pair.Key.AlternatingCurrentWaveform.Complete();
+            activeWaveforms.Remove(pair.Key);
+        }
+
+        if (activeWaveforms.Count == 0)
+        {
+            waveformTimer.Stop();
+        }
+    }
+
+    private void StopWaveform(ChannelConfig channel, bool completed)
+    {
+        var elapsedSeconds = channel.AlternatingCurrentWaveform.ElapsedSeconds;
+        if (activeWaveforms.Remove(channel, out var runtime))
+        {
+            elapsedSeconds = Stopwatch.GetElapsedTime(
+                runtime.StartTimestamp,
+                Stopwatch.GetTimestamp()).TotalSeconds;
+        }
+
+        if (completed)
+        {
+            channel.AlternatingCurrentWaveform.Complete();
+        }
+        else
+        {
+            channel.AlternatingCurrentWaveform.Stop(elapsedSeconds);
+        }
+
+        if (activeWaveforms.Count == 0)
+        {
+            waveformTimer.Stop();
+        }
+    }
+
+    private sealed record TiWaveformRuntime(
+        long StartTimestamp,
+        AlternatingCurrentWaveformPreview Preview);
 }

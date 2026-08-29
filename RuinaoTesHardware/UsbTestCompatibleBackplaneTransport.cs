@@ -668,7 +668,7 @@ public sealed class UsbTestCompatibleBackplaneTransport :
     {
         var error = Marshal.GetLastWin32Error();
         throw new BackplaneConnectionException(
-            $"{operation}失败：{new Win32Exception(error).Message}（{error}）。");
+            UsbTransportErrorFormatter.Format(operation, error));
     }
 
     private const string LibUsbKLibrary = "libusbK.dll";

@@ -27,8 +27,22 @@ public sealed class AlternatingCurrentStimulationClient
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)
     {
+        return await ConfigureAsync(parameters, options, progress: null, cancellationToken);
+    }
+
+    public async Task<AlternatingCurrentStimulationConfigurationResult> ConfigureAsync(
+        AlternatingCurrentStimulationParameters parameters,
+        BackplaneConnectionOptions options,
+        IProgress<AlternatingCurrentConfigurationProgress>? progress,
+        CancellationToken cancellationToken = default)
+    {
         var plan = CreatePlan(parameters);
         var hardwarePlan = ToHardwarePlan(plan);
+        var totalCommandCount = plan.Segments.Count + 1;
+        progress?.Report(new AlternatingCurrentConfigurationProgress(
+            0,
+            totalCommandCount,
+            "准备下发tACS参数"));
         var waveformCommands = new List<StimulationHardwareCommandResult>(plan.Segments.Count);
         for (var index = 0; index < plan.Segments.Count; index++)
         {
@@ -39,11 +53,19 @@ public sealed class AlternatingCurrentStimulationClient
             waveformCommands.Add(ToProductResult(
                 write,
                 $"tACS第{segmentNumber}段正弦配置已被硬件接受，尚未执行状态回读验证。"));
+            progress?.Report(new AlternatingCurrentConfigurationProgress(
+                segmentNumber,
+                totalCommandCount,
+                $"第{segmentNumber}段正弦配置已确认"));
         }
 
         var controlWrite = await ExecuteHardwareOperationAsync(
             "下发tACS通道总控制配置",
             () => writer.WriteControlAsync(hardwarePlan, options, cancellationToken));
+        progress?.Report(new AlternatingCurrentConfigurationProgress(
+            totalCommandCount,
+            totalCommandCount,
+            "通道总控制配置已确认"));
         return new AlternatingCurrentStimulationConfigurationResult(
             plan,
             waveformCommands,

@@ -42,12 +42,17 @@ public sealed class StimulationConnectionCommandTests
             new NoopLoggingService(),
             new DemoTiGroupFactory(),
             new LocalizationViewModel(new AppLocalizationService()),
-            new NoopToastService());
+            new NoopToastService(),
+            new TestUserDialogService());
 
         Assert.False(viewModel.StartCommand.CanExecute(null));
         Assert.False(viewModel.StartChannelCommand.CanExecute(viewModel.Groups[0].Channels[0]));
 
         connection.SetConnected(true);
+        foreach (var channel in viewModel.Groups.SelectMany(group => group.Channels))
+        {
+            channel.UpdateImpedance(500m);
+        }
 
         Assert.True(viewModel.StartCommand.CanExecute(null));
         Assert.True(viewModel.StartChannelCommand.CanExecute(viewModel.Groups[0].Channels[0]));
@@ -63,7 +68,8 @@ public sealed class StimulationConnectionCommandTests
             new NoopLoggingService(),
             new DemoTiGroupFactory(),
             new LocalizationViewModel(new AppLocalizationService()),
-            new NoopToastService());
+            new NoopToastService(),
+            new TestUserDialogService());
         var firstChannel = viewModel.Groups[0].Channels[0];
         var secondChannel = viewModel.Groups[0].Channels[1];
         firstChannel.Polarity = "调转";
@@ -109,7 +115,7 @@ public sealed class StimulationConnectionCommandTests
         Assert.Equal(
             originalFrequencies,
             channels.Select(channel => channel.FrequencyHz));
-        Assert.All(channels, channel => Assert.Equal("2", channel.CurrentMA));
+        Assert.All(channels, channel => Assert.Equal("2.000", channel.CurrentMA));
     }
 
     [Fact]
@@ -124,7 +130,7 @@ public sealed class StimulationConnectionCommandTests
 
         viewModel.ApplyPrescription(CreateTiPrescription(), target);
 
-        Assert.Equal("2", target.CurrentMA);
+        Assert.Equal("2.000", target.CurrentMA);
         Assert.Equal("1010", target.FrequencyHz);
         Assert.Equal("0.8", untouched.CurrentMA);
     }
@@ -208,7 +214,8 @@ public sealed class StimulationConnectionCommandTests
         new NoopLoggingService(),
         new DemoTiGroupFactory(),
         new LocalizationViewModel(new AppLocalizationService()),
-        new NoopToastService());
+        new NoopToastService(),
+        new TestUserDialogService());
 
     private static PrescriptionDefinition CreateTiPrescription() => new(
         Id: "ti",

@@ -248,7 +248,16 @@
                             <ColumnDefinition Width="36" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding Localization.CarrierFrequencyLabel, ElementName=Root}" Foreground="{StaticResource SubText}" VerticalAlignment="Center" />
-                        <TextBox Grid.Column="1" Style="{StaticResource StimulationFieldBox}" Text="{Binding FrequencyHz, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsParameterEditingEnabled}" />
+                        <TextBox Grid.Column="1"
+                                 Tag="FrequencyHz"
+                                 Style="{StaticResource StimulationFieldBox}"
+                                 Text="{Binding FrequencyHz, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 IsEnabled="{Binding IsParameterEditingEnabled}"
+                                 GotKeyboardFocus="RememberDirectCurrentValue"
+                                 PreviewTextInput="Decimal_PreviewTextInput"
+                                 DataObject.Pasting="Decimal_Pasting"
+                                 TextChanged="ClearNumericValidation"
+                                 LostKeyboardFocus="NormalizeDirectCurrentValue" />
                         <TextBlock Grid.Column="2" Text="Hz" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource SubText}" />
                     </Grid>
                 </StackPanel>
@@ -264,10 +273,18 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding Localization.ModeLabel, ElementName=Root}" Foreground="{StaticResource SubText}" VerticalAlignment="Center" />
                         <ComboBox Grid.Column="1"
-                                  Style="{StaticResource StimulationComboBox}"
-                                  IsEnabled="{Binding IsParameterEditingEnabled}"
                                   SelectedValuePath="Content"
                                   SelectedValue="{Binding StimulationMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <ComboBox.Style>
+                                <Style TargetType="ComboBox" BasedOn="{StaticResource StimulationComboBox}">
+                                    <Setter Property="IsEnabled" Value="{Binding IsParameterEditingEnabled}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsAlternatingCurrent, ElementName=Root}" Value="True">
+                                            <Setter Property="IsEnabled" Value="False" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ComboBox.Style>
                             <ComboBoxItem Content="间隔" />
                             <ComboBoxItem Content="连续" />
                         </ComboBox>
@@ -291,7 +308,8 @@
                                  LostKeyboardFocus="NormalizeDirectCurrentValue" />
                         <TextBlock Grid.Column="2" Text="s" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource SubText}" />
                     </Grid>
-                    <Grid Height="40">
+                    <Grid Height="40"
+                          Visibility="{Binding ShowIntervalTime, ElementName=Root, Converter={StaticResource BoolToVisibilityConverter}}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="104" />
                             <ColumnDefinition Width="118" />
@@ -363,7 +381,18 @@
                                 CornerRadius="5"
                                 Padding="2"
                                 Visibility="{Binding EnableSimulatedWaveform, ElementName=Root, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid>
                             <StackPanel Orientation="Horizontal">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsAlternatingCurrent, ElementName=Root}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
                                 <RadioButton Content="波形细节"
                                              GroupName="{Binding Name}"
                                              Style="{StaticResource WaveformModeOption}"
@@ -373,6 +402,27 @@
                                              Style="{StaticResource WaveformModeOption}"
                                              IsChecked="{Binding DirectCurrentWaveform.IsGlobalView, Mode=TwoWay}" />
                             </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsAlternatingCurrent, ElementName=Root}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <RadioButton Content="波形细节"
+                                             GroupName="{Binding Name}"
+                                             Style="{StaticResource WaveformModeOption}"
+                                             IsChecked="{Binding AlternatingCurrentWaveform.IsWindowView, Mode=TwoWay}" />
+                                <RadioButton Content="全程"
+                                             GroupName="{Binding Name}"
+                                             Style="{StaticResource WaveformModeOption}"
+                                             IsChecked="{Binding AlternatingCurrentWaveform.IsGlobalView, Mode=TwoWay}" />
+                            </StackPanel>
+                            </Grid>
                         </Border>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="{Binding Localization.WaveformLabel, ElementName=Root}"
@@ -387,8 +437,32 @@
                             BorderThickness="1"
                             CornerRadius="3"
                             SnapsToDevicePixels="True">
-                        <renderers:DirectCurrentWaveformSurface State="{Binding DirectCurrentWaveform}"
-                                                                    Visibility="{Binding EnableSimulatedWaveform, ElementName=Root, Converter={StaticResource BoolToVisibilityConverter}}" />
+                        <Grid>
+                        <renderers:DirectCurrentWaveformSurface State="{Binding DirectCurrentWaveform}">
+                            <renderers:DirectCurrentWaveformSurface.Style>
+                                <Style TargetType="renderers:DirectCurrentWaveformSurface">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsAlternatingCurrent, ElementName=Root}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </renderers:DirectCurrentWaveformSurface.Style>
+                        </renderers:DirectCurrentWaveformSurface>
+                        <renderers:AlternatingCurrentWaveformSurface State="{Binding AlternatingCurrentWaveform}">
+                            <renderers:AlternatingCurrentWaveformSurface.Style>
+                                <Style TargetType="renderers:AlternatingCurrentWaveformSurface">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsAlternatingCurrent, ElementName=Root}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </renderers:AlternatingCurrentWaveformSurface.Style>
+                        </renderers:AlternatingCurrentWaveformSurface>
+                        </Grid>
                     </Border>
                 </Grid>
             </Border>

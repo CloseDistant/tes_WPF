@@ -98,6 +98,86 @@ public sealed class PrescriptionEditorViewModelTests
     }
 
     [Fact]
+    public void TryBuildTemporalInterference_UsesExactSecondsAndContinuousMode()
+    {
+        var editor = new PrescriptionEditorViewModel(
+            CreateEmptyPrescription(),
+            true,
+            [StimulationModeCodes.TemporalInterference]);
+        Assert.True(editor.ContinueToEditor());
+        editor.Name = "TI测试处方";
+        editor.Indication = "测试";
+        editor.CurrentMilliamp = "1.234";
+        editor.RampUpSeconds = "0.4";
+        editor.RampDownSecondsEntry = "0.6";
+        editor.TotalDurationMinutes = "1200.5";
+
+        var built = editor.TryBuild(out var prescription);
+
+        Assert.True(built, editor.ErrorMessage);
+        Assert.True(editor.IsTemporalInterference);
+        Assert.True(editor.ShowDeliveryMode);
+        Assert.False(editor.IsDeliveryModeEnabled);
+        Assert.True(editor.ShowInterval);
+        Assert.True(editor.ShowSingleDuration);
+        Assert.Equal("-", editor.IntervalMinutesEntry);
+        Assert.Equal("-", editor.SessionDurationMinutesEntry);
+        Assert.Equal("间隔时间 (s)", editor.IntervalLabel);
+        Assert.Equal("单次时长 (s)", editor.SessionDurationLabel);
+        Assert.Equal(PrescriptionDeliveryModes.Continuous, prescription.DeliveryMode);
+        Assert.Equal(1.234, prescription.CurrentMilliamp);
+        Assert.Equal(1200.5, prescription.DirectCurrentTotalDurationSeconds);
+        Assert.Equal(0.4, prescription.DirectCurrentRampUpDurationSeconds);
+        Assert.Equal(0.6, prescription.DirectCurrentRampDownDurationSeconds);
+        Assert.Null(prescription.DirectCurrentIntervalSecondsValue);
+        Assert.Null(prescription.DirectCurrentSingleDurationSecondsValue);
+        Assert.Equal("1.234 mA", prescription.CurrentDisplay);
+
+        var csv = PrescriptionViewModel.BuildCsv(prescription);
+        Assert.Contains("\"刺激时间\",\"1200.5 s\"", csv);
+        Assert.Contains("\"模式\",\"连续\"", csv);
+        Assert.Contains("\"间隔时间\",\"-\"", csv);
+        Assert.Contains("\"单次时长\",\"-\"", csv);
+    }
+
+    [Fact]
+    public void TryBuildTacs_PersistsIndependentParametersAndFrequency()
+    {
+        var editor = new PrescriptionEditorViewModel(
+            CreateEmptyPrescription(),
+            true,
+            [StimulationModeCodes.AlternatingCurrent]);
+        Assert.True(editor.ContinueToEditor());
+        editor.Name = "tACS测试处方";
+        editor.Indication = "测试";
+        editor.CurrentMilliamp = "1.234";
+        editor.RampUpSeconds = "1.2";
+        editor.RampDownSecondsEntry = "2.3";
+        editor.TotalDurationMinutes = "1200.5";
+        editor.CarrierFrequencyHz = "4321";
+
+        var built = editor.TryBuild(out var prescription);
+
+        Assert.True(built, editor.ErrorMessage);
+        Assert.True(editor.IsTacs);
+        Assert.Equal(PrescriptionDeliveryModes.Continuous, prescription.DeliveryMode);
+        Assert.Equal(1.234, prescription.TacsPeakCurrentMilliampere);
+        Assert.Equal(1.2, prescription.TacsRampUpSeconds);
+        Assert.Equal(2.3, prescription.TacsRampDownSeconds);
+        Assert.Equal(4321, prescription.TacsFrequencyHz);
+        Assert.Equal(1200.5, prescription.TacsTotalDurationSeconds);
+        Assert.Null(prescription.DirectCurrentTotalDurationSecondsValue);
+        Assert.Equal("4321 Hz", prescription.FrequencyDisplay);
+        Assert.Equal("42", prescription.FrequencyRowHeight);
+
+        var csv = PrescriptionViewModel.BuildCsv(prescription);
+        Assert.Contains("\"载波频率\",\"4321 Hz\"", csv);
+        Assert.Contains("\"刺激时间\",\"1200.5 s\"", csv);
+        Assert.Contains("\"间隔时间\",\"-\"", csv);
+        Assert.Contains("\"单次时长\",\"-\"", csv);
+    }
+
+    [Fact]
     public void TryBuildMonophasicPulseCurrent_PersistsIndependentTypeAndDerivedFields()
     {
         var editor = new PrescriptionEditorViewModel(

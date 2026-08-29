@@ -132,7 +132,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
             canExecute: CanConnectDevice,
             onError: exception => HandleDeviceOperationError(
                 "联机失败",
-                "设备联机失败，请检查设备连接和通讯配置后重试。",
+                "未能连接设备。请确认设备电源已开启，并检查 USB 连接后重试。",
                 exception));
         ConnectCommand = connectCommand;
         DisconnectCommand = new AsyncRelayCommand(
@@ -728,8 +728,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private void HandleDeviceOperationError(string title, string message, Exception exception)
     {
         logger.Error(title, exception);
-        ShellState.FooterStatus = $"{title}：{exception.Message}";
-        toastService.ShowError(title, $"{message}\n\n实际原因：{exception.Message}");
+        ShellState.FooterStatus = message;
+        toastService.ShowError(title, message);
     }
 
     /// <summary>导航到指定页面。</summary>
@@ -1139,7 +1139,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
             logger.Warning($"启动自动联机失败，本次不再自动重试：{exception.Message}");
             toastService.ShowError(
                 "自动联机失败",
-                $"仪器未联机，本次不会自动重试；请检查设备后点击“联机”。\n\n实际原因：{exception.Message}");
+                "仪器未联机，本次不会自动重试。请确认设备电源已开启并检查 USB 连接，然后点击“联机”。");
         }
     }
 

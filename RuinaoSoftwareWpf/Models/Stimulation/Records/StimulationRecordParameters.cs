@@ -89,6 +89,39 @@ public static class StimulationRecordParameters
         return CreatePrescription(group, prescriptionName, StimulationModeCodes.DirectCurrent);
     }
 
+    public static PrescriptionDefinition CreateTacsPrescription(TiGroup group, string prescriptionName)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+        var channel = group.Channels.FirstOrDefault()
+            ?? throw new InvalidOperationException("启动tACS时至少需要一个通道。");
+        var current = ParseDouble(channel.CurrentMA) ?? 0;
+        var rampUp = ParseDouble(channel.RampUpS) ?? 0;
+        var rampDown = ParseDouble(channel.RampDownS) ?? 0;
+        var duration = ParseDouble(channel.DurationS) ?? 0;
+        var frequency = ParseInt(channel.FrequencyHz) ?? 0;
+        return new PrescriptionDefinition(
+            $"REC_{Guid.NewGuid():N}",
+            string.IsNullOrWhiteSpace(prescriptionName) ? group.Title : prescriptionName,
+            "电刺激实验实际参数",
+            StimulationModeCodes.AlternatingCurrent,
+            current,
+            PrescriptionDeliveryModes.Continuous,
+            duration <= 0 ? 0 : Math.Max(1, (int)Math.Round(duration / 60d, MidpointRounding.AwayFromZero)),
+            null,
+            null,
+            BuildCourse(group),
+            (int)Math.Round(rampUp, MidpointRounding.AwayFromZero),
+            (int)Math.Round(rampDown, MidpointRounding.AwayFromZero),
+            "实际电刺激记录",
+            false,
+            TacsPeakCurrentMilliampereValue: current,
+            TacsRampUpSecondsValue: rampUp,
+            TacsRampDownSecondsValue: rampDown,
+            TacsFrequencyHzValue: frequency,
+            TacsTotalDurationSecondsValue: duration,
+            TacsParameterVersion: 1);
+    }
+
     public static PrescriptionDefinition CreateMonophasicPulseCurrentPrescription(
         TiGroup group,
         string prescriptionName)
@@ -190,7 +223,15 @@ public static class StimulationRecordParameters
             PulseTreatmentDurationSecondsValue = durationSeconds,
             PulseWidthMilliseconds = ParseInt(channel.PulseWidthMilliseconds),
             PulseRiseWidthMilliseconds = ParseInt(channel.PulseRiseWidthMilliseconds),
-            PulseIntervalWidthMilliseconds = ParseInt(channel.PulseIntervalWidthMilliseconds)
+            PulseIntervalWidthMilliseconds = ParseInt(channel.PulseIntervalWidthMilliseconds),
+            TacsPeakCurrentMilliampereValue = reusableParameters.IsTacs ? currentMilliamp : reusableParameters.TacsPeakCurrentMilliampereValue,
+            TacsRampUpSecondsValue = reusableParameters.IsTacs ? rampUpSeconds : reusableParameters.TacsRampUpSecondsValue,
+            TacsRampDownSecondsValue = reusableParameters.IsTacs ? rampDownSeconds : reusableParameters.TacsRampDownSecondsValue,
+            TacsFrequencyHzValue = reusableParameters.IsTacs && frequencyHz.HasValue
+                ? (int)Math.Round(frequencyHz.Value, MidpointRounding.AwayFromZero)
+                : reusableParameters.TacsFrequencyHzValue,
+            TacsTotalDurationSecondsValue = reusableParameters.IsTacs ? durationSeconds : reusableParameters.TacsTotalDurationSecondsValue,
+            TacsParameterVersion = reusableParameters.IsTacs ? 1 : reusableParameters.TacsParameterVersion
         };
 
         var plannedPulseCount = long.TryParse(

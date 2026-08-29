@@ -45,6 +45,14 @@ public sealed record AlternatingCurrentStimulationConfigurationResult(
     IReadOnlyList<StimulationHardwareCommandResult> WaveformCommands,
     StimulationHardwareCommandResult ControlCommand);
 
+/// <summary>
+/// 单通道tACS配置下发进度。完成数只在收到与请求匹配的有效硬件回复后递增。
+/// </summary>
+public sealed record AlternatingCurrentConfigurationProgress(
+    int CompletedCommandCount,
+    int TotalCommandCount,
+    string Stage);
+
 public sealed record AlternatingCurrentStimulationProgress(
     decimal SimulatedCurrentMilliampere,
     decimal EnvelopePeakMilliampere,

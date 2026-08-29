@@ -162,6 +162,43 @@ public sealed class AlternatingCurrentStimulationTests
         Assert.Equal(5U, control.Single(value => value.Address == 0x3004).Value);
     }
 
+    [Fact]
+    public async Task ConfigureAsync_ProgressAdvancesOnlyAfterEachHardwareReply()
+    {
+        var transport = new RecordingStatusTransport();
+        await using var backplaneClient = new BackplaneClient(new EmptyDiscovery(), transport);
+        var client = new AlternatingCurrentStimulationClient(backplaneClient);
+        var reports = new List<AlternatingCurrentConfigurationProgress>();
+
+        await client.ConfigureAsync(
+            CreateParameters(),
+            new BackplaneConnectionOptions(0x01, TimeSpan.FromSeconds(1)),
+            new InlineProgress<AlternatingCurrentConfigurationProgress>(reports.Add),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(7, reports.Count);
+        Assert.Equal(Enumerable.Range(0, 7), reports.Select(report => report.CompletedCommandCount));
+        Assert.All(reports, report => Assert.Equal(6, report.TotalCommandCount));
+        Assert.Equal(6, transport.Requests.Count);
+    }
+
+    [Fact]
+    public async Task DeviceClient_ConfigureAlternatingCurrent_UsesDedicatedTenSecondTimeout()
+    {
+        var transport = new TimeoutRecordingStatusTransport();
+        await using var backplaneClient = new BackplaneClient(new EmptyDiscovery(), transport);
+        var client = new TesHardwareDeviceClient(backplaneClient);
+
+        _ = await client.ConfigureAlternatingCurrentAsync(
+            CreateParameters(),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(6, transport.RequestTimeouts.Count);
+        Assert.All(
+            transport.RequestTimeouts,
+            timeout => Assert.Equal(TimeSpan.FromSeconds(10), timeout));
+    }
+
     private static AlternatingCurrentStimulationParameters CreateParameters() =>
         new(
             BoardAddress: 0x01,
@@ -221,5 +258,60 @@ public sealed class AlternatingCurrentStimulationTests
 
         public ValueTask DisposeAsync() =>
             ValueTask.CompletedTask;
+    }
+
+    private sealed class TimeoutRecordingStatusTransport :
+        IBackplaneTransport,
+        IBackplaneRequestTimeoutTransport
+    {
+        public bool IsOpen => true;
+        public List<TimeSpan> RequestTimeouts { get; } = [];
+
+        public Task OpenAsync(
+            UsbBackplaneDevice device,
+            TimeSpan timeout,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<byte[]> ExchangeAsync(
+            ReadOnlyMemory<byte> request,
+            CancellationToken cancellationToken = default) =>
+            BuildResponse(request);
+
+        public Task<byte[]> ExchangeAsync(
+            ReadOnlyMemory<byte> request,
+            TimeSpan timeout,
+            CancellationToken cancellationToken = default)
+        {
+            RequestTimeouts.Add(timeout);
+            return BuildResponse(request);
+        }
+
+        public Task CloseAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public ValueTask DisposeAsync() =>
+            ValueTask.CompletedTask;
+
+        private static Task<byte[]> BuildResponse(ReadOnlyMemory<byte> request)
+        {
+            Assert.True(
+                TesV14ProtocolCodec.TryParseFrame(request.Span, out var frame, out var error),
+                error);
+            Assert.NotNull(frame);
+            return Task.FromResult(TesV14ProtocolCodec.BuildFrame(
+                TesV14FrameControl.None,
+                TesV14Command.Response,
+                frame.DestinationAddress,
+                frame.SourceAddress,
+                27,
+                frame.SendSequence,
+                [0, 0, 0, 0]));
+        }
+    }
+
+    private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
     }
 }

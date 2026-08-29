@@ -62,6 +62,8 @@ public partial class PrescriptionEditorDialog : Window
         }
 
         var allowDecimal = viewModel.IsDirectCurrent
+            || viewModel.IsTemporalInterference
+            || viewModel.IsTacs
             || viewModel.IsMonophasicPulseCurrent
             || viewModel.IsPulseCurrent
                 && textBox.Tag is nameof(DirectCurrentParameterKind.TotalDurationSeconds);
@@ -82,6 +84,8 @@ public partial class PrescriptionEditorDialog : Window
         var pastedText = e.DataObject.GetData(DataFormats.Text) as string ?? string.Empty;
         var allowDecimal = sender is FrameworkElement { Tag: "CurrentMilliamp" }
             || viewModel.IsDirectCurrent
+            || viewModel.IsTemporalInterference
+            || viewModel.IsTacs
             || viewModel.IsMonophasicPulseCurrent
             || viewModel.IsPulseCurrent
                 && sender is FrameworkElement { Tag: nameof(DirectCurrentParameterKind.TotalDurationSeconds) };
@@ -103,7 +107,11 @@ public partial class PrescriptionEditorDialog : Window
 
     private void RememberDirectCurrentValue(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if ((viewModel.IsDirectCurrent || viewModel.IsPulseCurrent || viewModel.IsMonophasicPulseCurrent)
+        if ((viewModel.IsDirectCurrent
+                || viewModel.IsTemporalInterference
+                || viewModel.IsTacs
+                || viewModel.IsPulseCurrent
+                || viewModel.IsMonophasicPulseCurrent)
             && sender is TextBox textBox)
         {
             previousParameterValues[textBox] = textBox.Text;
@@ -112,7 +120,11 @@ public partial class PrescriptionEditorDialog : Window
 
     private void NormalizeDirectCurrentValue(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if ((!viewModel.IsDirectCurrent && !viewModel.IsPulseCurrent && !viewModel.IsMonophasicPulseCurrent)
+        if ((!viewModel.IsDirectCurrent
+                && !viewModel.IsTemporalInterference
+                && !viewModel.IsTacs
+                && !viewModel.IsPulseCurrent
+                && !viewModel.IsMonophasicPulseCurrent)
             || sender is not TextBox textBox
             || textBox.Tag is not string kindName)
         {
@@ -154,6 +166,29 @@ public partial class PrescriptionEditorDialog : Window
                 directCurrentKind,
                 textBox.Text,
                 fallback);
+            return new ParameterNormalizationView(result.IsValid, result.Value, result.ErrorMessage);
+        }
+
+        if (viewModel.IsTemporalInterference
+            && TryMapTemporalInterferenceKind(kindName, out var temporalInterferenceKind))
+        {
+            var fallback = previousParameterValues.GetValueOrDefault(
+                textBox,
+                TiAlternatingCurrentParameterRules.GetDefault(temporalInterferenceKind));
+            var result = viewModel.NormalizeTemporalInterferenceEntry(
+                temporalInterferenceKind,
+                textBox.Text,
+                fallback);
+            return new ParameterNormalizationView(result.IsValid, result.Value, result.ErrorMessage);
+        }
+
+        if (viewModel.IsTacs
+            && TryMapTacsKind(kindName, out var tacsKind))
+        {
+            var fallback = previousParameterValues.GetValueOrDefault(
+                textBox,
+                TacsParameterRules.GetDefault(tacsKind));
+            var result = viewModel.NormalizeTacsEntry(tacsKind, textBox.Text, fallback);
             return new ParameterNormalizationView(result.IsValid, result.Value, result.ErrorMessage);
         }
 
@@ -255,6 +290,39 @@ public partial class PrescriptionEditorDialog : Window
             nameof(DirectCurrentParameterKind.RampUpSeconds) =>
                 PulseCurrentParameterKind.RiseWidthMilliseconds,
             _ => (PulseCurrentParameterKind)(-1)
+        };
+        return Enum.IsDefined(kind);
+    }
+
+    private static bool TryMapTemporalInterferenceKind(
+        string kindName,
+        out TiAlternatingCurrentParameterKind kind)
+    {
+        kind = kindName switch
+        {
+            nameof(DirectCurrentParameterKind.CurrentMilliamp) =>
+                TiAlternatingCurrentParameterKind.PeakCurrentMilliampere,
+            nameof(DirectCurrentParameterKind.TotalDurationSeconds) =>
+                TiAlternatingCurrentParameterKind.TotalDurationSeconds,
+            nameof(DirectCurrentParameterKind.RampUpSeconds) =>
+                TiAlternatingCurrentParameterKind.RampUpSeconds,
+            nameof(DirectCurrentParameterKind.RampDownSeconds) =>
+                TiAlternatingCurrentParameterKind.RampDownSeconds,
+            _ => (TiAlternatingCurrentParameterKind)(-1),
+        };
+        return Enum.IsDefined(kind);
+    }
+
+    private static bool TryMapTacsKind(string kindName, out TacsParameterKind kind)
+    {
+        kind = kindName switch
+        {
+            nameof(DirectCurrentParameterKind.CurrentMilliamp) => TacsParameterKind.PeakCurrentMilliampere,
+            nameof(DirectCurrentParameterKind.TotalDurationSeconds) => TacsParameterKind.TotalDurationSeconds,
+            nameof(DirectCurrentParameterKind.RampUpSeconds) => TacsParameterKind.RampUpSeconds,
+            nameof(DirectCurrentParameterKind.RampDownSeconds) => TacsParameterKind.RampDownSeconds,
+            nameof(TacsParameterKind.FrequencyHz) => TacsParameterKind.FrequencyHz,
+            _ => (TacsParameterKind)(-1),
         };
         return Enum.IsDefined(kind);
     }

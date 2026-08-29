@@ -63,6 +63,46 @@ public sealed class StimulationModeRegistryTests
                 .ExecutionAvailability);
     }
 
+    [Fact]
+    public void Catalog_TemporalInterferenceRequiresImpedanceMonitoring()
+    {
+        var definition = FeatureCatalog.GetStimulationType(
+            StimulationModeCodes.TemporalInterference);
+
+        Assert.True(definition.RequiresImpedanceMonitoring);
+    }
+
+    [Fact]
+    public void Catalog_TacsIsIndependentHardwareModeWithImpedanceMonitoring()
+    {
+        var definition = FeatureCatalog.GetStimulationType(
+            StimulationModeCodes.AlternatingCurrent);
+
+        Assert.Equal("tACS", definition.ShortName);
+        Assert.Equal(StimulationModeExecutionAvailability.Hardware, definition.ExecutionAvailability);
+        Assert.True(definition.RequiresImpedanceMonitoring);
+        Assert.NotEqual(
+            FeatureCatalog.GetStimulationType(StimulationModeCodes.TemporalInterference).ModeCode,
+            definition.ModeCode);
+    }
+
+    [Fact]
+    public void Catalog_TacsLocalizationKeyResolvesInChineseAndEnglish()
+    {
+        var service = new AppLocalizationService();
+        var localization = new LocalizationViewModel(service);
+        var definition = FeatureCatalog.GetStimulationType(
+            StimulationModeCodes.AlternatingCurrent);
+
+        Assert.Equal("经颅交流电刺激", localization.FeatureText(definition.LocalizationKey));
+
+        service.ToggleLanguage();
+
+        Assert.Equal(
+            "Transcranial Alternating Current Stimulation",
+            localization.FeatureText(definition.LocalizationKey));
+    }
+
     private static TestStimulationModeModule[] CreateCatalogModules()
     {
         return FeatureCatalog.StimulationTypes

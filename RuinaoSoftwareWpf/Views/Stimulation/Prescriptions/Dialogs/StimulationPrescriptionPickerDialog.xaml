@@ -246,6 +246,22 @@
                                         </DockPanel>
                                     </Border>
                                     <Border BorderBrush="#354053" BorderThickness="0,0,0,1" Padding="0,11">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsTacs}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding FrequencyDisplay}" Style="{StaticResource DetailValueStyle}" />
+                                            <TextBlock Text="载波频率" Style="{StaticResource DetailLabelStyle}" />
+                                        </DockPanel>
+                                    </Border>
+                                    <Border BorderBrush="#354053" BorderThickness="0,0,0,1" Padding="0,11">
                                         <DockPanel>
                                             <TextBlock DockPanel.Dock="Right" Text="{Binding IntervalDisplay}" Style="{StaticResource DetailValueStyle}" />
                                             <TextBlock Text="{Binding IntervalLabel}" Style="{StaticResource DetailLabelStyle}" />

@@ -270,9 +270,10 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="142"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="39"/><RowDefinition Height="39"/><RowDefinition Height="39"/><RowDefinition Height="39"/>
-                        <RowDefinition Height="{Binding DeliveryModeRowHeight}"/><RowDefinition Height="39"/><RowDefinition Height="39"/>
+                        <RowDefinition Height="{Binding DeliveryModeRowHeight}"/><RowDefinition Height="39"/><RowDefinition Height="{Binding IntervalRowHeight}"/>
                         <RowDefinition Height="{Binding SingleDurationRowHeight}"/><RowDefinition Height="39"/><RowDefinition Height="39"/>
-                        <RowDefinition Height="{Binding RampDownRowHeight}"/><RowDefinition Height="39"/><RowDefinition Height="34"/>
+                        <RowDefinition Height="{Binding RampDownRowHeight}"/><RowDefinition Height="{Binding FrequencyRowHeight}"/>
+                        <RowDefinition Height="39"/><RowDefinition Height="34"/>
                     </Grid.RowDefinitions>
                     <TextBlock Text="处方名称" Style="{StaticResource EditorLabel}"/>
                     <TextBox Grid.Column="1" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxLength="50" Style="{StaticResource EditorBox}"/>
@@ -341,9 +342,20 @@
                              PreviewTextInput="ModeNumeric_PreviewTextInput" DataObject.Pasting="Numeric_Pasting"
                              TextChanged="ClearNumericValidation"
                              LostKeyboardFocus="NormalizeDirectCurrentValue"/>
-                    <TextBlock Grid.Row="11" Text="证据等级" Style="{StaticResource EditorLabel}"/>
-                    <TextBox Grid.Row="11" Grid.Column="1" Text="{Binding EvidenceGrade, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" Style="{StaticResource EditorBox}"/>
-                    <TextBlock Grid.Row="12" Grid.ColumnSpan="2" Text="{Binding ErrorMessage}" Foreground="{StaticResource Danger}"
+                    <TextBlock Grid.Row="11" Text="载波频率 (Hz)" Style="{StaticResource EditorLabel}"/>
+                    <TextBox Grid.Row="11"
+                             Grid.Column="1"
+                             Tag="FrequencyHz"
+                             Text="{Binding CarrierFrequencyHz, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource EditorBox}"
+                             GotKeyboardFocus="RememberDirectCurrentValue"
+                             PreviewTextInput="Integer_PreviewTextInput"
+                             DataObject.Pasting="Numeric_Pasting"
+                             TextChanged="ClearNumericValidation"
+                             LostKeyboardFocus="NormalizeDirectCurrentValue"/>
+                    <TextBlock Grid.Row="12" Text="证据等级" Style="{StaticResource EditorLabel}"/>
+                    <TextBox Grid.Row="12" Grid.Column="1" Text="{Binding EvidenceGrade, UpdateSourceTrigger=PropertyChanged}" MaxLength="100" Style="{StaticResource EditorBox}"/>
+                    <TextBlock Grid.Row="13" Grid.ColumnSpan="2" Text="{Binding ErrorMessage}" Foreground="{StaticResource Danger}"
                                FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"/>
                 </Grid>
             </ScrollViewer>

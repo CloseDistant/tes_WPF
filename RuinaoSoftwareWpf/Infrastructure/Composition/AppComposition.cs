@@ -108,6 +108,8 @@ public static class AppComposition
             provider => provider.GetRequiredService<IHardwareService>());
         services.AddSingleton<IStimulationDeviceGateway, StimulationDeviceGateway>();
         services.AddSingleton<IStimulationEngine, StimulationEngine>();   // 刺激控制引擎
+        services.AddSingleton<ITiWaveformPreviewFactory, TiWaveformPreviewFactory>(); // TI业务到共享正弦计划的隔离映射
+        services.AddSingleton<ITacsWaveformPreviewFactory, TacsWaveformPreviewFactory>(); // 独立tACS业务到共享正弦计划的映射
         services.AddSingleton<IPrescriptionService, PrescriptionService>(); // 处方服务
         services.AddSingleton<SqliteCaptureRecordingRepository>(); // 采集工作台本地记录仓储
         services.AddSingleton<ICaptureRecordingRepository>(provider => provider.GetRequiredService<SqliteCaptureRecordingRepository>());
@@ -172,10 +174,12 @@ public static class AppComposition
         services.AddSingleton<StimulationTypeSelectionViewModel>(); // 电刺激类型选择页
         services.AddSingleton<TiControlViewModel>();       // TI 控制面板
         services.AddSingleton<DirectCurrentControlViewModel>(); // tDCS 独立页面
+        services.AddSingleton<TacsControlViewModel>(); // tACS 独立页面
         services.AddSingleton<PulseCurrentControlViewModel>(); // tPCS 参数页面
         services.AddSingleton<MonophasicPulseCurrentControlViewModel>(); // M-tPCS 独立页面
         services.AddSingleton<IStimulationModeModule, TemporalInterferenceStimulationModeModule>();
         services.AddSingleton<IStimulationModeModule, DirectCurrentStimulationModeModule>();
+        services.AddSingleton<IStimulationModeModule, TacsStimulationModeModule>();
         services.AddSingleton<IStimulationModeModule, PulseCurrentStimulationModeModule>();
         services.AddSingleton<IStimulationModeModule, MonophasicPulseCurrentStimulationModeModule>();
         services.AddSingleton<StimulationModeRegistry>(); // 刺激模式统一注册、页面路由与处方应用边界

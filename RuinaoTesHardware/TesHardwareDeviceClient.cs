@@ -25,9 +25,15 @@ public sealed class TesHardwareDeviceClient
         ProtocolVersion: 0x01,
         Timeout: TimeSpan.FromSeconds(2),
         HandshakeAckRequired: false);
+    // tACS/TI parameter configuration contains multiple waveform-register writes. On the
+    // production board, a valid acknowledgement can arrive several seconds after TX.
+    // Keep this allowance isolated from start/stop/emergency-stop control commands.
+    private static readonly BackplaneConnectionOptions AlternatingCurrentConfigurationOptions =
+        DefaultOptions with { Timeout = TimeSpan.FromSeconds(10) };
 
     private readonly BackplaneClient backplaneClient;
     private readonly DirectCurrentStimulationClient directCurrentClient;
+    private readonly AlternatingCurrentStimulationClient alternatingCurrentClient;
     private readonly MonophasicPulseCurrentStimulationClient monophasicPulseCurrentClient;
     private readonly PulseCurrentStimulationClient pulseCurrentClient;
 
@@ -35,6 +41,7 @@ public sealed class TesHardwareDeviceClient
     {
         this.backplaneClient = backplaneClient;
         directCurrentClient = new DirectCurrentStimulationClient(backplaneClient);
+        alternatingCurrentClient = new AlternatingCurrentStimulationClient(backplaneClient);
         monophasicPulseCurrentClient = new MonophasicPulseCurrentStimulationClient(backplaneClient);
         pulseCurrentClient = new PulseCurrentStimulationClient(backplaneClient);
     }
@@ -139,6 +146,39 @@ public sealed class TesHardwareDeviceClient
     public Task<DirectCurrentCommandResult> EmergencyStopBackplaneAsync(
         CancellationToken cancellationToken = default) =>
         directCurrentClient.EmergencyStopBackplaneAsync(DefaultOptions, cancellationToken);
+
+    /// <summary>下发一个物理通道的tACS最多5段正弦波和总控制配置。</summary>
+    public Task<AlternatingCurrentStimulationConfigurationResult> ConfigureAlternatingCurrentAsync(
+        AlternatingCurrentStimulationParameters parameters,
+        IProgress<AlternatingCurrentConfigurationProgress>? progress = null,
+        CancellationToken cancellationToken = default) =>
+        alternatingCurrentClient.ConfigureAsync(
+            parameters,
+            AlternatingCurrentConfigurationOptions,
+            progress,
+            cancellationToken);
+
+    /// <summary>按低8位掩码启动指定业务板的tACS/TI刺激通道。</summary>
+    public Task<StimulationHardwareCommandResult> StartAlternatingCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default) =>
+        alternatingCurrentClient.StartChannelsAsync(
+            boardAddress,
+            channelMask,
+            DefaultOptions,
+            cancellationToken);
+
+    /// <summary>按低8位掩码停止指定业务板的tACS/TI刺激通道。</summary>
+    public Task<StimulationHardwareCommandResult> StopAlternatingCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default) =>
+        alternatingCurrentClient.StopChannelsAsync(
+            boardAddress,
+            channelMask,
+            DefaultOptions,
+            cancellationToken);
 
     /// <summary>下发一个物理通道的M-tPCS正向单相三角脉冲配置。</summary>
     public Task<StimulationHardwareConfigurationResult<MonophasicPulseCurrentStimulationPlan>>

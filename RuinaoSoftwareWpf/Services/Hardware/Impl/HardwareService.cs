@@ -255,16 +255,77 @@ public sealed class HardwareService : IHardwareService
     /// 启动某个 TI 刺激组。
     /// 流程：如果尚未连接，则自动联机并启动心跳；然后下发参数和启动命令。
     /// </summary>
-    public async Task<HardwareOperationResult> StartGroupAsync(
+    public Task<HardwareOperationResult> StartGroupAsync(
         TiGroup group,
         string selectedChannelNames,
         PrescriptionDefinition parameterRecord,
+        CancellationToken cancellationToken = default) =>
+        StartGroupCoreAsync(
+            group,
+            selectedChannelNames,
+            parameterRecord,
+            alternatingCurrentConfigurationProgress: null,
+            cancellationToken);
+
+    public Task<HardwareOperationResult> StartTiGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        PrescriptionDefinition parameterRecord,
+        IProgress<StimulationParameterDownloadProgress>? progress,
         CancellationToken cancellationToken = default)
+    {
+        if (!IsTemporalInterference(parameterRecord.StimulationType))
+        {
+            throw new ArgumentException("TI参数下发入口只能用于TI刺激类型。", nameof(parameterRecord));
+        }
+
+        return StartGroupCoreAsync(
+            group,
+            selectedChannelNames,
+            parameterRecord,
+            progress,
+            cancellationToken);
+    }
+
+    public Task<HardwareOperationResult> StartTacsGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        PrescriptionDefinition parameterRecord,
+        IProgress<StimulationParameterDownloadProgress>? progress,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsTacs(parameterRecord.StimulationType))
+        {
+            throw new ArgumentException("tACS参数下发入口只能用于tACS刺激类型。", nameof(parameterRecord));
+        }
+
+        return StartGroupCoreAsync(
+            group,
+            selectedChannelNames,
+            parameterRecord,
+            progress,
+            cancellationToken);
+    }
+
+    private async Task<HardwareOperationResult> StartGroupCoreAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        PrescriptionDefinition parameterRecord,
+        IProgress<StimulationParameterDownloadProgress>? alternatingCurrentConfigurationProgress,
+        CancellationToken cancellationToken)
     {
         var useDebugMock = ShouldUseDebugStimulationMock();
         if (useDebugMock)
         {
             logger.Debug($"DEBUG 模拟启动刺激：mode={parameterRecord.StimulationType}, group={group.Title}, channels={selectedChannelNames}");
+            if (IsAlternatingCurrentMode(parameterRecord.StimulationType))
+            {
+                alternatingCurrentConfigurationProgress?.Report(new StimulationParameterDownloadProgress(
+                    1,
+                    1,
+                    string.Empty,
+                    "DEBUG模拟参数下发完成"));
+            }
         }
         else
         {
@@ -280,7 +341,14 @@ public sealed class HardwareService : IHardwareService
                         ? StartMonophasicPulseCurrentGroupOnHardwareBridgeAsync(group, token)
                         : IsPulseCurrent(parameterRecord.StimulationType)
                             ? StartPulseCurrentGroupOnHardwareBridgeAsync(group, token)
-                            : StartGroupOnProtocolBridgeAsync(group, token),
+                            : IsAlternatingCurrentMode(parameterRecord.StimulationType)
+                                ? StartAlternatingCurrentGroupOnHardwareBridgeAsync(
+                                    group,
+                                    parameterRecord.StimulationType,
+                                    alternatingCurrentConfigurationProgress,
+                                    token)
+                                : throw new NotSupportedException(
+                                    $"不支持的刺激类型：{parameterRecord.StimulationType}"),
                 cancellationToken);
         }
 
@@ -303,7 +371,10 @@ public sealed class HardwareService : IHardwareService
                                 ? StopMonophasicPulseCurrentGroupOnHardwareBridgeAsync(group, token)
                                 : IsPulseCurrent(parameterRecord.StimulationType)
                                     ? StopPulseCurrentGroupOnHardwareBridgeAsync(group, token)
-                                    : StopGroupOnHardwareBridgeAsync(group, token),
+                                : IsAlternatingCurrentMode(parameterRecord.StimulationType)
+                                    ? StopAlternatingCurrentGroupOnHardwareBridgeAsync(group, token)
+                                    : throw new NotSupportedException(
+                                        $"不支持的刺激类型：{parameterRecord.StimulationType}"),
                         CancellationToken.None);
                 }
                 catch (Exception stopException)
@@ -330,7 +401,7 @@ public sealed class HardwareService : IHardwareService
 
     /// <summary>
     /// 停止某个刺激组。
-    /// 流程：下发参数，再下发停止命令。
+    /// 流程：按当前运行组下发停止命令；停止过程不重复写入刺激参数。
     /// </summary>
     public async Task<HardwareOperationResult> StopGroupAsync(
         TiGroup group,
@@ -348,7 +419,9 @@ public sealed class HardwareService : IHardwareService
                         ? StopMonophasicPulseCurrentGroupOnHardwareBridgeAsync(group, token)
                         : IsPulseCurrent(stimulationType)
                             ? StopPulseCurrentGroupOnHardwareBridgeAsync(group, token)
-                            : StopGroupOnHardwareBridgeAsync(group, token),
+                        : IsAlternatingCurrentMode(stimulationType)
+                            ? StopAlternatingCurrentGroupOnHardwareBridgeAsync(group, token)
+                            : throw new NotSupportedException($"不支持的刺激类型：{stimulationType}"),
                 cancellationToken);
         }
 
@@ -390,7 +463,9 @@ public sealed class HardwareService : IHardwareService
                         ? hardwareBridge.EmergencyStopMonophasicPulseCurrentBackplaneAsync(token)
                         : IsPulseCurrent(stimulationType)
                             ? hardwareBridge.EmergencyStopPulseCurrentBackplaneAsync(token)
-                            : EmergencyStopGroupOnProtocolBridgeAsync(group, token),
+                            : IsAlternatingCurrentMode(stimulationType)
+                                ? hardwareBridge.EmergencyStopBackplaneAsync(token)
+                                : throw new NotSupportedException($"不支持的刺激类型：{stimulationType}"),
                 cancellationToken);
         }
 
@@ -433,7 +508,9 @@ public sealed class HardwareService : IHardwareService
                         ? StopMonophasicPulseCurrentGroupOnHardwareBridgeAsync(group, token)
                         : IsPulseCurrent(stimulationType)
                             ? StopPulseCurrentGroupOnHardwareBridgeAsync(group, token)
-                            : StopGroupOnHardwareBridgeAsync(group, token),
+                        : IsAlternatingCurrentMode(stimulationType)
+                            ? StopAlternatingCurrentGroupOnHardwareBridgeAsync(group, token)
+                            : throw new NotSupportedException($"不支持的刺激类型：{stimulationType}"),
                 cancellationToken);
         }
 
@@ -515,26 +592,134 @@ public sealed class HardwareService : IHardwareService
     }
 
     /// <summary>
-    /// 调用 Bridge 启动 TI 刺激组。调用方必须已经完成真实设备联机。
+    /// 交流电刺激启动顺序：逐通道下发独立正弦计划；全部配置确认后，按业务板合并通道掩码开始。
+    /// 参数下发进度只在收到有效硬件回复后推进。
     /// </summary>
-    private async Task StartGroupOnProtocolBridgeAsync(TiGroup group, CancellationToken cancellationToken)
+    private async Task StartAlternatingCurrentGroupOnHardwareBridgeAsync(
+        TiGroup group,
+        string stimulationType,
+        IProgress<StimulationParameterDownloadProgress>? progress,
+        CancellationToken cancellationToken)
     {
-        await hardwareBridge.SendTiParametersAsync(group, cancellationToken);
-        await hardwareBridge.StartTiAsync(cancellationToken);
+        var bindings = CreateAlternatingCurrentBindings(group);
+        var totalCommandCount = bindings.Sum(binding =>
+            hardwareBridge.GetAlternatingCurrentConfigurationCommandCount(binding.Parameters));
+        var completedCommandCount = 0;
+        progress?.Report(new StimulationParameterDownloadProgress(
+            0,
+            totalCommandCount,
+            string.Empty,
+            "准备下发刺激参数"));
+
+        foreach (var binding in bindings)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var completedBeforeChannel = completedCommandCount;
+            var channelCommandCount = hardwareBridge
+                .GetAlternatingCurrentConfigurationCommandCount(binding.Parameters);
+            var channelProgress = new DelegatingProgress<AlternatingCurrentHardwareConfigurationProgress>(value =>
+                progress?.Report(new StimulationParameterDownloadProgress(
+                    completedBeforeChannel + value.CompletedCommandCount,
+                    totalCommandCount,
+                    binding.ChannelName,
+                    value.Stage)));
+            try
+            {
+                await hardwareBridge.ConfigureAlternatingCurrentAsync(
+                    binding.Parameters,
+                    channelProgress,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException(
+                    $"{binding.ChannelName}参数下发失败：{exception.Message}",
+                    exception);
+            }
+
+            completedCommandCount += channelCommandCount;
+        }
+
+        await StartAlternatingCurrentBoardsWithSafetyAsync(
+            bindings,
+            GetAlternatingCurrentDisplayName(stimulationType),
+            cancellationToken);
     }
 
-    /// <summary>调用硬件桥停止刺激组。</summary>
-    private async Task StopGroupOnHardwareBridgeAsync(TiGroup group, CancellationToken cancellationToken)
+    private async Task StartAlternatingCurrentBoardsWithSafetyAsync(
+        IReadOnlyList<AlternatingCurrentChannelBinding> bindings,
+        string stimulationDisplayName,
+        CancellationToken cancellationToken)
     {
-        await hardwareBridge.SendTiParametersAsync(group, cancellationToken);
-        await hardwareBridge.StopTiAsync(cancellationToken);
+        var boards = bindings.GroupBy(binding => binding.BoardAddress).ToArray();
+        var startedBoardCount = 0;
+        try
+        {
+            foreach (var board in boards)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await hardwareBridge.StartAlternatingCurrentChannelsAsync(
+                    board.Key,
+                    CombineAlternatingCurrentChannelMask(board),
+                    cancellationToken);
+                startedBoardCount++;
+            }
+        }
+        catch (Exception startException)
+        {
+            var failedBoard = boards.Skip(startedBoardCount).FirstOrDefault();
+            try
+            {
+                if (startedBoardCount > 0)
+                {
+                    await hardwareBridge.EmergencyStopBackplaneAsync(CancellationToken.None);
+                }
+                else if (failedBoard is not null)
+                {
+                    await hardwareBridge.StopAlternatingCurrentChannelsAsync(
+                        failedBoard.Key,
+                        CombineAlternatingCurrentChannelMask(failedBoard),
+                        CancellationToken.None);
+                }
+            }
+            catch (Exception safetyStopException)
+            {
+                throw new InvalidOperationException(
+                    $"{stimulationDisplayName}启动未确认，随后安全停止命令也未确认。请立即人工检查设备并使用紧急停止。",
+                    new AggregateException(startException, safetyStopException));
+            }
+
+            if (startException is OperationCanceledException)
+            {
+                throw;
+            }
+
+            throw new InvalidOperationException(
+                startedBoardCount > 0
+                    ? $"{stimulationDisplayName}多板同步开始过程中发生失败，已向背板发送紧急停止。"
+                    : $"{stimulationDisplayName}开始回复未确认，已向对应业务板补发指定通道停止。",
+                startException);
+        }
     }
 
-    /// <summary>调用 Bridge 对 TI 刺激组执行急停。</summary>
-    private async Task EmergencyStopGroupOnProtocolBridgeAsync(TiGroup group, CancellationToken cancellationToken)
+    /// <summary>按业务板合并通道掩码停止，不重新下发参数。</summary>
+    private async Task StopAlternatingCurrentGroupOnHardwareBridgeAsync(
+        TiGroup group,
+        CancellationToken cancellationToken)
     {
-        await hardwareBridge.SendTiParametersAsync(group, cancellationToken);
-        await hardwareBridge.EmergencyStopAsync(cancellationToken);
+        var bindings = CreateAlternatingCurrentBindings(group);
+        foreach (var board in bindings.GroupBy(binding => binding.BoardAddress))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await hardwareBridge.StopAlternatingCurrentChannelsAsync(
+                board.Key,
+                CombineAlternatingCurrentChannelMask(board),
+                cancellationToken);
+        }
     }
 
     /// <summary>
@@ -783,6 +968,57 @@ public sealed class HardwareService : IHardwareService
         }
     }
 
+    private IReadOnlyList<AlternatingCurrentChannelBinding> CreateAlternatingCurrentBindings(
+        TiGroup group)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+        if (group.Channels.Count == 0)
+        {
+            throw new InvalidOperationException("交流电刺激操作至少需要一个通道。");
+        }
+
+        var boards = CurrentDeviceTopology?.Slots
+            .Where(slot => slot.IsInserted
+                && slot.IsOnline
+                && slot.BoardKind == DeviceBoardKind.Stimulation)
+            .OrderBy(slot => slot.SlotIndex)
+            .ThenBy(slot => slot.Address)
+            .Take(2)
+            .ToArray()
+            ?? [];
+        var bindings = new List<AlternatingCurrentChannelBinding>(group.Channels.Count);
+        foreach (var channel in group.Channels)
+        {
+            var logicalChannel = ParseLogicalChannelNumber(channel.Name);
+            var boardIndex = (logicalChannel - 1) / 8;
+            if (boardIndex >= boards.Length)
+            {
+                throw new InvalidOperationException($"{channel.Name}没有映射到在线电刺激业务板。");
+            }
+
+            var physicalChannel = (logicalChannel - 1) % 8 + 1;
+            var boardAddress = boards[boardIndex].Address;
+            bindings.Add(new AlternatingCurrentChannelBinding(
+                channel.Name,
+                boardAddress,
+                physicalChannel,
+                new AlternatingCurrentHardwareParameters(
+                    boardAddress,
+                    physicalChannel,
+                    ParseDecimal(channel.CurrentMA, channel.Name, "幅值"),
+                    ParseDecimal(channel.RampUpS, channel.Name, "渐升时间"),
+                    ParseDecimal(channel.RampDownS, channel.Name, "渐降时间"),
+                    ParseFrequency(channel.FrequencyHz, channel.Name),
+                    ParseDecimal(channel.DurationS, channel.Name, "刺激总时间"))));
+        }
+
+        return bindings;
+    }
+
+    private static uint CombineAlternatingCurrentChannelMask(
+        IEnumerable<AlternatingCurrentChannelBinding> bindings) =>
+        bindings.Aggregate(0U, (mask, binding) => mask | (1U << (binding.PhysicalChannelNumber - 1)));
+
     private IReadOnlyList<PulseCurrentChannelBinding> CreatePulseCurrentBindings(TiGroup group)
     {
         ArgumentNullException.ThrowIfNull(group);
@@ -957,6 +1193,34 @@ public sealed class HardwareService : IHardwareService
         throw new InvalidOperationException($"{channelName}的{parameterName}不是有效数值。");
     }
 
+    private static uint ParseFrequency(string text, string channelName)
+    {
+        if (uint.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"{channelName}的载波频率必须是整数Hz。");
+    }
+
+    private static bool IsTemporalInterference(string stimulationType) =>
+        string.Equals(
+            stimulationType,
+            StimulationModeCodes.TemporalInterference,
+            StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTacs(string stimulationType) =>
+        string.Equals(
+            stimulationType,
+            StimulationModeCodes.AlternatingCurrent,
+            StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAlternatingCurrentMode(string stimulationType) =>
+        IsTemporalInterference(stimulationType) || IsTacs(stimulationType);
+
+    private static string GetAlternatingCurrentDisplayName(string stimulationType) =>
+        IsTacs(stimulationType) ? "tACS" : "TI";
+
     private static bool IsDirectCurrent(string stimulationType) =>
         string.Equals(
             stimulationType,
@@ -980,6 +1244,12 @@ public sealed class HardwareService : IHardwareService
         int PhysicalChannelNumber,
         DirectCurrentHardwareParameters Parameters);
 
+    private sealed record AlternatingCurrentChannelBinding(
+        string ChannelName,
+        byte BoardAddress,
+        int PhysicalChannelNumber,
+        AlternatingCurrentHardwareParameters Parameters);
+
     private sealed record MonophasicPulseCurrentChannelBinding(
         byte BoardAddress,
         int PhysicalChannelNumber,
@@ -989,6 +1259,11 @@ public sealed class HardwareService : IHardwareService
         byte BoardAddress,
         int PhysicalChannelNumber,
         PulseCurrentHardwareParameters Parameters);
+
+    private sealed class DelegatingProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
+    }
 
     private bool ShouldUseDebugStimulationMock()
     {

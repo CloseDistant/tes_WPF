@@ -78,12 +78,14 @@ public sealed class LocalizationViewModel : ObservableObject
     public string StimulationTypeHintText => T("StimulationTypeHint");
     public string TemporalInterferenceText => T("TemporalInterference");
     public string TranscranialDirectCurrentText => T("TranscranialDirectCurrent");
+    public string TranscranialAlternatingCurrentText => T("TranscranialAlternatingCurrent");
     public string TranscranialMonophasicPulseCurrentText => T("TranscranialMonophasicPulseCurrent");
     public string TranscranialPulseCurrentText => T("TranscranialPulseCurrent");
     public string ComingSoonText => T("ComingSoon");
     public string BackText => T("Back");
     public string ModeTitleText => T("ModeTitle");
     public string DirectCurrentModeTitleText => T("DirectCurrentModeTitle");
+    public string AlternatingCurrentModeTitleText => T("AlternatingCurrentModeTitle");
     public string PulseCurrentModeTitleText => T("PulseCurrentModeTitle");
     public string MonophasicPulseCurrentModeTitleText => T("MonophasicPulseCurrentModeTitle");
     public string ChannelHintText => T("ChannelHint");

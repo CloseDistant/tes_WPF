@@ -162,8 +162,9 @@
                         <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="540"/></Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="{Binding DeliveryModeRowHeight}"/>
-                            <RowDefinition Height="42"/><RowDefinition Height="42"/><RowDefinition Height="{Binding SingleDurationRowHeight}"/><RowDefinition Height="54"/>
-                            <RowDefinition Height="42"/><RowDefinition Height="{Binding RampDownRowHeight}"/><RowDefinition Height="54"/>
+                            <RowDefinition Height="42"/><RowDefinition Height="{Binding IntervalRowHeight}"/><RowDefinition Height="{Binding SingleDurationRowHeight}"/><RowDefinition Height="54"/>
+                            <RowDefinition Height="42"/><RowDefinition Height="{Binding RampDownRowHeight}"/>
+                            <RowDefinition Height="{Binding FrequencyRowHeight}"/><RowDefinition Height="54"/>
                         </Grid.RowDefinitions>
                         <Border Grid.ColumnSpan="2" Style="{StaticResource DetailRow}"/>
                         <Border Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource DetailRow}" Background="#1A1F29"/>
@@ -176,6 +177,7 @@
                         <Border Grid.Row="8" Grid.ColumnSpan="2" Style="{StaticResource DetailRow}"/>
                         <Border Grid.Row="9" Grid.ColumnSpan="2" Style="{StaticResource DetailRow}" Background="#1A1F29"/>
                         <Border Grid.Row="10" Grid.ColumnSpan="2" Style="{StaticResource DetailRow}"/>
+                        <Border Grid.Row="11" Grid.ColumnSpan="2" Style="{StaticResource DetailRow}" Background="#1A1F29"/>
                         <TextBlock Margin="12,0" Text="适应症" Style="{StaticResource LabelText}"/><TextBlock Grid.Column="1" Text="{Binding Indication}" Style="{StaticResource ValueText}"/>
                         <TextBlock Grid.Row="1" Margin="12,0" Text="刺激模式" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding StimulationType}" Style="{StaticResource ValueText}"/>
                         <TextBlock Grid.Row="2" Margin="12,0" Text="{Binding CurrentLabel}" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CurrentDisplay}" Style="{StaticResource ValueText}"/>
@@ -186,7 +188,8 @@
                         <TextBlock Grid.Row="7" Margin="12,0" Text="疗程" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding Course}" Style="{StaticResource ValueText}"/>
                         <TextBlock Grid.Row="8" Margin="12,0" Text="{Binding RampUpLabel}" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding RampUpDisplay}" Style="{StaticResource ValueText}"/>
                         <TextBlock Grid.Row="9" Margin="12,0" Text="{Binding RampDownLabel}" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding RampDownDisplay}" Style="{StaticResource ValueText}"/>
-                        <TextBlock Grid.Row="10" Margin="12,0" Text="证据等级" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="10" Grid.Column="1" Text="{Binding EvidenceGrade}" Style="{StaticResource ValueText}"/>
+                        <TextBlock Grid.Row="10" Margin="12,0" Text="载波频率" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="10" Grid.Column="1" Text="{Binding FrequencyDisplay}" Style="{StaticResource ValueText}"/>
+                        <TextBlock Grid.Row="11" Margin="12,0" Text="证据等级" Style="{StaticResource LabelText}"/><TextBlock Grid.Row="11" Grid.Column="1" Text="{Binding EvidenceGrade}" Style="{StaticResource ValueText}"/>
                     </Grid>
                 </ScrollViewer>
                 <StackPanel Grid.Row="3" Orientation="Horizontal" DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}" VerticalAlignment="Center">

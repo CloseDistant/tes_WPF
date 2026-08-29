@@ -5,6 +5,7 @@ public static class StimulationModeCodes
 {
     public const string TemporalInterference = "TI";
     public const string DirectCurrent = "tDCS";
+    public const string AlternatingCurrent = "tACS";
     public const string PulseCurrent = "tPCS";
     public const string MonophasicPulseCurrent = "M-tPCS";
 }

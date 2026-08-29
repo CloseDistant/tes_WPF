@@ -12,6 +12,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="RuinaoHardwareEngineer.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="runtimes\win-x64\native\libusbK.dll">
       <Link>libusbK.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

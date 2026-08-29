@@ -72,6 +72,27 @@ public interface IHardwareService : IHardwareConnectionState
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 启动TI组并报告参数配置确认进度。未提供进度能力的替代实现仍执行原有启动入口；
+    /// 正式硬件实现只在收到有效配置回复后推进进度。
+    /// </summary>
+    Task<HardwareOperationResult> StartTiGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        PrescriptionDefinition parameterRecord,
+        IProgress<StimulationParameterDownloadProgress>? progress,
+        CancellationToken cancellationToken = default) =>
+        StartGroupAsync(group, selectedChannelNames, parameterRecord, cancellationToken);
+
+    /// <summary>启动独立tACS通道组并报告参数配置确认进度。</summary>
+    Task<HardwareOperationResult> StartTacsGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        PrescriptionDefinition parameterRecord,
+        IProgress<StimulationParameterDownloadProgress>? progress,
+        CancellationToken cancellationToken = default) =>
+        StartGroupAsync(group, selectedChannelNames, parameterRecord, cancellationToken);
+
+    /// <summary>
     /// 停止指定刺激组。
     /// </summary>
     Task<HardwareOperationResult> StopGroupAsync(
