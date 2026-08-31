@@ -92,6 +92,22 @@ public sealed class CameraCapturePipelineTests
         Assert.Equal(10, measurement!.FramesPerSecond, 3);
     }
 
+    [Fact]
+    public void FaceGuideCheck_AcceptsFaceMostlyInsideGuide()
+    {
+        var face = new NormalizedCameraRect(0.38, 0.16, 0.24, 0.62);
+
+        Assert.True(OpenCvCameraCaptureService.IsPrimaryFaceInsideGuide(face));
+    }
+
+    [Fact]
+    public void FaceGuideCheck_RejectsFaceWhoseChinFallsOutsideGuide()
+    {
+        var face = new NormalizedCameraRect(0.38, 0.54, 0.24, 0.58);
+
+        Assert.False(OpenCvCameraCaptureService.IsPrimaryFaceInsideGuide(face));
+    }
+
     private sealed class TestDisposable : IDisposable
     {
         public bool IsDisposed { get; private set; }

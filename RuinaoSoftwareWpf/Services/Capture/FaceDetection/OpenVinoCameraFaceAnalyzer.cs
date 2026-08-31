@@ -15,6 +15,9 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
 {
     private const double FaceDetectionConfidence = 0.65;
     private const double PoseInputPaddingRatio = 0.12;
+    private const double LandmarkHorizontalPaddingRatio = 0.06;
+    private const double LandmarkTopPaddingRatio = 0.04;
+    private const double LandmarkBottomPaddingRatio = 0.28;
     private static readonly Size FaceDetectorInputSize = new(300, 300);
     private static readonly Size LandmarkInputSize = new(64, 64);
     private static readonly Size HeadPoseInputSize = new(60, 60);
@@ -316,13 +319,20 @@ public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
         int frameWidth,
         int frameHeight)
     {
-        // 98点模型按官方定义接收已经检测出的人脸区域并缩放到64×64。
-        // 不再人为扩大或下移输入框，避免脸部在模型输入中缩小、偏移后把下巴预测到嘴部附近。
+        // 普通人脸检测器的结果经常止于嘴部附近。98点模型需要看见完整下颌轮廓，
+        // 因此只扩大它的分析输入区域，并给下方保留更多空间。最终显示框仍由实际
+        // 检出的下巴关键点生成，不把这段输入留白直接算作人脸范围。
+        var horizontalPadding = (int)Math.Round(
+            detectorBounds.Width * LandmarkHorizontalPaddingRatio);
+        var topPadding = (int)Math.Round(
+            detectorBounds.Height * LandmarkTopPaddingRatio);
+        var bottomPadding = (int)Math.Round(
+            detectorBounds.Height * LandmarkBottomPaddingRatio);
         return ClampRect(
-            detectorBounds.Left,
-            detectorBounds.Top,
-            detectorBounds.Right,
-            detectorBounds.Bottom,
+            detectorBounds.Left - horizontalPadding,
+            detectorBounds.Top - topPadding,
+            detectorBounds.Right + horizontalPadding,
+            detectorBounds.Bottom + bottomPadding,
             frameWidth,
             frameHeight);
     }

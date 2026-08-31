@@ -17,7 +17,8 @@
         <views:LoginView x:Name="LoginContent" Visibility="Visible" />
 
         <!-- 登录页和主界面共用的全局仪器联机状态。 -->
-        <Border Width="220"
+        <Border x:Name="GlobalDeviceStatus"
+                Width="220"
                 Height="22"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Bottom"

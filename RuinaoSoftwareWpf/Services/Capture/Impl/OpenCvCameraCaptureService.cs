@@ -39,7 +39,9 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
     private Task previewTask = Task.CompletedTask;
     private Task faceAnalysisTask = Task.CompletedTask;
     private CameraFaceAnalysis? latestFaceAnalysis;
+    private CameraFaceStatusSnapshot? latestFaceStatus;
     private int isOpenFlag;
+    private int previewRenderingEnabledFlag = 1;
     private int recordingEnabledFlag;
     private int recordedFrameCount;
     private long previewSequence;
@@ -73,6 +75,8 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
     public CameraCaptureProfileSnapshot? ActiveProfile => Volatile.Read(ref activeProfile);
 
     public string? LastOpenFailureMessage => Volatile.Read(ref lastOpenFailureMessage);
+
+    public bool IsPreviewRenderingEnabled => Volatile.Read(ref previewRenderingEnabledFlag) == 1;
 
     public async Task<bool> OpenAsync(
         int preferredIndex,
@@ -174,6 +178,31 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
         return true;
     }
 
+    public bool TryTakeLatestFaceStatus(out CameraFaceStatusSnapshot snapshot)
+    {
+        var current = Interlocked.Exchange(ref latestFaceStatus, null);
+        if (current is null)
+        {
+            snapshot = null!;
+            return false;
+        }
+
+        snapshot = current;
+        return true;
+    }
+
+    public void SetPreviewRenderingEnabled(bool enabled)
+    {
+        Volatile.Write(ref previewRenderingEnabledFlag, enabled ? 1 : 0);
+        if (enabled)
+        {
+            return;
+        }
+
+        pendingPreviewFrames.Clear();
+        completedPreviews.Clear();
+    }
+
     public void SetRecordingEnabled(bool enabled)
     {
         if (enabled)
@@ -252,6 +281,7 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
             pendingFaceFrames.Clear();
             completedPreviews.Clear();
             Volatile.Write(ref latestFaceAnalysis, null);
+            Interlocked.Exchange(ref latestFaceStatus, null);
             Volatile.Write(ref activeProfile, null);
             Volatile.Write(ref activePreferredIndex, -1);
             activeDeviceKey = null;
@@ -269,6 +299,10 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
             selectedProfile.RecordingInterval,
             Stopwatch.Frequency,
             earlyToleranceRatio: 0.15);
+        var faceAnalysisSampler = new FixedIntervalFrameSampler(
+            selectedProfile.FaceAnalysisInterval,
+            Stopwatch.Frequency,
+            earlyToleranceRatio: 0.10);
         var sourceFrameRateTracker = new CameraSourceFrameRateTracker(
             TimeSpan.FromSeconds(5),
             Stopwatch.Frequency);
@@ -308,7 +342,16 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
                     }
 
                     var capturedAt = DateTimeOffset.Now;
-                    if (previewSampler.ShouldSample(now))
+                    if (faceAnalysisSampler.ShouldSample(now))
+                    {
+                        PublishFaceFrame(new PendingCameraFrame(
+                            frame.Clone(),
+                            capturedAt,
+                            now,
+                            recordedCount));
+                    }
+
+                    if (IsPreviewRenderingEnabled && previewSampler.ShouldSample(now))
                     {
                         PublishPreviewFrame(new PendingCameraFrame(
                             frame.Clone(),
@@ -343,10 +386,6 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
 
     private void ProcessPreviewFrames(CancellationToken cancellationToken)
     {
-        var faceAnalysisSampler = new FixedIntervalFrameSampler(
-            selectedProfile.FaceAnalysisInterval,
-            Stopwatch.Frequency,
-            earlyToleranceRatio: 0.10);
         try
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -363,15 +402,6 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
                     try
                     {
                         using var displayFrame = CreateDisplayFrame(pending.Frame);
-                        if (faceAnalysisSampler.ShouldSample(pending.MonotonicTimestamp))
-                        {
-                            PublishFaceFrame(new PendingCameraFrame(
-                                displayFrame.Clone(),
-                                pending.CapturedAt,
-                                pending.MonotonicTimestamp,
-                                pending.RecordedFrameCount));
-                        }
-
                         var snapshot = CreatePreviewSnapshot(pending, displayFrame);
                         completedPreviews.Publish(snapshot);
                     }
@@ -392,7 +422,6 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
         Mat displayFrame)
     {
         var frame = displayFrame;
-        var guideRect = GuideRectFor(frame);
         var analysis = Volatile.Read(ref latestFaceAnalysis);
         if (analysis is null
             || Stopwatch.GetElapsedTime(analysis.AnalyzedAtTimestamp, Stopwatch.GetTimestamp()) > FaceAnalysisStaleAfter)
@@ -403,14 +432,7 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
                 pending.CapturedAt);
         }
 
-        var isPrimaryFaceInsideGuide = false;
-        if (analysis.PrimaryFaceBounds is { } normalizedFace)
-        {
-            var face = Denormalize(normalizedFace, frame.Width, frame.Height);
-            var faceCenter = new OpenCvSharp.Point(face.X + face.Width / 2, face.Y + face.Height / 2);
-            var overlapRatio = CalculateOverlapRatio(face, guideRect);
-            isPrimaryFaceInsideGuide = guideRect.Contains(faceCenter) && overlapRatio >= 0.85;
-        }
+        var isPrimaryFaceInsideGuide = IsPrimaryFaceInsideGuide(analysis.PrimaryFaceBounds);
 
 
 #if DEBUG
@@ -480,12 +502,21 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
 
                 using (pending)
                 {
+                    using var analysisFrame = CreateDisplayFrame(pending.Frame);
                     var analysis = faceAnalyzer.Analyze(
-                        pending.Frame,
+                        analysisFrame,
                         Interlocked.Increment(ref faceAnalysisSequence),
                         pending.MonotonicTimestamp,
                         pending.CapturedAt);
                     Volatile.Write(ref latestFaceAnalysis, analysis);
+                    Interlocked.Exchange(
+                        ref latestFaceStatus,
+                        new CameraFaceStatusSnapshot(
+                            analysis.Sequence,
+                            pending.CapturedAt,
+                            pending.MonotonicTimestamp,
+                            analysis.State,
+                            IsPrimaryFaceInsideGuide(analysis.PrimaryFaceBounds)));
                 }
             }
         }
@@ -501,7 +532,42 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
                     Interlocked.Increment(ref faceAnalysisSequence),
                     Stopwatch.GetTimestamp(),
                     DateTimeOffset.Now));
+            var unavailable = Volatile.Read(ref latestFaceAnalysis)!;
+            Interlocked.Exchange(
+                ref latestFaceStatus,
+                new CameraFaceStatusSnapshot(
+                    unavailable.Sequence,
+                    unavailable.CapturedAt,
+                    unavailable.AnalyzedAtTimestamp,
+                    unavailable.State,
+                    false));
         }
+    }
+
+    internal static bool IsPrimaryFaceInsideGuide(NormalizedCameraRect? faceBounds)
+    {
+        if (faceBounds is not { Width: > 0, Height: > 0 } face)
+        {
+            return false;
+        }
+
+        var centerX = face.X + face.Width / 2d;
+        var centerY = face.Y + face.Height / 2d;
+        var centerInside = centerX >= GuideBounds.X
+            && centerX <= GuideBounds.X + GuideBounds.Width
+            && centerY >= GuideBounds.Y
+            && centerY <= GuideBounds.Y + GuideBounds.Height;
+        if (!centerInside)
+        {
+            return false;
+        }
+
+        var overlapLeft = Math.Max(face.X, GuideBounds.X);
+        var overlapTop = Math.Max(face.Y, GuideBounds.Y);
+        var overlapRight = Math.Min(face.X + face.Width, GuideBounds.X + GuideBounds.Width);
+        var overlapBottom = Math.Min(face.Y + face.Height, GuideBounds.Y + GuideBounds.Height);
+        var overlapArea = Math.Max(0, overlapRight - overlapLeft) * Math.Max(0, overlapBottom - overlapTop);
+        return overlapArea / (face.Width * face.Height) >= 0.85;
     }
 
     private void SignalPreviewProcessor()
@@ -597,7 +663,9 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
             return null;
         }
 
-        var cached = profileStore.Find(deviceKey);
+        // 每个录像档位分别复用已验证后端和性能结果。高分辨率或高帧率档位的
+        // 较低实测帧率不能污染均衡档位，否则切回均衡后会错误轮询其他后端。
+        var cached = profileStore.Find(deviceKey, requestedProfile.RecordingQualityMode);
         var backendCandidates = new List<VideoCaptureAPIs>();
         VideoCaptureAPIs? lowPerformanceCachedApi = null;
         if (cached is not null
@@ -778,7 +846,8 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
             profile.ActualDeviceFramesPerSecond,
             profile.ActualInputCodec,
             profile.MeasuredSourceFramesPerSecond,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            profile.RecordingQualityMode);
 
     private static int? TryEncodeFourCc(string? codec)
     {
@@ -843,35 +912,6 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
         }
 
         return false;
-    }
-
-    private static OpenCvSharp.Rect GuideRectFor(Mat frame) => new(
-        (int)Math.Round(frame.Width * GuideBounds.X),
-        (int)Math.Round(frame.Height * GuideBounds.Y),
-        (int)Math.Round(frame.Width * GuideBounds.Width),
-        (int)Math.Round(frame.Height * GuideBounds.Height));
-
-    private static OpenCvSharp.Rect Denormalize(NormalizedCameraRect rect, int width, int height) => new(
-        (int)Math.Round(rect.X * width),
-        (int)Math.Round(rect.Y * height),
-        Math.Max(1, (int)Math.Round(rect.Width * width)),
-        Math.Max(1, (int)Math.Round(rect.Height * height)));
-
-    private static double CalculateOverlapRatio(OpenCvSharp.Rect face, OpenCvSharp.Rect guide)
-    {
-        var left = Math.Max(face.Left, guide.Left);
-        var top = Math.Max(face.Top, guide.Top);
-        var right = Math.Min(face.Right, guide.Right);
-        var bottom = Math.Min(face.Bottom, guide.Bottom);
-
-        if (right <= left || bottom <= top)
-        {
-            return 0;
-        }
-
-        var overlapArea = (right - left) * (bottom - top);
-        var faceArea = Math.Max(face.Width * face.Height, 1);
-        return overlapArea / (double)faceArea;
     }
 
     private sealed class PendingCameraFrame(

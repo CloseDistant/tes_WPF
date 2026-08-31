@@ -137,4 +137,5 @@ public sealed record CameraOpeningPreference(
     double? FramesPerSecond,
     string? InputCodec,
     double? MeasuredSourceFramesPerSecond,
-    DateTimeOffset VerifiedAt);
+    DateTimeOffset VerifiedAt,
+    CameraRecordingQualityMode RecordingQualityMode = CameraRecordingQualityMode.Balanced);

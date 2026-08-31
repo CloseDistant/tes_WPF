@@ -10,6 +10,8 @@ public interface ICameraCaptureService : IAsyncDisposable
 
     string? LastOpenFailureMessage { get; }
 
+    bool IsPreviewRenderingEnabled { get; }
+
     Task<bool> OpenAsync(
         int preferredIndex,
         string deviceKey,
@@ -17,6 +19,10 @@ public interface ICameraCaptureService : IAsyncDisposable
         CancellationToken cancellationToken = default);
 
     bool TryTakeLatestPreview(out CameraPreviewSnapshot snapshot);
+
+    bool TryTakeLatestFaceStatus(out CameraFaceStatusSnapshot snapshot);
+
+    void SetPreviewRenderingEnabled(bool enabled);
 
     void SetRecordingEnabled(bool enabled);
 

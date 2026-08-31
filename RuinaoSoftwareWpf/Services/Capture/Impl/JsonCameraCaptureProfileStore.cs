@@ -33,7 +33,9 @@ internal sealed class JsonCameraCaptureProfileStore : ICameraCaptureProfileStore
         this.storagePath = storagePath;
     }
 
-    public CameraOpeningPreference? Find(string deviceKey)
+    public CameraOpeningPreference? Find(
+        string deviceKey,
+        CameraRecordingQualityMode recordingQualityMode)
     {
         if (string.IsNullOrWhiteSpace(deviceKey))
         {
@@ -46,7 +48,8 @@ internal sealed class JsonCameraCaptureProfileStore : ICameraCaptureProfileStore
                 .FirstOrDefault(item => string.Equals(
                     item.DeviceKey,
                     deviceKey,
-                    StringComparison.OrdinalIgnoreCase));
+                    StringComparison.OrdinalIgnoreCase)
+                    && item.RecordingQualityMode == recordingQualityMode);
         }
     }
 
@@ -59,9 +62,10 @@ internal sealed class JsonCameraCaptureProfileStore : ICameraCaptureProfileStore
             {
                 var items = LoadCore();
                 items.RemoveAll(item => string.Equals(
-                    item.DeviceKey,
-                    preference.DeviceKey,
-                    StringComparison.OrdinalIgnoreCase));
+                        item.DeviceKey,
+                        preference.DeviceKey,
+                        StringComparison.OrdinalIgnoreCase)
+                    && item.RecordingQualityMode == preference.RecordingQualityMode);
                 items.Add(preference);
 
                 var directory = Path.GetDirectoryName(storagePath)
@@ -89,14 +93,38 @@ internal sealed class JsonCameraCaptureProfileStore : ICameraCaptureProfileStore
                 return [];
             }
 
-            return JsonSerializer.Deserialize<List<CameraOpeningPreference>>(
-                File.ReadAllText(storagePath),
-                JsonOptions) ?? [];
+            return (JsonSerializer.Deserialize<List<CameraOpeningPreference>>(
+                    File.ReadAllText(storagePath),
+                    JsonOptions) ?? [])
+                .Select(NormalizeLegacyPreference)
+                .ToList();
         }
         catch (Exception exception)
         {
             logger.Warning($"读取摄像头能力档案失败，将重新建立：{exception.Message}");
             return [];
         }
+    }
+
+    private static CameraOpeningPreference NormalizeLegacyPreference(
+        CameraOpeningPreference preference)
+    {
+        // 旧版本能力档案没有 RecordingQualityMode，反序列化后会落到 Balanced。
+        // 根据当时已经保存的实际规格恢复档位，避免旧的4K/60帧低性能记录污染均衡模式。
+        if (preference.RecordingQualityMode != CameraRecordingQualityMode.Balanced)
+        {
+            return preference;
+        }
+
+        var inferredMode = preference switch
+        {
+            { Width: >= 3000, Height: >= 2000 } => CameraRecordingQualityMode.HighDefinition,
+            { Width: >= 1900, Height: >= 1000, FramesPerSecond: >= 45 } =>
+                CameraRecordingQualityMode.HighFrameRate,
+            _ => CameraRecordingQualityMode.Balanced
+        };
+        return inferredMode == preference.RecordingQualityMode
+            ? preference
+            : preference with { RecordingQualityMode = inferredMode };
     }
 }

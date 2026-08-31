@@ -278,6 +278,16 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         return cameraCaptureService.TryTakeLatestPreview(out snapshot);
     }
 
+    internal bool TryTakeLatestCameraFaceStatus(out CameraFaceStatusSnapshot snapshot)
+    {
+        return cameraCaptureService.TryTakeLatestFaceStatus(out snapshot);
+    }
+
+    internal void SetCameraPreviewRenderingEnabled(bool enabled)
+    {
+        cameraCaptureService.SetPreviewRenderingEnabled(enabled);
+    }
+
     internal string CameraOpenFailureMessage => cameraCaptureService.LastOpenFailureMessage
         ?? T("CaptureWorkspaceCameraOpenFailed");
 

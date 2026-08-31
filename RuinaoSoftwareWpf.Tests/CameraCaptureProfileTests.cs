@@ -91,7 +91,9 @@ public sealed class CameraCaptureProfileTests
 
             store.Save(expected);
 
-            Assert.Equal(expected, store.Find("CAMERA-A"));
+            Assert.Equal(
+                expected,
+                store.Find("CAMERA-A", CameraRecordingQualityMode.Balanced));
         }
         finally
         {
@@ -101,6 +103,97 @@ public sealed class CameraCaptureProfileTests
             }
         }
     }
+
+    [Fact]
+    public void JsonProfileStore_KeepsOpeningPreferenceForEachRecordingQualityMode()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"ruinao-camera-profile-{Guid.NewGuid():N}");
+        var path = Path.Combine(root, "camera-capabilities.json");
+        try
+        {
+            var store = new JsonCameraCaptureProfileStore(new NullLoggingService(), path);
+            var balanced = CreatePreference(
+                CameraRecordingQualityMode.Balanced,
+                "DSHOW",
+                measuredFramesPerSecond: 29.8);
+            var highDefinition = CreatePreference(
+                CameraRecordingQualityMode.HighDefinition,
+                "MSMF",
+                measuredFramesPerSecond: 18.5);
+
+            store.Save(balanced);
+            store.Save(highDefinition);
+
+            Assert.Equal(
+                balanced,
+                store.Find("camera-a", CameraRecordingQualityMode.Balanced));
+            Assert.Equal(
+                highDefinition,
+                store.Find("camera-a", CameraRecordingQualityMode.HighDefinition));
+            Assert.Null(store.Find("camera-a", CameraRecordingQualityMode.HighFrameRate));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void JsonProfileStore_InfersModeForLegacyPreferenceWithoutModeField()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"ruinao-camera-profile-{Guid.NewGuid():N}");
+        var path = Path.Combine(root, "camera-capabilities.json");
+        try
+        {
+            Directory.CreateDirectory(root);
+            var legacyPreference = new
+            {
+                DeviceKey = "camera-a",
+                CaptureBackend = "MSMF",
+                UsesDriverDefault = false,
+                Width = 3840,
+                Height = 2160,
+                FramesPerSecond = 30d,
+                InputCodec = "MJPG",
+                MeasuredSourceFramesPerSecond = 18.5d,
+                VerifiedAt = DateTimeOffset.Parse("2026-08-25T10:00:00Z")
+            };
+            File.WriteAllText(
+                path,
+                System.Text.Json.JsonSerializer.Serialize(new[] { legacyPreference }));
+            var store = new JsonCameraCaptureProfileStore(new NullLoggingService(), path);
+
+            Assert.Null(store.Find("camera-a", CameraRecordingQualityMode.Balanced));
+            Assert.Equal(
+                CameraRecordingQualityMode.HighDefinition,
+                store.Find("camera-a", CameraRecordingQualityMode.HighDefinition)?.RecordingQualityMode);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    private static CameraOpeningPreference CreatePreference(
+        CameraRecordingQualityMode mode,
+        string backend,
+        double measuredFramesPerSecond) => new(
+        "camera-a",
+        backend,
+        UsesDriverDefault: false,
+        Width: CameraCaptureProfile.ForMode(mode).RequestedWidth,
+        Height: CameraCaptureProfile.ForMode(mode).RequestedHeight,
+        FramesPerSecond: CameraCaptureProfile.ForMode(mode).DeviceFramesPerSecond,
+        InputCodec: "MJPG",
+        MeasuredSourceFramesPerSecond: measuredFramesPerSecond,
+        VerifiedAt: DateTimeOffset.Parse("2026-08-25T10:00:00Z"),
+        RecordingQualityMode: mode);
 
     private sealed class NullLoggingService : ILoggingService
     {

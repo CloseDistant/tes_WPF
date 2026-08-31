@@ -6,7 +6,7 @@ using Xunit;
 public sealed class OpenVinoCameraFaceAnalyzerTests
 {
     [Fact]
-    public void CalculateLandmarkInputBounds_UsesDetectedFaceWithoutSyntheticExtension()
+    public void CalculateLandmarkInputBounds_IncludesSpaceForActualChinDetection()
     {
         var detectorBounds = new Rect(100, 50, 100, 100);
 
@@ -15,7 +15,24 @@ public sealed class OpenVinoCameraFaceAnalyzerTests
             frameWidth: 640,
             frameHeight: 480);
 
-        Assert.Equal(detectorBounds, result);
+        Assert.Equal(new Rect(94, 46, 112, 132), result);
+        Assert.True(result.Bottom > detectorBounds.Bottom);
+    }
+
+    [Fact]
+    public void CalculateLandmarkInputBounds_ClampsExpandedAreaToFrame()
+    {
+        var detectorBounds = new Rect(2, 1, 100, 100);
+
+        var result = OpenVinoCameraFaceAnalyzer.CalculateLandmarkInputBounds(
+            detectorBounds,
+            frameWidth: 105,
+            frameHeight: 115);
+
+        Assert.Equal(0, result.Left);
+        Assert.Equal(0, result.Top);
+        Assert.Equal(105, result.Right);
+        Assert.Equal(115, result.Bottom);
     }
 
     [Fact]

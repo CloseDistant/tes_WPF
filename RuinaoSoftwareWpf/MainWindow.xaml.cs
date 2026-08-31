@@ -51,6 +51,18 @@ public partial class MainWindow : Window
         Focus();
     }
 
+    public void EnterAssessmentPresentationMode()
+    {
+        MainContent.EnterAssessmentPresentationMode();
+        GlobalDeviceStatus.Visibility = Visibility.Collapsed;
+    }
+
+    public void ExitAssessmentPresentationMode()
+    {
+        MainContent.ExitAssessmentPresentationMode();
+        GlobalDeviceStatus.Visibility = Visibility.Visible;
+    }
+
     public MainWindow(
         MainViewModel viewModel,
         ILoggingService logger,

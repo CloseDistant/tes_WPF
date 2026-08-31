@@ -25,32 +25,46 @@ public partial class AssessmentCaptureView : UserControl
 
     private readonly DispatcherTimer cameraTimer = new()
     {
-        Interval = TimeSpan.FromMilliseconds(33)
+        Interval = TimeSpan.FromMilliseconds(50)
+    };
+
+    private readonly DispatcherTimer faceStatusTimer = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(200)
     };
 
     private readonly SemaphoreSlim cameraLifecycleGate = new(1, 1);
     private bool cameraPreviewHasFrame;
     private DateTime lastRecordingStatusUpdateAt = DateTime.MinValue;
     private DateTimeOffset lastCameraPreviewCapturedAt = DateTimeOffset.MinValue;
+    private DateTimeOffset lastCameraFaceStatusCapturedAt = DateTimeOffset.MinValue;
     private CameraPreviewOverlayState? latestCameraOverlay;
     private WriteableBitmap? cameraPreviewBitmap;
     private AssessmentCaptureViewModel? calibrationAnimationViewModel;
     private bool hasCalibrationMarkerPosition;
+    private bool isFormalPresentationActive;
+    private bool isStartingFormalPresentation;
+    private bool isCaptureDetailsOpen = true;
+    private bool captureDetailsOpenBeforeFormal = true;
 
     public AssessmentCaptureView()
     {
         InitializeComponent();
         playbackTimer.Tick += (_, _) => UpdatePlaybackTime();
         cameraTimer.Tick += (_, _) => UpdateCameraPreview();
+        faceStatusTimer.Tick += (_, _) => UpdateCameraFaceStatus();
         DataContextChanged += AssessmentCaptureView_DataContextChanged;
         Loaded += AssessmentCaptureView_Loaded;
         Unloaded += AssessmentCaptureView_Unloaded;
+        WorkbenchContent.SizeChanged += (_, _) => UpdateFormalParadigmBounds();
     }
 
     private AssessmentCaptureViewModel? ViewModel => DataContext as AssessmentCaptureViewModel;
 
     private async void AssessmentCaptureView_Loaded(object sender, RoutedEventArgs e)
     {
+        ConfigureDevelopmentDetails();
+        SetCaptureDetailsOpen(true);
         AttachCalibrationAnimationViewModel(ViewModel);
         // 如果用户离开演示播放页后又返回，MediaElement 不会自动恢复画面。
         // 这里兜底清理“播放中但没有播放器上下文”的状态，让用户重新完整观看演示。
@@ -81,6 +95,7 @@ public partial class AssessmentCaptureView : UserControl
 
     private async Task StopPageActivitiesForUnloadAsync()
     {
+        ExitFormalPresentationMode();
         DetachCalibrationAnimationViewModel();
         StopCalibrationMarkerAnimation();
         playbackTimer.Stop();
@@ -129,6 +144,13 @@ public partial class AssessmentCaptureView : UserControl
 
     private void OnCalibrationViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(AssessmentCaptureViewModel.IsExecutingCaptureTask))
+        {
+            Dispatcher.BeginInvoke(
+                DispatcherPriority.Render,
+                new Action(UpdateFormalPresentationForCurrentStage));
+        }
+
         if (e.PropertyName is not nameof(AssessmentCaptureViewModel.CalibrationAnimationSequence))
         {
             return;
@@ -137,6 +159,159 @@ public partial class AssessmentCaptureView : UserControl
         Dispatcher.BeginInvoke(
             DispatcherPriority.Render,
             new Action(ApplyCalibrationMarkerAnimation));
+    }
+
+    private void ConfigureDevelopmentDetails()
+    {
+#if DEBUG
+        DevelopmentModuleProgressCard.Visibility = Visibility.Visible;
+#else
+        DevelopmentModuleProgressCard.Visibility = Visibility.Collapsed;
+#endif
+    }
+
+    private void HideCaptureDetailsButton_Click(object sender, RoutedEventArgs e)
+    {
+        SetCaptureDetailsOpen(false);
+    }
+
+    private void ShowCaptureDetailsButton_Click(object sender, RoutedEventArgs e)
+    {
+        SetCaptureDetailsOpen(true);
+    }
+
+    private void SetCaptureDetailsOpen(bool open)
+    {
+        isCaptureDetailsOpen = open;
+        if (isFormalPresentationActive)
+        {
+            CaptureDetailsPanel.Visibility = Visibility.Collapsed;
+            ShowCaptureDetailsButton.Visibility = Visibility.Collapsed;
+            SetCameraPreviewRenderingEnabled(false);
+            return;
+        }
+
+        CaptureDetailsPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        ShowCaptureDetailsButton.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+        SetCameraPreviewRenderingEnabled(open);
+    }
+
+    private async Task EnterFormalPresentationModeAsync()
+    {
+        if (isFormalPresentationActive)
+        {
+            return;
+        }
+
+        if (Window.GetWindow(this) is not MainWindow mainWindow)
+        {
+            throw new InvalidOperationException("无法取得数字表型采集的主窗口。");
+        }
+
+        captureDetailsOpenBeforeFormal = isCaptureDetailsOpen;
+        isFormalPresentationActive = true;
+        mainWindow.EnterAssessmentPresentationMode();
+
+        WorkbenchRoot.Margin = new Thickness(0);
+        WorkbenchHeader.Visibility = Visibility.Collapsed;
+        ParadigmCard.Padding = new Thickness(0);
+        ParadigmCard.Margin = new Thickness(0);
+        ParadigmCard.BorderThickness = new Thickness(0);
+        ParadigmCard.CornerRadius = new CornerRadius(0);
+        SharedDisplayHeader.Visibility = Visibility.Collapsed;
+        SharedDisplayFrame.BorderThickness = new Thickness(0);
+        SharedDisplayFrame.CornerRadius = new CornerRadius(0);
+        ParadigmCanvasHost.Margin = new Thickness(0);
+        SetCaptureDetailsOpen(false);
+        UpdateFormalParadigmBounds();
+
+        // 等待无边框全屏布局真正提交后再启动范式时间轴，避免首个刺激帧在布局切换中丢失。
+        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+    }
+
+    private void ExitFormalPresentationMode()
+    {
+        if (!isFormalPresentationActive)
+        {
+            return;
+        }
+
+        isFormalPresentationActive = false;
+        if (Window.GetWindow(this) is MainWindow mainWindow)
+        {
+            mainWindow.ExitAssessmentPresentationMode();
+        }
+
+        WorkbenchRoot.Margin = new Thickness(18, 14, 18, 14);
+        WorkbenchHeader.Visibility = Visibility.Visible;
+        ParadigmCard.Width = double.NaN;
+        ParadigmCard.Height = double.NaN;
+        ParadigmCard.HorizontalAlignment = HorizontalAlignment.Stretch;
+        ParadigmCard.VerticalAlignment = VerticalAlignment.Stretch;
+        ParadigmCard.Padding = new Thickness(14);
+        ParadigmCard.BorderThickness = new Thickness(1);
+        ParadigmCard.CornerRadius = new CornerRadius(6);
+        SharedDisplayHeader.Visibility = Visibility.Visible;
+        SharedDisplayFrame.BorderThickness = new Thickness(1);
+        SharedDisplayFrame.CornerRadius = new CornerRadius(4);
+        ParadigmCanvasHost.Margin = new Thickness(16, 10, 16, 10);
+        SetCaptureDetailsOpen(captureDetailsOpenBeforeFormal);
+    }
+
+    private async void UpdateFormalPresentationForCurrentStage()
+    {
+        if (ViewModel?.IsExecutingCaptureTask == true)
+        {
+            if (!isFormalPresentationActive)
+            {
+                try
+                {
+                    await EnterFormalPresentationModeAsync();
+                }
+                catch (Exception exception)
+                {
+                    ViewModel.ShowStageNotice($"正式采集画面启动失败：{exception.Message}");
+                }
+            }
+
+            return;
+        }
+
+        // 从面部取景切换到正式任务时，会先调整窗口并等待一次 Render。
+        // 此时忽略此前排队的旧阶段通知，避免它把刚进入的全屏立即恢复。
+        if (!isStartingFormalPresentation)
+        {
+            ExitFormalPresentationMode();
+        }
+    }
+
+    private void UpdateFormalParadigmBounds()
+    {
+        if (!isFormalPresentationActive)
+        {
+            return;
+        }
+
+        var availableWidth = WorkbenchContent.ActualWidth;
+        var availableHeight = WorkbenchContent.ActualHeight;
+        if (availableWidth <= 0 || availableHeight <= 0)
+        {
+            return;
+        }
+
+        const double aspectRatio = 16d / 9d;
+        var canvasWidth = availableWidth;
+        var canvasHeight = canvasWidth / aspectRatio;
+        if (canvasHeight > availableHeight)
+        {
+            canvasHeight = availableHeight;
+            canvasWidth = canvasHeight * aspectRatio;
+        }
+
+        ParadigmCard.Width = canvasWidth;
+        ParadigmCard.Height = canvasHeight;
+        ParadigmCard.HorizontalAlignment = HorizontalAlignment.Center;
+        ParadigmCard.VerticalAlignment = VerticalAlignment.Center;
     }
 
     private void ApplyCalibrationMarkerAnimation()
@@ -256,9 +431,13 @@ public partial class AssessmentCaptureView : UserControl
             return;
         }
 
-        if (!cameraPreviewHasFrame)
+        if (!HasRecentCameraAnalysisFrame())
         {
-            await StartCameraPreviewAsync();
+            if (!viewModel.IsCameraOpen)
+            {
+                await StartCameraPreviewAsync();
+            }
+
             viewModel.ShowStageNotice(viewModel.Localize("CaptureWorkspaceCameraNoFrameStageNotice"));
             return;
         }
@@ -286,7 +465,24 @@ public partial class AssessmentCaptureView : UserControl
             return;
         }
 
-        viewModel.StartCurrentModule();
+        try
+        {
+            isStartingFormalPresentation = true;
+            await EnterFormalPresentationModeAsync();
+            viewModel.StartCurrentModule();
+        }
+        catch (Exception exception)
+        {
+            ExitFormalPresentationMode();
+            StopModuleRecording(viewModel, CaptureMediaStopReason.Failed, exception.Message);
+            await viewModel.FailCurrentModuleAttemptAsync("PRESENTATION_START_FAILED", exception.Message);
+            viewModel.ShowStageNotice($"正式采集画面启动失败：{exception.Message}");
+        }
+        finally
+        {
+            isStartingFormalPresentation = false;
+            UpdateFormalPresentationForCurrentStage();
+        }
     }
 
     private async void StartSyncTestButton_Click(object sender, RoutedEventArgs e)
@@ -307,9 +503,13 @@ public partial class AssessmentCaptureView : UserControl
             return;
         }
 
-        if (!cameraPreviewHasFrame)
+        if (!HasRecentCameraAnalysisFrame())
         {
-            await StartCameraPreviewAsync();
+            if (!viewModel.IsCameraOpen)
+            {
+                await StartCameraPreviewAsync();
+            }
+
             viewModel.ShowStageNotice(viewModel.Localize("CaptureWorkspaceCameraNoFrameStageNotice"));
             return;
         }
@@ -405,6 +605,7 @@ public partial class AssessmentCaptureView : UserControl
             }
 
             cameraTimer.Stop();
+            faceStatusTimer.Stop();
             if (viewModel.IsMediaRecording)
             {
                 StopRecordingForPreviewStop();
@@ -420,6 +621,7 @@ public partial class AssessmentCaptureView : UserControl
             }
 
             cameraTimer.Start();
+            faceStatusTimer.Start();
         }
         catch (Exception exception)
         {
@@ -448,6 +650,7 @@ public partial class AssessmentCaptureView : UserControl
     private async Task StopCameraPreviewCoreAsync()
     {
         cameraTimer.Stop();
+        faceStatusTimer.Stop();
         StopRecordingForPreviewStop();
         if (ViewModel is { } viewModel)
         {
@@ -459,16 +662,36 @@ public partial class AssessmentCaptureView : UserControl
 
     private void ResetCameraPreviewDisplay()
     {
+        ClearCameraPreviewVisual();
+        (DataContext as AssessmentCaptureViewModel)?.ResetFaceReadiness();
+        (DataContext as AssessmentCaptureViewModel)?.ResetFaceConditionMonitoring();
+        lastCameraFaceStatusCapturedAt = DateTimeOffset.MinValue;
+        lastRecordingStatusUpdateAt = DateTime.MinValue;
+    }
+
+    private void ClearCameraPreviewVisual()
+    {
         CameraPreviewImage.Source = null;
         cameraPreviewBitmap = null;
         CameraGuideRectangle.Visibility = Visibility.Collapsed;
         CameraFaceRectangle.Visibility = Visibility.Collapsed;
         cameraPreviewHasFrame = false;
         latestCameraOverlay = null;
-        (DataContext as AssessmentCaptureViewModel)?.ResetFaceReadiness();
-        (DataContext as AssessmentCaptureViewModel)?.ResetFaceConditionMonitoring();
         lastCameraPreviewCapturedAt = DateTimeOffset.MinValue;
-        lastRecordingStatusUpdateAt = DateTime.MinValue;
+    }
+
+    private void SetCameraPreviewRenderingEnabled(bool enabled)
+    {
+        var viewModel = ViewModel;
+        viewModel?.SetCameraPreviewRenderingEnabled(enabled);
+        if (enabled && viewModel?.IsCameraOpen == true)
+        {
+            cameraTimer.Start();
+            return;
+        }
+
+        cameraTimer.Stop();
+        ClearCameraPreviewVisual();
     }
 
     private void StopRecordingForPreviewStop()
@@ -505,7 +728,6 @@ public partial class AssessmentCaptureView : UserControl
             if (!cameraPreviewHasFrame
                 || DateTimeOffset.Now - lastCameraPreviewCapturedAt > TimeSpan.FromSeconds(1))
             {
-                viewModel.ResetFaceReadiness();
                 CameraFaceRectangle.Visibility = Visibility.Collapsed;
                 CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceNoFrameRead");
             }
@@ -517,7 +739,6 @@ public partial class AssessmentCaptureView : UserControl
         {
             if (DateTimeOffset.Now - snapshot.CapturedAt > TimeSpan.FromSeconds(1))
             {
-                viewModel.ResetFaceReadiness();
                 CameraFaceRectangle.Visibility = Visibility.Collapsed;
                 CameraPreviewStatusText.Text = viewModel.Localize("CaptureWorkspaceNoFrameRead");
                 return;
@@ -553,36 +774,6 @@ public partial class AssessmentCaptureView : UserControl
             UpdateCameraOverlay(latestCameraOverlay.Value);
 
             cameraPreviewHasFrame = true;
-            var nowTimestamp = Stopwatch.GetTimestamp();
-            viewModel.ObserveFaceReadiness(
-                snapshot.FaceState,
-                snapshot.IsPrimaryFaceInsideGuide,
-                nowTimestamp);
-
-            var faceStatusText = FaceStateText(viewModel, snapshot.FaceState);
-            if (snapshot.FaceState == CameraFaceState.Normal && !snapshot.IsPrimaryFaceInsideGuide)
-            {
-                faceStatusText = viewModel.Localize("CaptureWorkspaceMoveFaceIntoFrame");
-            }
-
-            var shouldMonitorFace = viewModel.IsExecutingCaptureTask
-                && viewModel.IsMediaRecording
-                && !viewModel.IsSyncTestModule;
-            var monitorUpdate = viewModel.ObserveFaceCondition(snapshot.FaceState, nowTimestamp);
-            if (shouldMonitorFace)
-            {
-                if (!monitorUpdate.IsNormal)
-                {
-                    faceStatusText = viewModel.Localize(
-                        "CaptureWorkspaceFaceAbnormalCountdown",
-                        faceStatusText,
-                        monitorUpdate.AbnormalDuration.TotalSeconds);
-                }
-
-            }
-
-            CameraPreviewStatusText.Text = faceStatusText;
-
             if (viewModel.IsMediaRecording
                 && DateTime.Now - lastRecordingStatusUpdateAt >= TimeSpan.FromMilliseconds(500))
             {
@@ -590,6 +781,66 @@ public partial class AssessmentCaptureView : UserControl
                 lastRecordingStatusUpdateAt = DateTime.Now;
             }
         }
+    }
+
+    private void UpdateCameraFaceStatus()
+    {
+        var viewModel = ViewModel;
+        if (viewModel is null || !viewModel.IsCameraOpen)
+        {
+            return;
+        }
+
+        CameraFaceStatusSnapshot status;
+        if (!viewModel.TryTakeLatestCameraFaceStatus(out status))
+        {
+            if (lastCameraFaceStatusCapturedAt != DateTimeOffset.MinValue
+                && DateTimeOffset.Now - lastCameraFaceStatusCapturedAt <= TimeSpan.FromSeconds(1))
+            {
+                return;
+            }
+
+            status = new CameraFaceStatusSnapshot(
+                0,
+                DateTimeOffset.Now,
+                Stopwatch.GetTimestamp(),
+                CameraFaceState.DetectorUnavailable,
+                false);
+        }
+        else
+        {
+            lastCameraFaceStatusCapturedAt = status.CapturedAt;
+        }
+
+        viewModel.ObserveFaceReadiness(
+            status.State,
+            status.IsPrimaryFaceInsideGuide,
+            status.AnalyzedAtTimestamp);
+        var monitorUpdate = viewModel.ObserveFaceCondition(status.State, status.AnalyzedAtTimestamp);
+        var faceStatusText = FaceStateText(viewModel, status.State);
+        if (status.State == CameraFaceState.Normal && !status.IsPrimaryFaceInsideGuide)
+        {
+            faceStatusText = viewModel.Localize("CaptureWorkspaceMoveFaceIntoFrame");
+        }
+
+        if (viewModel.IsExecutingCaptureTask
+            && viewModel.IsMediaRecording
+            && !viewModel.IsSyncTestModule
+            && !monitorUpdate.IsNormal)
+        {
+            faceStatusText = viewModel.Localize(
+                "CaptureWorkspaceFaceAbnormalCountdown",
+                faceStatusText,
+                monitorUpdate.AbnormalDuration.TotalSeconds);
+        }
+
+        CameraPreviewStatusText.Text = faceStatusText;
+    }
+
+    private bool HasRecentCameraAnalysisFrame()
+    {
+        return lastCameraFaceStatusCapturedAt != DateTimeOffset.MinValue
+            && DateTimeOffset.Now - lastCameraFaceStatusCapturedAt <= TimeSpan.FromSeconds(1);
     }
 
     private void CameraPreviewViewport_SizeChanged(object sender, SizeChangedEventArgs e)

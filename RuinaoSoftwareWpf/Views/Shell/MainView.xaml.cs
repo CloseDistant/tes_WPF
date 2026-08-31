@@ -12,6 +12,8 @@ namespace RuinaoSoftwareWpf.Views;
 /// </summary>
 public partial class MainView : UserControl
 {
+    private bool isAssessmentPresentationMode;
+
     public MainView()
     {
         InitializeComponent();
@@ -28,6 +30,48 @@ public partial class MainView : UserControl
         AccountDropDownToggle.IsChecked = false;
         MoreDropDownToggle.IsChecked = false;
         PatientDropDownToggle.IsChecked = false;
+    }
+
+    /// <summary>
+    /// 正式数字表型任务使用的纯范式呈现模式。这里只改变 Shell 的可见结构，
+    /// 不修改导航 ViewModel 状态，因此退出任务后可以无损恢复进入前的工作台。
+    /// </summary>
+    public void EnterAssessmentPresentationMode()
+    {
+        if (isAssessmentPresentationMode)
+        {
+            return;
+        }
+
+        isAssessmentPresentationMode = true;
+        CloseTransientPopups();
+        ToolbarBorder.Visibility = Visibility.Collapsed;
+        ToolbarRow.Height = new GridLength(0);
+        StatusBorder.Visibility = Visibility.Collapsed;
+        StatusRow.Height = new GridLength(0);
+        SidebarToggleButton.Visibility = Visibility.Collapsed;
+        Grid.SetColumn(PageContent, 0);
+        Grid.SetColumnSpan(PageContent, 2);
+    }
+
+    /// <summary>
+    /// 离开正式任务时恢复普通软件框架。方法可重复调用，供异常、取消和卸载路径兜底。
+    /// </summary>
+    public void ExitAssessmentPresentationMode()
+    {
+        if (!isAssessmentPresentationMode)
+        {
+            return;
+        }
+
+        isAssessmentPresentationMode = false;
+        ToolbarRow.Height = new GridLength(40);
+        ToolbarBorder.Visibility = Visibility.Visible;
+        StatusRow.Height = new GridLength(22);
+        StatusBorder.Visibility = Visibility.Visible;
+        SidebarToggleButton.Visibility = Visibility.Visible;
+        Grid.SetColumn(PageContent, 1);
+        Grid.SetColumnSpan(PageContent, 1);
     }
 
     /// <summary>

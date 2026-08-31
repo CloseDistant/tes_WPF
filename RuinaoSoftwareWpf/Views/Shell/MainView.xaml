@@ -149,14 +149,14 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid>
+    <Grid x:Name="ShellRoot">
         <Grid.RowDefinitions>
-            <RowDefinition Height="40" />
+            <RowDefinition x:Name="ToolbarRow" Height="40" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="22" />
+            <RowDefinition x:Name="StatusRow" Height="22" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Background="#2A2B31" BorderBrush="#333640" BorderThickness="0,0,0,1">
+        <Border x:Name="ToolbarBorder" Grid.Row="0" Background="#2A2B31" BorderBrush="#333640" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="240" />
@@ -343,13 +343,14 @@
         </Border>
 
 
-        <Grid Grid.Row="1">
+        <Grid x:Name="ShellBody" Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="{Binding SidebarColumnWidth}" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0"
+            <Border x:Name="SidebarBorder"
+                    Grid.Column="0"
                     Background="#151923"
                     BorderBrush="#242A36"
                     BorderThickness="0,0,1,0"
@@ -486,10 +487,12 @@
             </Border>
 
 
-            <ContentControl Grid.Column="1"
+            <ContentControl x:Name="PageContent"
+                            Grid.Column="1"
                             Content="{Binding CurrentPageViewModel}" />
 
-            <Button Grid.Column="1"
+            <Button x:Name="SidebarToggleButton"
+                    Grid.Column="1"
                     Width="22"
                     Height="56"
                     HorizontalAlignment="Left"
@@ -627,7 +630,7 @@
             </Grid>
         </Border>
 
-        <Border Grid.Row="2" Background="#0D1017" BorderBrush="#252A35" BorderThickness="0,1,0,0">
+        <Border x:Name="StatusBorder" Grid.Row="2" Background="#0D1017" BorderBrush="#252A35" BorderThickness="0,1,0,0">
             <TextBlock Text="{Binding ShellState.FooterStatus}"
                        Visibility="Collapsed"
                        Foreground="{StaticResource SubText}"
