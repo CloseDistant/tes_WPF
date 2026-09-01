@@ -4,7 +4,7 @@
              xmlns:local="clr-namespace:RuinaoSoftwareWpf"
              xmlns:controls="clr-namespace:RuinaoSoftwareWpf.Views.Controls"
              Background="#11141D">
-    <Grid>
+    <Grid PreviewMouseLeftButtonDown="CommitFocusedInputOnBlankClick">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="420" />
             <ColumnDefinition Width="*" />

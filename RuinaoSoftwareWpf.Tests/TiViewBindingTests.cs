@@ -6,6 +6,19 @@ namespace RuinaoSoftwareWpf.Tests;
 public sealed class TiViewBindingTests
 {
     [Fact]
+    public void View_BlankClickCommitsFocusedParameterInput()
+    {
+        var rootGrid = LoadTiView()
+            .Root?
+            .Elements()
+            .Single(element => element.Name.LocalName == "Grid");
+
+        Assert.Equal(
+            "CommitFocusedInputOnBlankClick",
+            rootGrid?.Attribute("PreviewMouseLeftButtonDown")?.Value);
+    }
+
+    [Fact]
     public void ParameterDownloadProgress_ReadOnlyViewModelProperty_UsesOneWayBinding()
     {
         var path = Path.Combine(
