@@ -53,6 +53,18 @@ public partial class StimulationChannelCard : UserControl
         typeof(StimulationChannelCard),
         new PropertyMetadata(false));
 
+    public static readonly DependencyProperty IsAlternatingCurrentProperty = DependencyProperty.Register(
+        nameof(IsAlternatingCurrent),
+        typeof(bool),
+        typeof(StimulationChannelCard),
+        new PropertyMetadata(false));
+
+    public static readonly DependencyProperty AlternatingCurrentModeCodeProperty = DependencyProperty.Register(
+        nameof(AlternatingCurrentModeCode),
+        typeof(string),
+        typeof(StimulationChannelCard),
+        new PropertyMetadata(StimulationModeCodes.TemporalInterference));
+
     public static readonly DependencyProperty ShowRampDownProperty = DependencyProperty.Register(
         nameof(ShowRampDown),
         typeof(bool),
@@ -67,6 +79,12 @@ public partial class StimulationChannelCard : UserControl
 
     public static readonly DependencyProperty ShowSingleDurationProperty = DependencyProperty.Register(
         nameof(ShowSingleDuration),
+        typeof(bool),
+        typeof(StimulationChannelCard),
+        new PropertyMetadata(true));
+
+    public static readonly DependencyProperty ShowIntervalTimeProperty = DependencyProperty.Register(
+        nameof(ShowIntervalTime),
         typeof(bool),
         typeof(StimulationChannelCard),
         new PropertyMetadata(true));
@@ -147,6 +165,18 @@ public partial class StimulationChannelCard : UserControl
         set => SetValue(IsMonophasicPulseCurrentProperty, value);
     }
 
+    public bool IsAlternatingCurrent
+    {
+        get => (bool)GetValue(IsAlternatingCurrentProperty);
+        set => SetValue(IsAlternatingCurrentProperty, value);
+    }
+
+    public string AlternatingCurrentModeCode
+    {
+        get => (string)GetValue(AlternatingCurrentModeCodeProperty);
+        set => SetValue(AlternatingCurrentModeCodeProperty, value);
+    }
+
     public bool ShowRampDown
     {
         get => (bool)GetValue(ShowRampDownProperty);
@@ -163,6 +193,12 @@ public partial class StimulationChannelCard : UserControl
     {
         get => (bool)GetValue(ShowSingleDurationProperty);
         set => SetValue(ShowSingleDurationProperty, value);
+    }
+
+    public bool ShowIntervalTime
+    {
+        get => (bool)GetValue(ShowIntervalTimeProperty);
+        set => SetValue(ShowIntervalTimeProperty, value);
     }
 
     public bool ShowElectrodeDescription
@@ -207,7 +243,8 @@ public partial class StimulationChannelCard : UserControl
 
     private void RememberDirectCurrentValue(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if ((IsDirectCurrentCard || IsMonophasicPulseCurrent) && sender is TextBox textBox)
+        if ((IsDirectCurrentCard || IsMonophasicPulseCurrent || IsAlternatingCurrent)
+            && sender is TextBox textBox)
         {
             previousDirectCurrentValues[textBox] = textBox.Text;
         }
@@ -215,13 +252,19 @@ public partial class StimulationChannelCard : UserControl
 
     private void NormalizeDirectCurrentValue(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if ((!IsDirectCurrentCard && !IsMonophasicPulseCurrent)
+        if ((!IsDirectCurrentCard && !IsMonophasicPulseCurrent && !IsAlternatingCurrent)
             || sender is not TextBox textBox
             || textBox.Tag is not string kindName)
         {
             return;
         }
 
+
+        if (IsAlternatingCurrent)
+        {
+            NormalizeAlternatingCurrentValue(textBox, kindName);
+            return;
+        }
 
         if (IsMonophasicPulseCurrent)
         {
@@ -299,6 +342,96 @@ public partial class StimulationChannelCard : UserControl
         }
     }
 
+    private void NormalizeAlternatingCurrentValue(TextBox textBox, string kindName)
+    {
+        if (string.Equals(
+                AlternatingCurrentModeCode,
+                StimulationModeCodes.AlternatingCurrent,
+                StringComparison.Ordinal))
+        {
+            NormalizeTacsValue(textBox, kindName);
+            return;
+        }
+
+        var kind = kindName switch
+        {
+            nameof(DirectCurrentParameterKind.CurrentMilliamp) =>
+                TiAlternatingCurrentParameterKind.PeakCurrentMilliampere,
+            nameof(DirectCurrentParameterKind.RampUpSeconds) =>
+                TiAlternatingCurrentParameterKind.RampUpSeconds,
+            nameof(DirectCurrentParameterKind.RampDownSeconds) =>
+                TiAlternatingCurrentParameterKind.RampDownSeconds,
+            nameof(DirectCurrentParameterKind.TotalDurationSeconds) =>
+                TiAlternatingCurrentParameterKind.TotalDurationSeconds,
+            nameof(TiAlternatingCurrentParameterKind.FrequencyHz) =>
+                TiAlternatingCurrentParameterKind.FrequencyHz,
+            _ => (TiAlternatingCurrentParameterKind)(-1),
+        };
+        if ((int)kind < 0)
+        {
+            return;
+        }
+
+        var fallback = previousDirectCurrentValues.GetValueOrDefault(
+            textBox,
+            TiAlternatingCurrentParameterRules.GetDefault(kind));
+        var result = TiAlternatingCurrentParameterRules.Normalize(kind, textBox.Text, fallback);
+        textBox.Text = result.Value;
+        textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+
+        var expression = BindingOperations.GetBindingExpression(textBox, TextBox.TextProperty);
+        if (expression is not null)
+        {
+            Validation.ClearInvalid(expression);
+        }
+
+        textBox.ToolTip = null;
+        previousDirectCurrentValues[textBox] = result.Value;
+        if (!result.IsValid
+            && ParameterValidationFailedCommand?.CanExecute(result.ErrorMessage) == true)
+        {
+            ParameterValidationFailedCommand.Execute(result.ErrorMessage);
+        }
+    }
+
+    private void NormalizeTacsValue(TextBox textBox, string kindName)
+    {
+        var kind = kindName switch
+        {
+            nameof(DirectCurrentParameterKind.CurrentMilliamp) => TacsParameterKind.PeakCurrentMilliampere,
+            nameof(DirectCurrentParameterKind.RampUpSeconds) => TacsParameterKind.RampUpSeconds,
+            nameof(DirectCurrentParameterKind.RampDownSeconds) => TacsParameterKind.RampDownSeconds,
+            nameof(DirectCurrentParameterKind.TotalDurationSeconds) => TacsParameterKind.TotalDurationSeconds,
+            nameof(TiAlternatingCurrentParameterKind.FrequencyHz) => TacsParameterKind.FrequencyHz,
+            _ => (TacsParameterKind)(-1),
+        };
+        if ((int)kind < 0)
+        {
+            return;
+        }
+
+        var fallback = previousDirectCurrentValues.GetValueOrDefault(
+            textBox,
+            TacsParameterRules.GetDefault(kind));
+        var result = TacsParameterRules.Normalize(kind, textBox.Text, fallback);
+        textBox.Text = result.Value;
+        textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+
+        var expression = BindingOperations.GetBindingExpression(textBox, TextBox.TextProperty);
+        if (expression is not null)
+        {
+            Validation.ClearInvalid(expression);
+        }
+
+        textBox.ToolTip = null;
+        previousDirectCurrentValues[textBox] = result.Value;
+        if (!result.IsValid
+            && ParameterValidationFailedCommand?.CanExecute(result.ErrorMessage) == true)
+        {
+            ParameterValidationFailedCommand.Execute(result.ErrorMessage);
+        }
+    }
+
     private void ClearNumericValidation(object sender, TextChangedEventArgs e)
     {
         if (sender is not TextBox textBox)
@@ -330,7 +463,7 @@ public partial class StimulationChannelCard : UserControl
         }
     }
 
-    private bool IsDirectCurrentCard => ShowPolarity && !ShowCarrierFrequency;
+    private bool IsDirectCurrentCard => ShowPolarity && !ShowCarrierFrequency && !IsAlternatingCurrent;
 
     private static bool IsDecimalCandidate(string value) =>
         Regex.IsMatch(value, "^[0-9]*([.][0-9]*)?$", RegexOptions.CultureInvariant);

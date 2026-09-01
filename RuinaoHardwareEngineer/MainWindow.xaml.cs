@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -73,6 +73,9 @@ public partial class MainWindow : Window
         StopStimulationImpedanceMonitoring(null);
         StopStimulationCountdown();
         StopProductDirectCurrentProgress(clearRemaining: true);
+        StopProductTacsProgress(clearRemaining: true);
+        StopProductMtpcsProgress(clearRemaining: true);
+        StopProductTpcsProgress(clearRemaining: true);
         diagnosticRefreshTimer.Stop();
         client.RawFrameSent -= Client_RawFrameSent;
         client.RawFrameReceived -= Client_RawFrameReceived;
@@ -687,7 +690,9 @@ public partial class MainWindow : Window
                 StopStimulationImpedanceMonitoring("硬件连接已断开，阻抗自动读取已停止。");
                 UpdateImpedanceBoardOptions(Array.Empty<Features.DeviceTopology.EngineerBoardSlot>());
                 InvalidateProductDirectCurrentConfiguration("硬件连接已断开，产品tDCS配置状态已失效。");
+                InvalidateProductTacsConfiguration("硬件连接已断开，产品tACS配置状态已失效。");
                 InvalidateProductMtpcsConfiguration("硬件连接已断开，产品M-tPCS配置状态已失效。");
+                InvalidateProductTpcsConfiguration("硬件连接已断开，产品tPCS配置状态已失效。");
             }
 
             UpdateConnectionStateBadge();

@@ -4,7 +4,7 @@
              xmlns:local="clr-namespace:RuinaoSoftwareWpf"
              xmlns:controls="clr-namespace:RuinaoSoftwareWpf.Views.Controls"
              Background="#11141D">
-    <Grid>
+    <Grid PreviewMouseLeftButtonDown="CommitFocusedInputOnBlankClick">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="420" />
             <ColumnDefinition Width="*" />
@@ -117,12 +117,73 @@
                                                          StartCommand="{Binding DataContext.StartChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                          StopCommand="{Binding DataContext.StopChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                          UsePrescriptionCommand="{Binding DataContext.UseChannelPrescriptionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                         ParameterValidationFailedCommand="{Binding DataContext.ParameterValidationFailedCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                          ShowCarrierFrequency="True"
                                                          ShowPolarity="False"
+                                                         IsAlternatingCurrent="True"
+                                                         EnableSimulatedWaveform="True"
+                                                         ShowMode="True"
+                                                         ShowIntervalTime="True"
+                                                         ShowSingleDuration="True"
                                                          ShowElectrodeDescription="True" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Grid>
+
+        <Border Grid.ColumnSpan="2"
+                Panel.ZIndex="100"
+                Background="#B30B0F17"
+                Visibility="{Binding IsParameterDownloadVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Border Width="520"
+                    Padding="28,26"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="#1C202B"
+                    BorderBrush="#3A4353"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                <StackPanel>
+                    <TextBlock Text="正在下发刺激参数"
+                               Foreground="#E8EDF6"
+                               FontSize="20"
+                               FontWeight="SemiBold" />
+                    <TextBlock Margin="0,8,0,0"
+                               Text="请稍候，参数下发期间不能修改或重复开始。"
+                               Foreground="#919DB0"
+                               FontSize="13" />
+                    <DockPanel Margin="0,24,0,8">
+                        <TextBlock Text="总体进度"
+                                   Foreground="#AAB4C5"
+                                   FontSize="13" />
+                        <TextBlock Text="{Binding ParameterDownloadPercentageText}"
+                                   Foreground="#E8EDF6"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   HorizontalAlignment="Right" />
+                    </DockPanel>
+                    <ProgressBar Height="9"
+                                 Minimum="0"
+                                 Maximum="100"
+                                 Value="{Binding ParameterDownloadPercentage, Mode=OneWay}" />
+                    <TextBlock Margin="0,10,0,0"
+                               Text="{Binding ParameterDownloadStatus}"
+                               Foreground="#8D99AC"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis" />
+                    <Border Margin="0,22,0,0"
+                            Padding="12,10"
+                            Background="#242115"
+                            BorderBrush="#665020"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <TextBlock Text="全部参数确认完成后，系统将自动同步开始刺激。"
+                                   Foreground="#E1B75A"
+                                   FontSize="13"
+                                   TextWrapping="Wrap" />
+                    </Border>
+                </StackPanel>
+            </Border>
+        </Border>
     </Grid>
 </UserControl>

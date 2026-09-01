@@ -4,6 +4,8 @@ internal sealed class TestUserDialogService : IUserDialogService
 {
     public bool ConfirmationResult { get; set; } = true;
 
+    public Func<string, string, bool>? ConfirmationHandler { get; set; }
+
     public bool ChannelStartConfirmationResult { get; set; } = true;
 
     public bool SynchronizedStartConfirmationResult { get; set; } = true;
@@ -28,7 +30,7 @@ internal sealed class TestUserDialogService : IUserDialogService
     {
         LastConfirmationTitle = title;
         LastConfirmationMessage = message;
-        return ConfirmationResult;
+        return ConfirmationHandler?.Invoke(title, message) ?? ConfirmationResult;
     }
 
     public bool ConfirmDirectCurrentChannelStart(DirectCurrentChannelStartConfirmationRequest request)

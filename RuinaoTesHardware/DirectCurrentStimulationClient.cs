@@ -14,11 +14,11 @@ public sealed class DirectCurrentStimulationClient
     public const uint ConfigurationVersion = 0x16;
     public const uint TrapezoidWaveformType = 8;
 
-    private readonly TypeEightStimulationHardwareWriter writer;
+    private readonly CompositeStimulationHardwareWriter writer;
 
     public DirectCurrentStimulationClient(BackplaneClient client)
     {
-        writer = new TypeEightStimulationHardwareWriter(client);
+        writer = new CompositeStimulationHardwareWriter(client);
     }
 
     public async Task<DirectCurrentConfigurationResult> ConfigureAsync(
@@ -29,7 +29,7 @@ public sealed class DirectCurrentStimulationClient
         var plan = CreatePlan(parameters);
         var waveformWrite = await ExecuteHardwareOperationAsync(
             "下发类型8梯形配置",
-            () => writer.WriteWaveformAsync(ToHardwarePlan(plan), options, cancellationToken));
+            () => writer.WriteWaveformAsync(ToHardwarePlan(plan), 0, options, cancellationToken));
         var controlWrite = await ExecuteHardwareOperationAsync(
             "下发通道总控制配置",
             () => writer.WriteControlAsync(ToHardwarePlan(plan), options, cancellationToken));
@@ -73,7 +73,7 @@ public sealed class DirectCurrentStimulationClient
         CancellationToken cancellationToken = default) =>
         StartChannelsAsync(
             boardAddress,
-            TypeEightStimulationHardwareWriter.CreateSingleChannelMask(channel),
+            CompositeStimulationHardwareWriter.CreateSingleChannelMask(channel),
             options,
             cancellationToken);
 
@@ -85,7 +85,7 @@ public sealed class DirectCurrentStimulationClient
         CancellationToken cancellationToken = default) =>
         StopChannelsAsync(
             boardAddress,
-            TypeEightStimulationHardwareWriter.CreateSingleChannelMask(channel),
+            CompositeStimulationHardwareWriter.CreateSingleChannelMask(channel),
             options,
             cancellationToken);
 
@@ -96,7 +96,7 @@ public sealed class DirectCurrentStimulationClient
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)
     {
-        TypeEightStimulationHardwareWriter.ValidateChannelMask(channelMask);
+        CompositeStimulationHardwareWriter.ValidateChannelMask(channelMask);
         var result = await ExecuteHardwareOperationAsync(
             $"开始直流电刺激通道0x{channelMask:X2}",
             () => writer.StartAsync(boardAddress, channelMask, options, cancellationToken));
@@ -112,7 +112,7 @@ public sealed class DirectCurrentStimulationClient
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)
     {
-        TypeEightStimulationHardwareWriter.ValidateChannelMask(channelMask);
+        CompositeStimulationHardwareWriter.ValidateChannelMask(channelMask);
         var result = await ExecuteHardwareOperationAsync(
             $"停止直流电刺激通道0x{channelMask:X2}",
             () => writer.StopAsync(boardAddress, channelMask, options, cancellationToken));
@@ -244,27 +244,38 @@ public sealed class DirectCurrentStimulationClient
             message);
     }
 
-    private static TypeEightStimulationHardwarePlan ToHardwarePlan(
+    private static CompositeStimulationHardwarePlan ToHardwarePlan(
         DirectCurrentStimulationPlan plan) =>
         new(
             plan.Parameters.BoardAddress,
             plan.Parameters.Channel,
             plan.EnableMask,
             plan.ConfigurationVersion,
-            plan.WaveformType,
-            plan.DurationMicroseconds,
-            plan.LowDa,
-            plan.HighDa,
-            plan.RiseMicroseconds,
-            plan.HighHoldMicroseconds,
-            plan.FallMicroseconds,
-            plan.LowHoldMicroseconds,
-            plan.TotalTimeMilliseconds);
+            plan.TotalTimeMilliseconds,
+            [
+                new StimulationWaveformHardwareSegment(
+                    plan.WaveformType,
+                    plan.DurationMicroseconds,
+                    FrequencyHz: 0,
+                    Amplitude: 0,
+                    Offset: 0,
+                    PhaseDegree: 0,
+                    DutyPermilleOrOrder: 0,
+                    plan.LowDa,
+                    plan.HighDa,
+                    plan.RiseMicroseconds,
+                    plan.HighHoldMicroseconds,
+                    plan.FallMicroseconds,
+                    plan.LowHoldMicroseconds,
+                    SampleCount: 0,
+                    RepeatCount: 1,
+                    Flags: 0),
+            ]);
 
     private static void Validate(DirectCurrentStimulationParameters parameters)
     {
-        TypeEightStimulationHardwareWriter.ValidateBoardAddress(parameters.BoardAddress);
-        TypeEightStimulationHardwareWriter.ValidateChannel(parameters.Channel);
+        CompositeStimulationHardwareWriter.ValidateBoardAddress(parameters.BoardAddress);
+        CompositeStimulationHardwareWriter.ValidateChannel(parameters.Channel);
 
         _ = ConvertCurrentToDa(parameters.CurrentMilliampere);
         ValidateTime(parameters.RampUpSeconds, "渐升时间", allowZero: true);

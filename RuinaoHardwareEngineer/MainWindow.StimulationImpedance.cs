@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -43,6 +43,8 @@ public partial class MainWindow
             (ImpedanceBoardComboBox.SelectedItem as BoardAddressOption)?.Value;
         var previousTdcsAddress =
             (ProductTdcsBoardAddressComboBox.SelectedItem as BoardAddressOption)?.Value;
+        var previousTacsAddress =
+            (ProductTacsBoardAddressComboBox.SelectedItem as BoardAddressOption)?.Value;
         var previousMtpcsAddress =
             (ProductMtpcsBoardAddressComboBox.SelectedItem as BoardAddressOption)?.Value;
         var previousTpcsAddress =
@@ -57,12 +59,17 @@ public partial class MainWindow
 
         ImpedanceBoardComboBox.SelectedItem = FindOnlineBoard(previousImpedanceAddress);
         ProductTdcsBoardAddressComboBox.SelectedItem = FindOnlineBoard(previousTdcsAddress);
+        ProductTacsBoardAddressComboBox.SelectedItem = FindOnlineBoard(previousTacsAddress);
         ProductMtpcsBoardAddressComboBox.SelectedItem = FindOnlineBoard(previousMtpcsAddress);
         ProductTpcsBoardAddressComboBox.SelectedItem = FindOnlineBoard(previousTpcsAddress);
         InvalidateProductDirectCurrentConfiguration(
             "拓扑已更新，原产品tDCS配置状态已失效，请重新生成并下发。");
+        InvalidateProductTacsConfiguration(
+            "拓扑已更新，原产品tACS配置状态已失效，请重新生成并下发。");
         InvalidateProductMtpcsConfiguration(
             "拓扑已更新，原产品M-tPCS配置状态已失效，请重新生成并下发。");
+        InvalidateProductTpcsConfiguration(
+            "拓扑已更新，原产品tPCS配置状态已失效，请重新生成并下发。");
         ImpedanceStatusText.Text = OnlineStimulationBoardOptions.Count == 0
             ? "拓扑中没有在线业务板，请先确认硬件连接并重新扫描。"
             : $"已关联{OnlineStimulationBoardOptions.Count}个在线电刺激业务板槽位；请选择后读取CH1～CH8。";

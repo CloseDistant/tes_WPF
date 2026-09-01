@@ -50,6 +50,24 @@ public sealed class PulseCurrentParametersTests
         Assert.True(success, error);
         Assert.NotNull(parameters);
         Assert.Equal(5, parameters.PlannedTotalCount);
+        Assert.Equal(1.1, parameters.TotalRuntimeSeconds, 6);
+    }
+
+    [Fact]
+    public void TryCreate_RiseWidthDoesNotReducePulsesInsideTreatmentTime()
+    {
+        var channel = CreateValidChannel();
+        channel.PulseWidthMilliseconds = "100";
+        channel.IntervalWidthMilliseconds = "100";
+        channel.TreatmentDurationSeconds = "1";
+        channel.RiseWidthMilliseconds = "0";
+        Assert.True(PulseCurrentParameters.TryCreate(channel, out var withoutRise, out var firstError), firstError);
+
+        channel.RiseWidthMilliseconds = "900";
+        Assert.True(PulseCurrentParameters.TryCreate(channel, out var withRise, out var secondError), secondError);
+
+        Assert.Equal(withoutRise!.PlannedTotalCount, withRise!.PlannedTotalCount);
+        Assert.Equal(1.9, withRise.TotalRuntimeSeconds, 6);
     }
 
     [Theory]

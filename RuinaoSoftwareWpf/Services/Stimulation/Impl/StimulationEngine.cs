@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 using System.Text.Json;
 
@@ -48,6 +48,21 @@ public sealed class StimulationEngine : IStimulationEngine
         string prescriptionName,
         CancellationToken cancellationToken = default)
     {
+        return await StartTiGroupAsync(
+            group,
+            selectedChannelNames,
+            prescriptionName,
+            progress: null,
+            cancellationToken);
+    }
+
+    public async Task<HardwareOperationResult> StartTiGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string prescriptionName,
+        IProgress<StimulationParameterDownloadProgress>? progress,
+        CancellationToken cancellationToken = default)
+    {
         authorizationService.RequireSignedIn();
         activeConfiguration = StimulationConfigurationSnapshot.Create(group);
         var parameterRecord = StimulationRecordParameters.CreateTiPrescription(group, prescriptionName);
@@ -66,7 +81,12 @@ public sealed class StimulationEngine : IStimulationEngine
             "StartTiGroupRequested",
             () => RegisterActiveChannels(executionGroup),
             "StartTiGroupConfirmed",
-            token => hardwareService.StartGroupAsync(executionGroup, selectedChannelNames, parameterRecord, token),
+            token => hardwareService.StartTiGroupAsync(
+                executionGroup,
+                selectedChannelNames,
+                parameterRecord,
+                progress,
+                token),
             cancellationToken);
     }
 
@@ -98,6 +118,40 @@ public sealed class StimulationEngine : IStimulationEngine
             cancellationToken);
     }
 
+    public async Task<HardwareOperationResult> StartTacsGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string prescriptionName,
+        IProgress<StimulationParameterDownloadProgress>? progress,
+        CancellationToken cancellationToken = default)
+    {
+        authorizationService.RequireSignedIn();
+        activeConfiguration = StimulationConfigurationSnapshot.Create(group);
+        var parameterRecord = StimulationRecordParameters.CreateTacsPrescription(group, prescriptionName);
+        var executionGroup = activeConfiguration.ToMutableGroup();
+        if (patientService.CurrentPatient is not null)
+        {
+            var session = await unifiedSessionService.GetOrStartAsync(cancellationToken);
+            configurationSnapshots.Capture(session.SessionKey, SessionModuleCodes.Stimulation, activeConfiguration);
+            await RecordRequestAsync("start_requested", executionGroup, selectedChannelNames, cancellationToken);
+        }
+
+        await safetyService.EnsureCanStartStimulationAsync(cancellationToken);
+        auditLog.RecordUserAction($"Start tACS group {group.Title}");
+        return await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Starting,
+            "StartTacsGroupRequested",
+            () => RegisterActiveChannels(executionGroup),
+            "StartTacsGroupConfirmed",
+            token => hardwareService.StartTacsGroupAsync(
+                executionGroup,
+                selectedChannelNames,
+                parameterRecord,
+                progress,
+                token),
+            cancellationToken);
+    }
+
     public async Task<HardwareOperationResult> StartMonophasicPulseCurrentGroupAsync(
         TiGroup group,
         string selectedChannelNames,
@@ -124,6 +178,34 @@ public sealed class StimulationEngine : IStimulationEngine
             "StartMonophasicPulseCurrentGroupRequested",
             () => RegisterActiveChannels(executionGroup),
             "StartMonophasicPulseCurrentGroupConfirmed",
+            token => hardwareService.StartGroupAsync(executionGroup, selectedChannelNames, parameterRecord, token),
+            cancellationToken);
+    }
+
+    public async Task<HardwareOperationResult> StartPulseCurrentGroupAsync(
+        TiGroup group,
+        string selectedChannelNames,
+        string prescriptionName,
+        CancellationToken cancellationToken = default)
+    {
+        authorizationService.RequireSignedIn();
+        activeConfiguration = StimulationConfigurationSnapshot.Create(group);
+        var parameterRecord = StimulationRecordParameters.CreatePulseCurrentPrescription(group, prescriptionName);
+        var executionGroup = activeConfiguration.ToMutableGroup();
+        if (patientService.CurrentPatient is not null)
+        {
+            var session = await unifiedSessionService.GetOrStartAsync(cancellationToken);
+            configurationSnapshots.Capture(session.SessionKey, SessionModuleCodes.Stimulation, activeConfiguration);
+            await RecordRequestAsync("start_requested", executionGroup, selectedChannelNames, cancellationToken);
+        }
+
+        await safetyService.EnsureCanStartStimulationAsync(cancellationToken);
+        auditLog.RecordUserAction($"Start tPCS group {group.Title}");
+        return await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Starting,
+            "StartPulseCurrentGroupRequested",
+            () => RegisterActiveChannels(executionGroup),
+            "StartPulseCurrentGroupConfirmed",
             token => hardwareService.StartGroupAsync(executionGroup, selectedChannelNames, parameterRecord, token),
             cancellationToken);
     }
@@ -199,6 +281,30 @@ public sealed class StimulationEngine : IStimulationEngine
         return result;
     }
 
+    public async Task<HardwareOperationResult> EmergencyStopTacsGroupAsync(
+        TiGroup group,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var executionGroup = StimulationConfigurationSnapshot.Create(group).ToMutableGroup();
+        await RecordRequestIfSessionActiveAsync("emergency_stop_requested", executionGroup, reason, cancellationToken);
+        auditLog.RecordUserAction($"Emergency stop tACS group {group.Title}: {reason}");
+        var result = await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Stopping,
+            $"EmergencyStopTacsRequested:{reason}",
+            () => ClearActiveChannels(StimulationExecutionState.EmergencyStopped),
+            $"EmergencyStopTacsConfirmed:{reason}",
+            token => hardwareService.EmergencyStopGroupAsync(
+                executionGroup,
+                reason,
+                StimulationModeCodes.AlternatingCurrent,
+                token),
+            cancellationToken);
+        activeConfiguration = null;
+        configurationSnapshots.Clear(SessionModuleCodes.Stimulation);
+        return result;
+    }
+
     public async Task<HardwareOperationResult> EmergencyStopMonophasicPulseCurrentGroupAsync(
         TiGroup group,
         string reason,
@@ -216,6 +322,30 @@ public sealed class StimulationEngine : IStimulationEngine
                 executionGroup,
                 reason,
                 StimulationModeCodes.MonophasicPulseCurrent,
+                token),
+            cancellationToken);
+        activeConfiguration = null;
+        configurationSnapshots.Clear(SessionModuleCodes.Stimulation);
+        return result;
+    }
+
+    public async Task<HardwareOperationResult> EmergencyStopPulseCurrentGroupAsync(
+        TiGroup group,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var executionGroup = StimulationConfigurationSnapshot.Create(group).ToMutableGroup();
+        await RecordRequestIfSessionActiveAsync("emergency_stop_requested", executionGroup, reason, cancellationToken);
+        auditLog.RecordUserAction($"Emergency stop tPCS group {group.Title}: {reason}");
+        var result = await ExecuteConfirmedTransitionAsync(
+            StimulationExecutionState.Stopping,
+            $"EmergencyStopPulseCurrentRequested:{reason}",
+            () => ClearActiveChannels(StimulationExecutionState.EmergencyStopped),
+            $"EmergencyStopPulseCurrentConfirmed:{reason}",
+            token => hardwareService.EmergencyStopGroupAsync(
+                executionGroup,
+                reason,
+                StimulationModeCodes.PulseCurrent,
                 token),
             cancellationToken);
         activeConfiguration = null;

@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 public sealed record StimulationChannelSnapshot(
     string Name,
@@ -12,4 +12,8 @@ public sealed record StimulationChannelSnapshot(
     string SingleDurationS,
     string FrequencyHz,
     string Polarity,
-    string StimulationMode);
+    string StimulationMode,
+    string PulseWidthMilliseconds = "",
+    string PulseRiseWidthMilliseconds = "",
+    string PulseIntervalWidthMilliseconds = "",
+    string PlannedPulseCount = "");

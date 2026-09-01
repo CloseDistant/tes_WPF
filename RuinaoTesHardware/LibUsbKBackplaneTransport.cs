@@ -305,7 +305,7 @@ public sealed class LibUsbKBackplaneTransport : IBackplaneTransport, IBackplaneT
     private static void ThrowLastWin32(string operation)
     {
         var error = Marshal.GetLastWin32Error();
-        throw new BackplaneConnectionException($"{operation}失败：{new Win32Exception(error).Message}（{error}）。");
+        throw new BackplaneConnectionException(UsbTransportErrorFormatter.Format(operation, error));
     }
 
     private const string LibUsbKLibrary = "libusbK.dll";

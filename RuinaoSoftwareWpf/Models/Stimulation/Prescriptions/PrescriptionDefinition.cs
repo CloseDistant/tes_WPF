@@ -28,7 +28,13 @@ public sealed record PrescriptionDefinition(
     double? DirectCurrentSingleDurationSecondsValue = null,
     double? DirectCurrentRampUpSecondsValue = null,
     double? DirectCurrentRampDownSecondsValue = null,
-    double? PulseTreatmentDurationSecondsValue = null)
+    double? PulseTreatmentDurationSecondsValue = null,
+    double? TacsPeakCurrentMilliampereValue = null,
+    double? TacsRampUpSecondsValue = null,
+    double? TacsRampDownSecondsValue = null,
+    int? TacsFrequencyHzValue = null,
+    double? TacsTotalDurationSecondsValue = null,
+    int? TacsParameterVersion = null)
 {
     public const string PulseCurrentStimulationType = StimulationModeCodes.PulseCurrent;
 
@@ -38,11 +44,21 @@ public sealed record PrescriptionDefinition(
         StimulationType,
         StimulationModeCodes.MonophasicPulseCurrent,
         StringComparison.Ordinal);
-    public string CurrentDisplay => $"{CurrentMilliamp:0.##} mA";
+    public bool IsTemporalInterference => string.Equals(
+        StimulationType,
+        StimulationModeCodes.TemporalInterference,
+        StringComparison.Ordinal);
+    public bool IsTacs => string.Equals(
+        StimulationType,
+        StimulationModeCodes.AlternatingCurrent,
+        StringComparison.Ordinal);
+    public string CurrentDisplay => IsTemporalInterference || IsTacs
+        ? $"{CurrentMilliamp:0.000} mA"
+        : $"{CurrentMilliamp:0.##} mA";
     public string CurrentLabel => "幅值";
     public string TotalDurationLabel => IsPulseCurrent
         ? "治疗时间"
-        : IsMonophasicPulseCurrent ? "刺激时间" : "总时长";
+        : IsMonophasicPulseCurrent || IsTemporalInterference || IsTacs ? "刺激时间" : "总时长";
     public string IntervalLabel => IsPulseCurrent ? "间隔宽度" : "间隔时间";
     public string SessionDurationLabel => IsPulseCurrent ? "脉冲宽度" : "单次时长";
     public string RampUpLabel => IsPulseCurrent
@@ -64,23 +80,43 @@ public sealed record PrescriptionDefinition(
         DirectCurrentRampDownSecondsValue ?? RampDownSeconds;
     public double PulseTreatmentDurationSecondsResolved =>
         PulseTreatmentDurationSecondsValue ?? PulseTreatmentDurationSeconds ?? 0d;
+    public double TacsPeakCurrentMilliampere =>
+        TacsPeakCurrentMilliampereValue ?? CurrentMilliamp;
+    public double TacsRampUpSeconds =>
+        TacsRampUpSecondsValue ?? DirectCurrentRampUpDurationSeconds;
+    public double TacsRampDownSeconds =>
+        TacsRampDownSecondsValue ?? DirectCurrentRampDownDurationSeconds;
+    public int TacsFrequencyHz => TacsFrequencyHzValue ?? 1000;
+    public double TacsTotalDurationSeconds =>
+        TacsTotalDurationSecondsValue ?? DirectCurrentTotalDurationSeconds;
     public string TotalDurationDisplay => IsPulseCurrent
         ? $"{PulseCurrentParameterRules.FormatTreatmentDuration(PulseTreatmentDurationSecondsResolved)} s"
-        : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentTotalDurationSeconds)} s";
+        : IsTacs
+            ? $"{TacsParameterRules.Format(TacsParameterKind.TotalDurationSeconds, (decimal)TacsTotalDurationSeconds)} s"
+            : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentTotalDurationSeconds)} s";
     public string IntervalDisplay => IsPulseCurrent
         ? FormatPulseValue(PulseIntervalWidthMilliseconds, "ms")
-        : IsContinuous ? "/" : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentIntervalDurationSeconds)} s";
+        : IsTemporalInterference || IsTacs
+            ? "-"
+            : IsContinuous ? "/" : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentIntervalDurationSeconds)} s";
     public string SessionDurationDisplay => IsPulseCurrent
         ? FormatPulseValue(PulseWidthMilliseconds, "ms")
-        : IsMonophasicPulseCurrent || IsContinuous
+        : IsTemporalInterference || IsTacs
+            ? "-"
+            : IsMonophasicPulseCurrent || IsContinuous
             ? "/"
             : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentSingleDurationSeconds)} s";
     public string RampUpDisplay => IsPulseCurrent
         ? FormatPulseValue(PulseRiseWidthMilliseconds, "ms")
-        : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentRampUpDurationSeconds)} s";
+        : IsTacs
+            ? $"{TacsParameterRules.Format(TacsParameterKind.RampUpSeconds, (decimal)TacsRampUpSeconds)} s"
+            : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentRampUpDurationSeconds)} s";
     public string RampDownDisplay => IsPulseCurrent || IsMonophasicPulseCurrent
         ? "/"
-        : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentRampDownDurationSeconds)} s";
+        : IsTacs
+            ? $"{TacsParameterRules.Format(TacsParameterKind.RampDownSeconds, (decimal)TacsRampDownSeconds)} s"
+            : $"{DirectCurrentParameterRules.FormatTime(DirectCurrentRampDownDurationSeconds)} s";
+    public string FrequencyDisplay => IsTacs ? $"{TacsFrequencyHz} Hz" : string.Empty;
     public string DisplayName => string.IsNullOrWhiteSpace(StimulationType)
         ? Name
         : $"{Name} ({StimulationType})";
@@ -90,8 +126,10 @@ public sealed record PrescriptionDefinition(
         && PulseRiseWidthMilliseconds.HasValue
         && PulseIntervalWidthMilliseconds.HasValue;
     public string DeliveryModeRowHeight => IsMonophasicPulseCurrent ? "0" : "42";
+    public string IntervalRowHeight => "42";
     public string SingleDurationRowHeight => IsMonophasicPulseCurrent ? "0" : "42";
     public string RampDownRowHeight => IsMonophasicPulseCurrent ? "0" : "42";
+    public string FrequencyRowHeight => IsTacs ? "42" : "0";
 
     public string GetChannelPolarity(int channelIndex)
     {

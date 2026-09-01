@@ -252,7 +252,11 @@ public sealed class PrescriptionViewModel : ObservableObject
             ? BuildPulseCurrentCsvRows(prescription)
             : prescription.IsMonophasicPulseCurrent
                 ? BuildMonophasicPulseCurrentCsvRows(prescription)
-                : BuildMinuteBasedCsvRows(prescription);
+                : prescription.IsTemporalInterference
+                    ? BuildTemporalInterferenceCsvRows(prescription)
+                    : prescription.IsTacs
+                        ? BuildTacsCsvRows(prescription)
+                        : BuildMinuteBasedCsvRows(prescription);
         var builder = new StringBuilder("参数,内容\r\n");
         foreach (var (label, value) in rows) builder.Append(Escape(label)).Append(',').Append(Escape(value)).Append("\r\n");
         return builder.ToString();
@@ -285,6 +289,31 @@ public sealed class PrescriptionViewModel : ObservableObject
         ("刺激模式", prescription.StimulationType), ("幅值", prescription.CurrentDisplay),
         ("刺激时间", prescription.TotalDurationDisplay), ("间隔时间", prescription.IntervalDisplay),
         ("渐升时间（渐降同值）", prescription.RampUpDisplay),
+        ("疗程", prescription.Course), ("证据等级", prescription.EvidenceGrade)
+    ];
+
+    private static (string Label, string Value)[] BuildTemporalInterferenceCsvRows(
+        PrescriptionDefinition prescription) =>
+    [
+        ("处方名称", prescription.Name), ("适应症", prescription.Indication),
+        ("刺激模式", prescription.StimulationType), ("幅值", prescription.CurrentDisplay),
+        ("模式", prescription.DeliveryMode),
+        ("刺激时间", prescription.TotalDurationDisplay),
+        ("间隔时间", prescription.IntervalDisplay),
+        ("单次时长", prescription.SessionDurationDisplay),
+        ("渐升时间", prescription.RampUpDisplay), ("渐降时间", prescription.RampDownDisplay),
+        ("疗程", prescription.Course), ("证据等级", prescription.EvidenceGrade)
+    ];
+
+    private static (string Label, string Value)[] BuildTacsCsvRows(
+        PrescriptionDefinition prescription) =>
+    [
+        ("处方名称", prescription.Name), ("适应症", prescription.Indication),
+        ("刺激模式", prescription.StimulationType), ("幅值", prescription.CurrentDisplay),
+        ("模式", prescription.DeliveryMode), ("刺激时间", prescription.TotalDurationDisplay),
+        ("载波频率", prescription.FrequencyDisplay),
+        ("间隔时间", prescription.IntervalDisplay), ("单次时长", prescription.SessionDurationDisplay),
+        ("渐升时间", prescription.RampUpDisplay), ("渐降时间", prescription.RampDownDisplay),
         ("疗程", prescription.Course), ("证据等级", prescription.EvidenceGrade)
     ];
 

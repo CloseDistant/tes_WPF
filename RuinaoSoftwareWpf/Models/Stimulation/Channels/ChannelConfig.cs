@@ -20,14 +20,20 @@ public sealed class ChannelConfig : ObservableObject, IStimulationImpedanceChann
     private string durationS = string.Empty;
     private string intervalS = string.Empty;
     private string singleDurationS = "60";
+    private string continuousTimingPlaceholder = "/";
     private string frequencyHz = string.Empty;
     private string polarity = "不掉转";
     private string stimulationMode = "间隔";
+    private string pulseWidthMilliseconds = string.Empty;
+    private string pulseRiseWidthMilliseconds = string.Empty;
+    private string pulseIntervalWidthMilliseconds = string.Empty;
+    private string plannedPulseCount = string.Empty;
     private string remainingTime = "00:00:00";
     private Brush accentBrush = Brushes.White;
     private bool isParameterEditingEnabled = true;
     private bool isStimulating;
     private bool isStarting;
+    private bool isStateUnknown;
     private bool isSelected;
     private decimal? impedanceOhms;
 
@@ -78,10 +84,24 @@ public sealed class ChannelConfig : ObservableObject, IStimulationImpedanceChann
         }
     }
 
-    /// <summary>连续模式显示“/”，间隔模式显示并编辑真实间隔时间。</summary>
+    /// <summary>连续模式下用于替代间隔参数的显示文本；默认沿用“/”。</summary>
+    public string ContinuousTimingPlaceholder
+    {
+        get => continuousTimingPlaceholder;
+        set
+        {
+            if (SetProperty(ref continuousTimingPlaceholder, value))
+            {
+                OnPropertyChanged(nameof(IntervalDisplay));
+                OnPropertyChanged(nameof(SingleDurationDisplay));
+            }
+        }
+    }
+
+    /// <summary>连续模式显示占位文本，间隔模式显示并编辑真实间隔时间。</summary>
     public string IntervalDisplay
     {
-        get => IsContinuousMode ? "/" : IntervalS;
+        get => IsContinuousMode ? ContinuousTimingPlaceholder : IntervalS;
         set
         {
             if (!IsContinuousMode)
@@ -91,10 +111,10 @@ public sealed class ChannelConfig : ObservableObject, IStimulationImpedanceChann
         }
     }
 
-    /// <summary>连续模式显示“/”，间隔模式显示并编辑包含渐升、平台和渐降的真实单次时长。</summary>
+    /// <summary>连续模式显示占位文本，间隔模式显示并编辑包含渐升、平台和渐降的真实单次时长。</summary>
     public string SingleDurationDisplay
     {
-        get => IsContinuousMode ? "/" : SingleDurationS;
+        get => IsContinuousMode ? ContinuousTimingPlaceholder : SingleDurationS;
         set
         {
             if (!IsContinuousMode)
@@ -110,6 +130,18 @@ public sealed class ChannelConfig : ObservableObject, IStimulationImpedanceChann
 
     /// <summary>载波频率，单位 Hz。</summary>
     public string FrequencyHz { get => frequencyHz; set => SetProperty(ref frequencyHz, value); }
+
+    /// <summary>tPCS 脉冲平台宽度，单位毫秒。</summary>
+    public string PulseWidthMilliseconds { get => pulseWidthMilliseconds; set => SetProperty(ref pulseWidthMilliseconds, value); }
+
+    /// <summary>tPCS 仅首次执行的渐升宽度，单位毫秒。</summary>
+    public string PulseRiseWidthMilliseconds { get => pulseRiseWidthMilliseconds; set => SetProperty(ref pulseRiseWidthMilliseconds, value); }
+
+    /// <summary>tPCS 相邻完整脉冲之间的零输出宽度，单位毫秒。</summary>
+    public string PulseIntervalWidthMilliseconds { get => pulseIntervalWidthMilliseconds; set => SetProperty(ref pulseIntervalWidthMilliseconds, value); }
+
+    /// <summary>tPCS 按治疗时间可完整发送的脉冲总数。</summary>
+    public string PlannedPulseCount { get => plannedPulseCount; set => SetProperty(ref plannedPulseCount, value); }
 
     /// <summary>刺激期间是否调转极性："不掉转" 或 "调转"。</summary>
     public string Polarity { get => polarity; set => SetProperty(ref polarity, value); }
@@ -204,7 +236,22 @@ public sealed class ChannelConfig : ObservableObject, IStimulationImpedanceChann
 
     public string StartButtonText => IsStarting ? "启动中" : "开始";
 
+    /// <summary>最近一次开始或停止未得到硬件确认；不作为永久数据库状态保存。</summary>
+    public bool IsStateUnknown
+    {
+        get => isStateUnknown;
+        set
+        {
+            if (SetProperty(ref isStateUnknown, value))
+            {
+                OnPropertyChanged(nameof(StatusIndicatorBrush));
+            }
+        }
+    }
+
     public DirectCurrentWaveformState DirectCurrentWaveform { get; } = new();
+
+    public AlternatingCurrentWaveformState AlternatingCurrentWaveform { get; } = new();
 
     /// <summary>该通道是否为当前界面选中的单通道。</summary>
     public bool IsSelected
@@ -249,8 +296,9 @@ public sealed class ChannelConfig : ObservableObject, IStimulationImpedanceChann
     public Brush ImpedanceBrush =>
         StimulationImpedancePresentation.GetImpedanceBrush(ImpedanceStatus);
 
-    public Brush StatusIndicatorBrush =>
-        StimulationImpedancePresentation.GetStatusIndicatorBrush(ImpedanceStatus, IsStimulating);
+    public Brush StatusIndicatorBrush => IsStateUnknown
+        ? Brushes.DarkOrange
+        : StimulationImpedancePresentation.GetStatusIndicatorBrush(ImpedanceStatus, IsStimulating);
 
     internal void UpdateImpedance(decimal? value)
     {

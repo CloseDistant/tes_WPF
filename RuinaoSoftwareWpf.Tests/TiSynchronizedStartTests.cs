@@ -13,6 +13,7 @@ public sealed class TiSynchronizedStartTests
         foreach (var channel in viewModel.Groups.SelectMany(group => group.Channels))
         {
             channel.CurrentMA = "1";
+            channel.UpdateImpedance(500m);
         }
 
         viewModel.StartCommand.Execute(null);
@@ -28,6 +29,9 @@ public sealed class TiSynchronizedStartTests
         Assert.All(
             viewModel.Groups.SelectMany(group => group.Channels),
             channel => Assert.True(channel.IsStimulating));
+        Assert.All(
+            viewModel.Groups.SelectMany(group => group.Channels),
+            channel => Assert.True(channel.AlternatingCurrentWaveform.HasWaveform));
 
         viewModel.EmergencyStopCommand.Execute(null);
         Assert.NotNull(engine.LastEmergencyStoppedTiGroup);
@@ -35,6 +39,9 @@ public sealed class TiSynchronizedStartTests
         Assert.All(
             viewModel.Groups.SelectMany(group => group.Channels),
             channel => Assert.False(channel.IsStimulating));
+        Assert.All(
+            viewModel.Groups.SelectMany(group => group.Channels),
+            channel => Assert.False(channel.AlternatingCurrentWaveform.IsRunning));
     }
 
     [Fact]
@@ -46,6 +53,7 @@ public sealed class TiSynchronizedStartTests
         foreach (var channel in channels)
         {
             channel.CurrentMA = "1";
+            channel.UpdateImpedance(500m);
         }
 
         channels[15].FrequencyHz = string.Empty;
@@ -65,6 +73,7 @@ public sealed class TiSynchronizedStartTests
         var channels = viewModel.Groups.SelectMany(group => group.Channels).ToArray();
         var target = channels[0];
         target.CurrentMA = "1";
+        target.UpdateImpedance(500m);
 
         viewModel.StartChannelCommand.Execute(target);
 
@@ -85,6 +94,8 @@ public sealed class TiSynchronizedStartTests
         var second = channels[1];
         first.CurrentMA = "1";
         second.CurrentMA = "1";
+        first.UpdateImpedance(500m);
+        second.UpdateImpedance(500m);
 
         viewModel.StartChannelCommand.Execute(first);
         viewModel.StartChannelCommand.Execute(second);
@@ -100,29 +111,62 @@ public sealed class TiSynchronizedStartTests
     }
 
     [Fact]
-    public void StopChannelCommand_WhenStopFails_ShowsStopFailureAndKeepsChannelRunning()
+    public async Task StopChannelCommand_WhenStopFails_ShowsStopFailureAndKeepsChannelRunning()
     {
         var engine = new CapturingStimulationEngine { FailStop = true };
         var toast = new CapturingToastService();
+        var dialog = new TestUserDialogService
+        {
+            ConfirmationHandler = (title, _) => title != "停止失败",
+        };
         var viewModel = CreateViewModel(
             engine,
             new ConnectedDebugSimulation(),
-            toast);
+            toast,
+            dialog);
         var target = viewModel.Groups[0].Channels[0];
         target.CurrentMA = "1";
+        target.UpdateImpedance(500m);
 
         viewModel.StartChannelCommand.Execute(target);
+        await WaitUntilAsync(
+            () => viewModel.StopChannelCommand.CanExecute(target),
+            TestContext.Current.CancellationToken);
         viewModel.StopChannelCommand.Execute(target);
+        await toast.WaitForShowAsync(TestContext.Current.CancellationToken);
 
         Assert.True(target.IsStimulating);
         Assert.Equal("刺激停止失败", toast.Title);
-        Assert.Contains("停止命令未完成", toast.Message);
+        Assert.Contains("状态未知", toast.Message);
+        Assert.Contains(target.Name, toast.Message);
+        Assert.True(target.IsStateUnknown);
+        Assert.Equal("停止失败", dialog.LastConfirmationTitle);
+        Assert.Contains(target.Name, dialog.LastConfirmationMessage);
+        Assert.True(viewModel.BackCommand.CanExecute(null));
+    }
+
+    private static async Task WaitUntilAsync(
+        Func<bool> condition,
+        CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(2);
+        while (!condition())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (DateTimeOffset.UtcNow >= deadline)
+            {
+                throw new TimeoutException("测试等待TI通道状态转换超时。");
+            }
+
+            await Task.Delay(10, cancellationToken);
+        }
     }
 
     private static TiControlViewModel CreateViewModel(
         CapturingStimulationEngine stimulationEngine,
         IDebugHardwareSimulationService? debugHardwareSimulation = null,
-        IToastService? toastService = null)
+        IToastService? toastService = null,
+        IUserDialogService? dialogService = null)
     {
         return new TiControlViewModel(
             stimulationEngine,
@@ -131,7 +175,8 @@ public sealed class TiSynchronizedStartTests
             new NoopLoggingService(),
             new DemoTiGroupFactory(),
             new LocalizationViewModel(new AppLocalizationService()),
-            toastService ?? new NoopToastService());
+            toastService ?? new NoopToastService(),
+            dialogService ?? new TestUserDialogService());
     }
 
     private sealed class ConnectedDebugSimulation : IDebugHardwareSimulationService
@@ -251,6 +296,8 @@ public sealed class TiSynchronizedStartTests
 
     private sealed class CapturingToastService : IToastService
     {
+        private readonly TaskCompletionSource shown = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public Visibility Visibility => Visibility.Visible;
         public string Title { get; private set; } = string.Empty;
         public string Message { get; private set; } = string.Empty;
@@ -260,9 +307,13 @@ public sealed class TiSynchronizedStartTests
         {
             Title = title;
             Message = message;
+            shown.TrySetResult();
         }
         public void ShowInformation(string message, string title = "提示") => Show(ToastKind.Information, title, message);
         public void ShowSuccess(string title, string message) => Show(ToastKind.Success, title, message);
         public void ShowError(string title, string message) => Show(ToastKind.Error, title, message);
+
+        public Task WaitForShowAsync(CancellationToken cancellationToken) =>
+            shown.Task.WaitAsync(cancellationToken);
     }
 }

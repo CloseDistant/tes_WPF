@@ -1,4 +1,4 @@
-namespace RuinaoTesHardware;
+﻿namespace RuinaoTesHardware;
 
 /// <summary>
 /// M-tPCS产品级硬件API。负责参数校验、完整三角脉冲计划、类型8寄存器映射、
@@ -16,11 +16,11 @@ public sealed class MonophasicPulseCurrentStimulationClient
     public const uint ConfigurationVersion = 0x16;
     public const uint TrapezoidWaveformType = 8;
 
-    private readonly TypeEightStimulationHardwareWriter writer;
+    private readonly CompositeStimulationHardwareWriter writer;
 
     public MonophasicPulseCurrentStimulationClient(BackplaneClient client)
     {
-        writer = new TypeEightStimulationHardwareWriter(client);
+        writer = new CompositeStimulationHardwareWriter(client);
     }
 
     public async Task<StimulationHardwareConfigurationResult<MonophasicPulseCurrentStimulationPlan>> ConfigureAsync(
@@ -32,7 +32,7 @@ public sealed class MonophasicPulseCurrentStimulationClient
         var hardwarePlan = ToHardwarePlan(plan);
         var waveformWrite = await ExecuteHardwareOperationAsync(
             "下发M-tPCS类型8三角脉冲配置",
-            () => writer.WriteWaveformAsync(hardwarePlan, options, cancellationToken));
+            () => writer.WriteWaveformAsync(hardwarePlan, 0, options, cancellationToken));
         var controlWrite = await ExecuteHardwareOperationAsync(
             "下发M-tPCS通道总控制配置",
             () => writer.WriteControlAsync(hardwarePlan, options, cancellationToken));
@@ -61,7 +61,7 @@ public sealed class MonophasicPulseCurrentStimulationClient
         CancellationToken cancellationToken = default) =>
         StartChannelsAsync(
             boardAddress,
-            TypeEightStimulationHardwareWriter.CreateSingleChannelMask(channel),
+            CompositeStimulationHardwareWriter.CreateSingleChannelMask(channel),
             options,
             cancellationToken);
 
@@ -71,7 +71,7 @@ public sealed class MonophasicPulseCurrentStimulationClient
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)
     {
-        TypeEightStimulationHardwareWriter.ValidateChannelMask(channelMask);
+        CompositeStimulationHardwareWriter.ValidateChannelMask(channelMask);
         var result = await ExecuteHardwareOperationAsync(
             $"开始M-tPCS通道0x{channelMask:X2}",
             () => writer.StartAsync(boardAddress, channelMask, options, cancellationToken));
@@ -98,7 +98,7 @@ public sealed class MonophasicPulseCurrentStimulationClient
         CancellationToken cancellationToken = default) =>
         StopChannelsAsync(
             boardAddress,
-            TypeEightStimulationHardwareWriter.CreateSingleChannelMask(channel),
+            CompositeStimulationHardwareWriter.CreateSingleChannelMask(channel),
             options,
             cancellationToken);
 
@@ -108,7 +108,7 @@ public sealed class MonophasicPulseCurrentStimulationClient
         BackplaneConnectionOptions options,
         CancellationToken cancellationToken = default)
     {
-        TypeEightStimulationHardwareWriter.ValidateChannelMask(channelMask);
+        CompositeStimulationHardwareWriter.ValidateChannelMask(channelMask);
         var result = await ExecuteHardwareOperationAsync(
             $"停止M-tPCS通道0x{channelMask:X2}",
             () => writer.StopAsync(boardAddress, channelMask, options, cancellationToken));
@@ -164,8 +164,8 @@ public sealed class MonophasicPulseCurrentStimulationClient
 
     private static void Validate(MonophasicPulseCurrentStimulationParameters parameters)
     {
-        TypeEightStimulationHardwareWriter.ValidateBoardAddress(parameters.BoardAddress);
-        TypeEightStimulationHardwareWriter.ValidateChannel(parameters.Channel);
+        CompositeStimulationHardwareWriter.ValidateBoardAddress(parameters.BoardAddress);
+        CompositeStimulationHardwareWriter.ValidateChannel(parameters.Channel);
         if (parameters.CurrentMilliampere is < MinimumCurrentMilliampere
                 or > MaximumCurrentMilliampere
             || decimal.Round(parameters.CurrentMilliampere, 2) != parameters.CurrentMilliampere)
@@ -214,22 +214,33 @@ public sealed class MonophasicPulseCurrentStimulationClient
         }
     }
 
-    private static TypeEightStimulationHardwarePlan ToHardwarePlan(
+    private static CompositeStimulationHardwarePlan ToHardwarePlan(
         MonophasicPulseCurrentStimulationPlan plan) =>
         new(
             plan.Parameters.BoardAddress,
             plan.Parameters.Channel,
             plan.EnableMask,
             plan.ConfigurationVersion,
-            plan.WaveformType,
-            plan.DurationMicroseconds,
-            plan.LowDa,
-            plan.HighDa,
-            plan.RiseMicroseconds,
-            plan.HighHoldMicroseconds,
-            plan.FallMicroseconds,
-            plan.LowHoldMicroseconds,
-            plan.TotalTimeMilliseconds);
+            plan.TotalTimeMilliseconds,
+            [
+                new StimulationWaveformHardwareSegment(
+                    plan.WaveformType,
+                    plan.DurationMicroseconds,
+                    FrequencyHz: 0,
+                    Amplitude: 0,
+                    Offset: 0,
+                    PhaseDegree: 0,
+                    DutyPermilleOrOrder: 0,
+                    plan.LowDa,
+                    plan.HighDa,
+                    plan.RiseMicroseconds,
+                    plan.HighHoldMicroseconds,
+                    plan.FallMicroseconds,
+                    plan.LowHoldMicroseconds,
+                    SampleCount: 0,
+                    RepeatCount: 1,
+                    Flags: 0),
+            ]);
 
     private static StimulationHardwareCommandResult ToProductResult(
         BackplaneRegisterOperationResult result,

@@ -78,6 +78,78 @@ public sealed class StimulationStateConfirmationTests
     }
 
     [Fact]
+    public async Task StartPulseCurrent_UsesIndependentRecordTypeAndPreservesHardwareFields()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = new Fixture();
+        var group = new TiGroup { Title = "经颅脉冲电流刺激" };
+        group.Channels.Add(new ChannelConfig
+        {
+            Name = "CH 1",
+            CurrentMA = "2.00",
+            DurationS = "1200.0",
+            Polarity = "调转",
+            StimulationMode = "间隔",
+            PulseRiseWidthMilliseconds = "5",
+            PulseWidthMilliseconds = "10",
+            PulseIntervalWidthMilliseconds = "20",
+            PlannedPulseCount = "40000"
+        });
+
+        var operation = fixture.Engine.StartPulseCurrentGroupAsync(
+            group,
+            "CH 1",
+            "tPCS测试处方",
+            cancellationToken);
+
+        await fixture.Hardware.StartInvoked.Task.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        Assert.Equal(StimulationExecutionState.Starting, fixture.StateMachine.CurrentState);
+        Assert.Equal(StimulationModeCodes.PulseCurrent, fixture.Hardware.CapturedStartParameters?.StimulationType);
+        Assert.Equal(5, fixture.Hardware.CapturedStartParameters?.PulseRiseWidthMilliseconds);
+        Assert.Equal(10, fixture.Hardware.CapturedStartParameters?.PulseWidthMilliseconds);
+        Assert.Equal(20, fixture.Hardware.CapturedStartParameters?.PulseIntervalWidthMilliseconds);
+        fixture.Hardware.StartCompletion.TrySetResult(new HardwareOperationResult(true, "confirmed"));
+        await operation;
+        Assert.Equal(StimulationExecutionState.Running, fixture.StateMachine.CurrentState);
+    }
+
+    [Fact]
+    public async Task StartTacs_UsesIndependentRecordTypeAndHardwareEntry()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = new Fixture();
+        var group = new TiGroup { Title = "经颅交流电刺激" };
+        group.Channels.Add(new ChannelConfig
+        {
+            Name = "CH 1",
+            CurrentMA = "1.234",
+            RampUpS = "1.2",
+            RampDownS = "2.3",
+            FrequencyHz = "4321",
+            DurationS = "1200.5",
+            StimulationMode = "连续",
+        });
+
+        var operation = fixture.Engine.StartTacsGroupAsync(
+            group,
+            "CH 1",
+            "tACS测试处方",
+            progress: null,
+            cancellationToken);
+
+        await fixture.Hardware.StartInvoked.Task.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        Assert.Equal(StimulationExecutionState.Starting, fixture.StateMachine.CurrentState);
+        Assert.Equal(StimulationModeCodes.AlternatingCurrent, fixture.Hardware.CapturedStartParameters?.StimulationType);
+        Assert.Equal(1.234, fixture.Hardware.CapturedStartParameters?.TacsPeakCurrentMilliampere);
+        Assert.Equal(4321, fixture.Hardware.CapturedStartParameters?.TacsFrequencyHz);
+        Assert.Equal(1200.5, fixture.Hardware.CapturedStartParameters?.TacsTotalDurationSeconds);
+
+        fixture.Hardware.StartCompletion.TrySetResult(new HardwareOperationResult(true, "confirmed"));
+        await operation;
+        Assert.Equal(StimulationExecutionState.Running, fixture.StateMachine.CurrentState);
+    }
+
+    [Fact]
     public async Task Stop_RemainsStoppingUntilHardwareConfirmsThenBecomesStopped()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -243,6 +315,14 @@ public sealed class StimulationStateConfirmationTests
             StartInvoked.TrySetResult();
             return StartCompletion.Task.WaitAsync(cancellationToken);
         }
+
+        public Task<HardwareOperationResult> StartTacsGroupAsync(
+            TiGroup group,
+            string selectedChannelNames,
+            PrescriptionDefinition parameterRecord,
+            IProgress<StimulationParameterDownloadProgress>? progress,
+            CancellationToken cancellationToken = default) =>
+            StartGroupAsync(group, selectedChannelNames, parameterRecord, cancellationToken);
 
         public Task<HardwareOperationResult> ConnectAsync(CancellationToken cancellationToken = default) => NotUsed();
         public Task<HardwareOperationResult> HandshakeAsync(CancellationToken cancellationToken = default) => NotUsed();

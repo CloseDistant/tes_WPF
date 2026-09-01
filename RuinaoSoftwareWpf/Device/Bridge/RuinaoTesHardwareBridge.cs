@@ -141,6 +141,54 @@ public sealed class RuinaoTesHardwareBridge
             cancellationToken);
     }
 
+    internal async Task ConfigurePulseCurrentAsync(
+        PulseCurrentHardwareParameters parameters,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        _ = await hardwareClient.ConfigurePulseCurrentAsync(
+            new PulseCurrentStimulationParameters(
+                parameters.BoardAddress,
+                parameters.PhysicalChannelNumber,
+                parameters.CurrentMilliampere,
+                parameters.RampWidthMilliseconds,
+                parameters.PulseWidthMilliseconds,
+                parameters.IntervalWidthMilliseconds,
+                parameters.TreatmentDurationSeconds,
+                parameters.ReversePolarity
+                    ? PulseCurrentPolarity.Reversed
+                    : PulseCurrentPolarity.Normal),
+            cancellationToken);
+    }
+
+    internal async Task StartPulseCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await hardwareClient.StartPulseCurrentChannelsAsync(
+            boardAddress,
+            channelMask,
+            cancellationToken);
+    }
+
+    internal async Task StopPulseCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await hardwareClient.StopPulseCurrentChannelsAsync(
+            boardAddress,
+            channelMask,
+            cancellationToken);
+    }
+
+    internal async Task EmergencyStopPulseCurrentBackplaneAsync(
+        CancellationToken cancellationToken = default)
+    {
+        _ = await hardwareClient.EmergencyStopPulseCurrentBackplaneAsync(cancellationToken);
+    }
+
     /// <summary>只发送背板0x0003=0；不遍历业务板，不执行通道拉低。</summary>
     internal async Task EmergencyStopBackplaneAsync(
         CancellationToken cancellationToken = default)
@@ -148,45 +196,61 @@ public sealed class RuinaoTesHardwareBridge
         _ = await hardwareClient.EmergencyStopBackplaneAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// 暂存上位机业务参数日志。生产刺激 API 尚未从临时分支迁入共用硬件 DLL，
-    /// 因此这里不得生成旧协议帧或把日志传输冒充为硬件确认。
-    /// </summary>
-    public Task SendTiParametersAsync(
-        TiGroup group,
+    internal int GetAlternatingCurrentConfigurationCommandCount(
+        AlternatingCurrentHardwareParameters parameters)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return AlternatingCurrentStimulationClient.CreatePlan(ToAlternatingCurrentParameters(parameters))
+            .Segments.Count + 1;
+    }
+
+    internal async Task ConfigureAlternatingCurrentAsync(
+        AlternatingCurrentHardwareParameters parameters,
+        IProgress<AlternatingCurrentHardwareConfigurationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        ArgumentNullException.ThrowIfNull(group);
-
-        foreach (var channel in group.Channels)
-        {
-            logger.Hardware(
-                $"PARAM channel={channel.Name} current={channel.CurrentMA}mA "
-                + $"freq={channel.FrequencyHz}Hz duration={channel.DurationS}s "
-                + $"anode={channel.Anode} cathode={channel.Cathode}");
-        }
-
-        return Task.CompletedTask;
+        ArgumentNullException.ThrowIfNull(parameters);
+        var progressAdapter = progress is null
+            ? null
+            : new AlternatingCurrentProgressAdapter(progress);
+        _ = await hardwareClient.ConfigureAlternatingCurrentAsync(
+            ToAlternatingCurrentParameters(parameters),
+            progressAdapter,
+            cancellationToken);
     }
 
-    public Task StartTiAsync(CancellationToken cancellationToken = default)
+    internal async Task StartAlternatingCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        throw CreateStimulationApiNotMigratedException();
+        _ = await hardwareClient.StartAlternatingCurrentChannelsAsync(
+            boardAddress,
+            channelMask,
+            cancellationToken);
     }
 
-    public Task StopTiAsync(CancellationToken cancellationToken = default)
+    internal async Task StopAlternatingCurrentChannelsAsync(
+        byte boardAddress,
+        uint channelMask,
+        CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        throw CreateStimulationApiNotMigratedException();
+        _ = await hardwareClient.StopAlternatingCurrentChannelsAsync(
+            boardAddress,
+            channelMask,
+            cancellationToken);
     }
 
-    public Task EmergencyStopAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        throw CreateStimulationApiNotMigratedException();
-    }
+    private static AlternatingCurrentStimulationParameters ToAlternatingCurrentParameters(
+        AlternatingCurrentHardwareParameters parameters) =>
+        new(
+            parameters.BoardAddress,
+            parameters.PhysicalChannelNumber,
+            parameters.PeakCurrentMilliampere,
+            parameters.RampUpSeconds,
+            parameters.RampDownSeconds,
+            parameters.FrequencyHz,
+            parameters.TotalDurationSeconds);
 
     private void HardwareClient_Log(object? sender, HardwareLogEntry entry)
     {
@@ -205,6 +269,16 @@ public sealed class RuinaoTesHardwareBridge
         logger.Hardware($"[{entry.Category}] {entry.Message}");
     }
 
-    private static NotSupportedException CreateStimulationApiNotMigratedException() =>
-        new("生产分支的刺激业务 API 尚未迁移到 RuinaoTesHardware，已禁止继续使用旧版协议拼帧链路。");
+    private sealed class AlternatingCurrentProgressAdapter(
+        IProgress<AlternatingCurrentHardwareConfigurationProgress> target)
+        : IProgress<AlternatingCurrentConfigurationProgress>
+    {
+        public void Report(AlternatingCurrentConfigurationProgress value)
+        {
+            target.Report(new AlternatingCurrentHardwareConfigurationProgress(
+                value.CompletedCommandCount,
+                value.TotalCommandCount,
+                value.Stage));
+        }
+    }
 }

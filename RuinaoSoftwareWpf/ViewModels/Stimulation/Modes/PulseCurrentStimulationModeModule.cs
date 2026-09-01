@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 public sealed class PulseCurrentStimulationModeModule
     : StimulationModeModuleBase<PulseCurrentControlViewModel>
@@ -7,6 +7,7 @@ public sealed class PulseCurrentStimulationModeModule
         : base(StimulationModeCodes.PulseCurrent, viewModel)
     {
         viewModel.BackRequested += (_, _) => RaiseBackRequested();
+        viewModel.HardwareOperationCompleted += (_, result) => RaiseHardwareOperationCompleted(result);
         viewModel.PrescriptionRequested += (_, eventArgs) =>
             RaisePrescriptionRequested(eventArgs);
     }

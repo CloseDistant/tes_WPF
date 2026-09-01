@@ -120,6 +120,12 @@ internal static class CaptureDbContextModelConfiguration
         entity.Property(item => item.DirectCurrentSingleDurationSeconds).HasColumnName("direct_current_single_duration_seconds");
         entity.Property(item => item.DirectCurrentRampUpSeconds).HasColumnName("direct_current_ramp_up_seconds");
         entity.Property(item => item.DirectCurrentRampDownSeconds).HasColumnName("direct_current_ramp_down_seconds");
+        entity.Property(item => item.TacsPeakCurrentMilliampere).HasColumnName("tacs_peak_current_milliampere");
+        entity.Property(item => item.TacsRampUpSeconds).HasColumnName("tacs_ramp_up_seconds");
+        entity.Property(item => item.TacsRampDownSeconds).HasColumnName("tacs_ramp_down_seconds");
+        entity.Property(item => item.TacsFrequencyHz).HasColumnName("tacs_frequency_hz");
+        entity.Property(item => item.TacsTotalDurationSeconds).HasColumnName("tacs_total_duration_seconds");
+        entity.Property(item => item.TacsParameterVersion).HasColumnName("tacs_parameter_version");
         entity.Property(item => item.Course).HasColumnName("course");
         entity.Property(item => item.RampUpSeconds).HasColumnName("ramp_up_seconds");
         entity.Property(item => item.RampDownSeconds).HasColumnName("ramp_down_seconds");

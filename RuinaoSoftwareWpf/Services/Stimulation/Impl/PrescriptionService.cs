@@ -192,6 +192,12 @@ public sealed class PrescriptionService : IPrescriptionService
                 DirectCurrentSingleDurationSeconds = source.DirectCurrentSingleDurationSeconds,
                 DirectCurrentRampUpSeconds = source.DirectCurrentRampUpSeconds,
                 DirectCurrentRampDownSeconds = source.DirectCurrentRampDownSeconds,
+                TacsPeakCurrentMilliampere = source.TacsPeakCurrentMilliampere,
+                TacsRampUpSeconds = source.TacsRampUpSeconds,
+                TacsRampDownSeconds = source.TacsRampDownSeconds,
+                TacsFrequencyHz = source.TacsFrequencyHz,
+                TacsTotalDurationSeconds = source.TacsTotalDurationSeconds,
+                TacsParameterVersion = source.TacsParameterVersion,
                 Course = source.Course,
                 RampUpSeconds = source.RampUpSeconds,
                 RampDownSeconds = source.RampDownSeconds,
@@ -275,7 +281,13 @@ public sealed class PrescriptionService : IPrescriptionService
         DirectCurrentSingleDurationSecondsValue: entity.DirectCurrentSingleDurationSeconds,
         DirectCurrentRampUpSecondsValue: entity.DirectCurrentRampUpSeconds,
         DirectCurrentRampDownSecondsValue: entity.DirectCurrentRampDownSeconds,
-        PulseTreatmentDurationSecondsValue: entity.PulseTreatmentDurationSecondsExact);
+        PulseTreatmentDurationSecondsValue: entity.PulseTreatmentDurationSecondsExact,
+        TacsPeakCurrentMilliampereValue: entity.TacsPeakCurrentMilliampere,
+        TacsRampUpSecondsValue: entity.TacsRampUpSeconds,
+        TacsRampDownSecondsValue: entity.TacsRampDownSeconds,
+        TacsFrequencyHzValue: entity.TacsFrequencyHz,
+        TacsTotalDurationSecondsValue: entity.TacsTotalDurationSeconds,
+        TacsParameterVersion: entity.TacsParameterVersion);
 
     private Task<int> SaveChangesAsync(CaptureDbContext context, CancellationToken cancellationToken)
     {
@@ -305,6 +317,12 @@ public sealed class PrescriptionService : IPrescriptionService
         entity.DirectCurrentSingleDurationSeconds = prescription.DirectCurrentSingleDurationSecondsValue;
         entity.DirectCurrentRampUpSeconds = prescription.DirectCurrentRampUpSecondsValue;
         entity.DirectCurrentRampDownSeconds = prescription.DirectCurrentRampDownSecondsValue;
+        entity.TacsPeakCurrentMilliampere = prescription.TacsPeakCurrentMilliampereValue;
+        entity.TacsRampUpSeconds = prescription.TacsRampUpSecondsValue;
+        entity.TacsRampDownSeconds = prescription.TacsRampDownSecondsValue;
+        entity.TacsFrequencyHz = prescription.TacsFrequencyHzValue;
+        entity.TacsTotalDurationSeconds = prescription.TacsTotalDurationSecondsValue;
+        entity.TacsParameterVersion = prescription.TacsParameterVersion;
         entity.Course = prescription.Course;
         entity.RampUpSeconds = prescription.RampUpSeconds;
         entity.RampDownSeconds = prescription.RampDownSeconds;

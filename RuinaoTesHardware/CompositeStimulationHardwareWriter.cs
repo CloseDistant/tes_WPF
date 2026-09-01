@@ -1,56 +1,80 @@
-using RuinaoTesProtocol.V14;
+﻿using RuinaoTesProtocol.V14;
 
 namespace RuinaoTesHardware;
 
-internal sealed record TypeEightStimulationHardwarePlan(
+internal sealed record StimulationWaveformHardwareSegment(
+    uint WaveformType,
+    uint DurationMicroseconds,
+    uint FrequencyHz,
+    uint Amplitude,
+    uint Offset,
+    uint PhaseDegree,
+    uint DutyPermilleOrOrder,
+    int LowLevelOrPositiveValue,
+    int HighLevelOrNegativeValue,
+    uint RisePermilleOrPositiveDurationMicroseconds,
+    uint HoldPermilleOrInterphaseIntervalMicroseconds,
+    uint FallPermilleOrNegativeDurationMicroseconds,
+    uint CustomIdOrSeedOrPeriodIntervalMicroseconds,
+    uint SampleCount,
+    uint RepeatCount,
+    uint Flags);
+
+internal sealed record CompositeStimulationHardwarePlan(
     byte BoardAddress,
     int Channel,
     uint EnableMask,
     uint ConfigurationVersion,
-    uint WaveformType,
-    uint DurationMicroseconds,
-    int LowDa,
-    int HighDa,
-    uint RiseMicroseconds,
-    uint HighHoldMicroseconds,
-    uint FallMicroseconds,
-    uint LowHoldMicroseconds,
-    uint TotalTimeMilliseconds);
+    uint TotalTimeMilliseconds,
+    IReadOnlyList<StimulationWaveformHardwareSegment> Waveforms);
 
 /// <summary>
-/// 类型8刺激模式共用的寄存器布局和命令写入器。
-/// 产品模式负责参数语义和安全校验，本类型只负责确定性的硬件布局。
+/// 电刺激产品模式共用的组合波形寄存器写入器。
+/// 产品客户端负责参数语义和安全校验，本类型只负责确定性的V1.6硬件布局。
 /// </summary>
-internal sealed class TypeEightStimulationHardwareWriter
+internal sealed class CompositeStimulationHardwareWriter
 {
     private const ushort StartRegister = 0x0002;
     private const ushort StopRegister = 0x0003;
+    private const int MaximumWaveformCount = 30;
     private readonly BackplaneClient client;
 
-    public TypeEightStimulationHardwareWriter(BackplaneClient client)
+    public CompositeStimulationHardwareWriter(BackplaneClient client)
     {
         this.client = client;
     }
 
     public Task<BackplaneRegisterOperationResult> WriteWaveformAsync(
-        TypeEightStimulationHardwarePlan plan,
+        CompositeStimulationHardwarePlan plan,
+        int waveformIndex,
         BackplaneConnectionOptions options,
-        CancellationToken cancellationToken) =>
-        client.WriteRegistersAsync(
+        CancellationToken cancellationToken)
+    {
+        ValidatePlan(plan);
+        if (waveformIndex < 0 || waveformIndex >= plan.Waveforms.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(waveformIndex), "波形序号超出配置范围。");
+        }
+
+        return client.WriteRegistersAsync(
             plan.BoardAddress,
-            BuildWaveformRegisters(plan),
+            BuildWaveformRegisters(plan, waveformIndex),
             options,
             cancellationToken);
+    }
 
     public Task<BackplaneRegisterOperationResult> WriteControlAsync(
-        TypeEightStimulationHardwarePlan plan,
+        CompositeStimulationHardwarePlan plan,
         BackplaneConnectionOptions options,
-        CancellationToken cancellationToken) =>
-        client.WriteRegistersAsync(
+        CancellationToken cancellationToken)
+    {
+        ValidatePlan(plan);
+        return client.WriteRegistersAsync(
             plan.BoardAddress,
             BuildControlRegisters(plan),
             options,
             cancellationToken);
+    }
 
     public Task<BackplaneRegisterOperationResult> StartAsync(
         byte boardAddress,
@@ -137,32 +161,34 @@ internal sealed class TypeEightStimulationHardwareWriter
     }
 
     private static IReadOnlyList<TesV14RegisterValue> BuildWaveformRegisters(
-        TypeEightStimulationHardwarePlan plan)
+        CompositeStimulationHardwarePlan plan,
+        int waveformIndex)
     {
-        var waveBase = checked((ushort)(GetChannelBase(plan.Channel) + 0x20));
+        var waveform = plan.Waveforms[waveformIndex];
+        var waveBase = checked((ushort)(GetChannelBase(plan.Channel) + 0x20 + waveformIndex * 0x10));
         return
         [
-            new(waveBase, plan.WaveformType),
-            new((ushort)(waveBase + 0x01), plan.DurationMicroseconds),
-            new((ushort)(waveBase + 0x02), 0),
-            new((ushort)(waveBase + 0x03), 0),
-            new((ushort)(waveBase + 0x04), 0),
-            new((ushort)(waveBase + 0x05), 0),
-            new((ushort)(waveBase + 0x06), 0),
-            new((ushort)(waveBase + 0x07), unchecked((uint)plan.LowDa)),
-            new((ushort)(waveBase + 0x08), unchecked((uint)plan.HighDa)),
-            new((ushort)(waveBase + 0x09), plan.RiseMicroseconds),
-            new((ushort)(waveBase + 0x0A), plan.HighHoldMicroseconds),
-            new((ushort)(waveBase + 0x0B), plan.FallMicroseconds),
-            new((ushort)(waveBase + 0x0C), plan.LowHoldMicroseconds),
-            new((ushort)(waveBase + 0x0D), 0),
-            new((ushort)(waveBase + 0x0E), 1),
-            new((ushort)(waveBase + 0x0F), 0),
+            new(waveBase, waveform.WaveformType),
+            new((ushort)(waveBase + 0x01), waveform.DurationMicroseconds),
+            new((ushort)(waveBase + 0x02), waveform.FrequencyHz),
+            new((ushort)(waveBase + 0x03), waveform.Amplitude),
+            new((ushort)(waveBase + 0x04), waveform.Offset),
+            new((ushort)(waveBase + 0x05), waveform.PhaseDegree),
+            new((ushort)(waveBase + 0x06), waveform.DutyPermilleOrOrder),
+            new((ushort)(waveBase + 0x07), unchecked((uint)waveform.LowLevelOrPositiveValue)),
+            new((ushort)(waveBase + 0x08), unchecked((uint)waveform.HighLevelOrNegativeValue)),
+            new((ushort)(waveBase + 0x09), waveform.RisePermilleOrPositiveDurationMicroseconds),
+            new((ushort)(waveBase + 0x0A), waveform.HoldPermilleOrInterphaseIntervalMicroseconds),
+            new((ushort)(waveBase + 0x0B), waveform.FallPermilleOrNegativeDurationMicroseconds),
+            new((ushort)(waveBase + 0x0C), waveform.CustomIdOrSeedOrPeriodIntervalMicroseconds),
+            new((ushort)(waveBase + 0x0D), waveform.SampleCount),
+            new((ushort)(waveBase + 0x0E), waveform.RepeatCount),
+            new((ushort)(waveBase + 0x0F), waveform.Flags),
         ];
     }
 
     private static IReadOnlyList<TesV14RegisterValue> BuildControlRegisters(
-        TypeEightStimulationHardwarePlan plan)
+        CompositeStimulationHardwarePlan plan)
     {
         var channelBase = GetChannelBase(plan.Channel);
         return
@@ -173,9 +199,28 @@ internal sealed class TypeEightStimulationHardwareWriter
             new((ushort)(channelBase + 0x01), 0),
             new((ushort)(channelBase + 0x02), 0),
             new((ushort)(channelBase + 0x03), plan.TotalTimeMilliseconds),
-            new((ushort)(channelBase + 0x04), 1),
+            new((ushort)(channelBase + 0x04), (uint)plan.Waveforms.Count),
             new((ushort)(channelBase + 0x05), 0),
         ];
+    }
+
+    private static void ValidatePlan(CompositeStimulationHardwarePlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ValidateBoardAddress(plan.BoardAddress);
+        ValidateChannel(plan.Channel);
+        ValidateChannelMask(plan.EnableMask);
+        if (plan.Waveforms.Count is < 1 or > MaximumWaveformCount)
+        {
+            throw new ArgumentException(
+                $"单通道必须配置1到{MaximumWaveformCount}段波形。",
+                nameof(plan));
+        }
+
+        if ((plan.EnableMask & (1U << (plan.Channel - 1))) == 0)
+        {
+            throw new ArgumentException("通道使能掩码没有包含当前刺激通道。", nameof(plan));
+        }
     }
 
     private static ushort GetChannelBase(int channel) =>

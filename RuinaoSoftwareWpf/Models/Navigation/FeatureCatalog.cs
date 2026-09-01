@@ -1,4 +1,4 @@
-namespace RuinaoSoftwareWpf;
+﻿namespace RuinaoSoftwareWpf;
 
 public static class FeatureCatalog
 {
@@ -17,9 +17,10 @@ public static class FeatureCatalog
 
     public static IReadOnlyList<StimulationTypeFeatureDefinition> StimulationTypes { get; } =
     [
-        new(FeatureKeys.StimulationTemporalInterference, "TemporalInterference", StimulationModeCodes.TemporalInterference, "时间相干电刺激", "≈", "时间相干电刺激参数设置"),
+        new(FeatureKeys.StimulationTemporalInterference, "TemporalInterference", StimulationModeCodes.TemporalInterference, "时间相干电刺激", "≈", "时间相干电刺激参数设置", RequiresImpedanceMonitoring: true),
         new(FeatureKeys.StimulationDirectCurrent, "TranscranialDirectCurrent", StimulationModeCodes.DirectCurrent, "经颅直流电刺激", "━", "经颅直流电刺激参数设置", RequiresImpedanceMonitoring: true),
-        new(FeatureKeys.StimulationPulseCurrent, "TranscranialPulseCurrent", StimulationModeCodes.PulseCurrent, "经颅脉冲电流刺激", "⌁", "经颅脉冲电流刺激参数设置", RequiresImpedanceMonitoring: true, ExecutionAvailability: StimulationModeExecutionAvailability.HardwareIntegrationPending),
+        new(FeatureKeys.StimulationAlternatingCurrent, "TranscranialAlternatingCurrent", StimulationModeCodes.AlternatingCurrent, "经颅交流电刺激", "∿", "经颅交流电刺激参数设置", RequiresImpedanceMonitoring: true),
+        new(FeatureKeys.StimulationPulseCurrent, "TranscranialPulseCurrent", StimulationModeCodes.PulseCurrent, "经颅脉冲电流刺激", "⌁", "经颅脉冲电流刺激参数设置", RequiresImpedanceMonitoring: true),
         new(FeatureKeys.StimulationMonophasicPulseCurrent, "TranscranialMonophasicPulseCurrent", StimulationModeCodes.MonophasicPulseCurrent, "经颅单相脉冲电流刺激", "△", "经颅单相脉冲电流刺激参数设置", RequiresImpedanceMonitoring: true)
     ];
 

@@ -20,6 +20,7 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
     private string course;
     private string rampUpValue;
     private string rampDownValue;
+    private string carrierFrequencyValue;
     private string evidenceGrade;
     private string errorMessage = string.Empty;
     private bool isModeSelectionStep;
@@ -42,9 +43,15 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
             : string.Empty;
         name = prescription.Name;
         indication = prescription.Indication;
-        currentMilliamp = isNew ? string.Empty : prescription.CurrentMilliamp.ToString("0.##", CultureInfo.InvariantCulture);
-        deliveryMode = IsPulseCurrent || IsMonophasicPulseCurrent
-            ? PrescriptionDeliveryModes.Interval
+        currentMilliamp = isNew
+            ? string.Empty
+            : prescription.CurrentMilliamp.ToString(
+                IsTemporalInterference || IsTacs ? "0.000" : "0.##",
+                CultureInfo.InvariantCulture);
+        deliveryMode = IsTemporalInterference || IsTacs
+            ? PrescriptionDeliveryModes.Continuous
+            : IsPulseCurrent || IsMonophasicPulseCurrent
+                ? PrescriptionDeliveryModes.Interval
             : isNew ? string.Empty : prescription.DeliveryMode;
         totalDurationValue = LoadTotalDuration(prescription, isNew);
         intervalValue = LoadIntervalValue(prescription, isNew);
@@ -52,6 +59,11 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         course = prescription.Course;
         rampUpValue = LoadRampUpValue(prescription, isNew);
         rampDownValue = LoadRampDownValue(prescription, isNew);
+        carrierFrequencyValue = isNew
+            ? string.Empty
+            : prescription.IsTacs
+                ? prescription.TacsFrequencyHz.ToString(CultureInfo.InvariantCulture)
+                : string.Empty;
         evidenceGrade = prescription.EvidenceGrade;
     }
 
@@ -99,14 +111,23 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
 
             var wasPulseCurrent = IsPulseCurrent;
             var wasMonophasic = IsMonophasicPulseCurrent;
+            var wasTemporalInterference = IsTemporalInterference;
+            var wasTacs = IsTacs;
             SetProperty(ref stimulationType, value);
             var isPulseCurrent = IsPulseCurrent;
-            if (wasPulseCurrent != isPulseCurrent || wasMonophasic != IsMonophasicPulseCurrent)
+            if (wasPulseCurrent != isPulseCurrent
+                || wasMonophasic != IsMonophasicPulseCurrent
+                || wasTemporalInterference != IsTemporalInterference
+                || wasTacs != IsTacs)
             {
                 ClearModeSpecificTimingFields();
             }
 
-            if (isPulseCurrent || IsMonophasicPulseCurrent)
+            if (IsTemporalInterference || IsTacs)
+            {
+                DeliveryMode = PrescriptionDeliveryModes.Continuous;
+            }
+            else if (isPulseCurrent || IsMonophasicPulseCurrent)
             {
                 DeliveryMode = PrescriptionDeliveryModes.Interval;
             }
@@ -122,8 +143,10 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         get => deliveryMode;
         set
         {
-            var next = IsPulseCurrent || IsMonophasicPulseCurrent
-                ? PrescriptionDeliveryModes.Interval
+            var next = IsTemporalInterference || IsTacs
+                ? PrescriptionDeliveryModes.Continuous
+                : IsPulseCurrent || IsMonophasicPulseCurrent
+                    ? PrescriptionDeliveryModes.Interval
                 : value;
             if (!SetProperty(ref deliveryMode, next))
             {
@@ -139,26 +162,36 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
 
     public bool IsPulseCurrent => StimulationType == PrescriptionDefinition.PulseCurrentStimulationType;
     public bool IsDirectCurrent => StimulationType == StimulationModeCodes.DirectCurrent;
+    public bool IsTemporalInterference => StimulationType == StimulationModeCodes.TemporalInterference;
+    public bool IsTacs => StimulationType == StimulationModeCodes.AlternatingCurrent;
     public bool IsMonophasicPulseCurrent => StimulationType == StimulationModeCodes.MonophasicPulseCurrent;
-    public bool IsDeliveryModeEnabled => !IsPulseCurrent && !IsMonophasicPulseCurrent;
-    public bool IsIntervalMode => IsPulseCurrent || IsMonophasicPulseCurrent || DeliveryMode == PrescriptionDeliveryModes.Interval;
+    public bool IsDeliveryModeEnabled => !IsPulseCurrent && !IsMonophasicPulseCurrent && !IsTemporalInterference && !IsTacs;
+    public bool IsIntervalMode => !IsTemporalInterference && !IsTacs
+        && (IsPulseCurrent || IsMonophasicPulseCurrent || DeliveryMode == PrescriptionDeliveryModes.Interval);
     public bool IsContinuousMode => !IsPulseCurrent && !IsMonophasicPulseCurrent && DeliveryMode == PrescriptionDeliveryModes.Continuous;
     public bool IsRampDownEnabled => !IsPulseCurrent && !IsMonophasicPulseCurrent;
     public bool ShowDeliveryMode => !IsMonophasicPulseCurrent;
+    public bool ShowInterval => true;
     public bool ShowSingleDuration => !IsMonophasicPulseCurrent;
     public string DeliveryModeRowHeight => ShowDeliveryMode ? "39" : "0";
+    public string IntervalRowHeight => ShowInterval ? "39" : "0";
     public string SingleDurationRowHeight => ShowSingleDuration ? "39" : "0";
     public string RampDownRowHeight => IsRampDownEnabled ? "39" : "0";
+    public string FrequencyRowHeight => IsTacs ? "39" : "0";
     public string CurrentLabel => "幅值 (mA)";
     public string TotalDurationLabel => IsPulseCurrent
         ? "治疗时间 (s)"
-        : IsDirectCurrent || IsMonophasicPulseCurrent ? "刺激时间 (s)" : "总时长 (min)";
+        : IsDirectCurrent || IsMonophasicPulseCurrent || IsTemporalInterference || IsTacs
+            ? "刺激时间 (s)"
+            : "总时长 (min)";
     public string IntervalLabel => IsPulseCurrent
         ? "间隔宽度 (ms)"
-        : IsDirectCurrent || IsMonophasicPulseCurrent ? "间隔时间 (s)" : "间隔时间 (min)";
+        : IsDirectCurrent || IsMonophasicPulseCurrent || IsTemporalInterference || IsTacs
+            ? "间隔时间 (s)"
+            : "间隔时间 (min)";
     public string SessionDurationLabel => IsPulseCurrent
         ? "脉冲宽度 (ms)"
-        : IsDirectCurrent ? "单次时长 (s)" : "单次时长 (min)";
+        : IsDirectCurrent || IsTemporalInterference || IsTacs ? "单次时长 (s)" : "单次时长 (min)";
     public string RampUpLabel => IsPulseCurrent
         ? "上升宽度 (ms)"
         : IsMonophasicPulseCurrent ? "渐升时间（渐降同值）(s)" : "渐升时间 (s)";
@@ -167,13 +200,13 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
 
     public string IntervalMinutesEntry
     {
-        get => IsContinuousMode ? "/" : intervalValue;
+        get => IsTemporalInterference || IsTacs ? "-" : IsContinuousMode ? "/" : intervalValue;
         set { if (IsIntervalMode) SetProperty(ref intervalValue, value, nameof(IntervalMinutesEntry)); }
     }
 
     public string SessionDurationMinutesEntry
     {
-        get => IsContinuousMode ? "/" : sessionDurationValue;
+        get => IsTemporalInterference || IsTacs ? "-" : IsContinuousMode ? "/" : sessionDurationValue;
         set { if (IsIntervalMode) SetProperty(ref sessionDurationValue, value, nameof(SessionDurationMinutesEntry)); }
     }
 
@@ -184,6 +217,12 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
     {
         get => IsPulseCurrent ? "/" : rampDownValue;
         set { if (!IsPulseCurrent) SetProperty(ref rampDownValue, value, nameof(RampDownSecondsEntry)); }
+    }
+
+    public string CarrierFrequencyHz
+    {
+        get => carrierFrequencyValue;
+        set => SetProperty(ref carrierFrequencyValue, value);
     }
 
     public string EvidenceGrade { get => evidenceGrade; set => SetProperty(ref evidenceGrade, value); }
@@ -264,6 +303,16 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
             return TryBuildDirectCurrent(current, out prescription);
         }
 
+        if (IsTemporalInterference)
+        {
+            return TryBuildTemporalInterference(out prescription);
+        }
+
+        if (IsTacs)
+        {
+            return TryBuildTacs(out prescription);
+        }
+
         if (IsMonophasicPulseCurrent)
         {
             return TryBuildMonophasicPulseCurrent(out prescription);
@@ -289,6 +338,18 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         string text,
         string fallbackValue) =>
         MonophasicPulseCurrentParameterRules.Normalize(kind, text, fallbackValue);
+
+    public TiAlternatingCurrentParameterNormalization NormalizeTemporalInterferenceEntry(
+        TiAlternatingCurrentParameterKind kind,
+        string text,
+        string fallbackValue) =>
+        TiAlternatingCurrentParameterRules.Normalize(kind, text, fallbackValue);
+
+    public TacsParameterNormalization NormalizeTacsEntry(
+        TacsParameterKind kind,
+        string text,
+        string fallbackValue) =>
+        TacsParameterRules.Normalize(kind, text, fallbackValue);
 
     public void ReportInputError(string message) => ErrorMessage = message;
 
@@ -524,6 +585,109 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         return true;
     }
 
+    private bool TryBuildTemporalInterference(out PrescriptionDefinition prescription)
+    {
+        prescription = Original;
+        if (!TryTemporalInterferenceParameter(
+                TiAlternatingCurrentParameterKind.PeakCurrentMilliampere,
+                CurrentMilliamp,
+                out var current)
+            || !TryTemporalInterferenceParameter(
+                TiAlternatingCurrentParameterKind.TotalDurationSeconds,
+                TotalDurationMinutes,
+                out var totalDuration)
+            || !TryTemporalInterferenceParameter(
+                TiAlternatingCurrentParameterKind.RampUpSeconds,
+                RampUpSeconds,
+                out var rampUp)
+            || !TryTemporalInterferenceParameter(
+                TiAlternatingCurrentParameterKind.RampDownSeconds,
+                RampDownSecondsEntry,
+                out var rampDown))
+        {
+            return false;
+        }
+
+        if (rampUp + rampDown > totalDuration)
+        {
+            ErrorMessage = "刺激时间不能小于渐升时间与渐降时间之和。";
+            return false;
+        }
+
+        prescription = Original with
+        {
+            Name = Name.Trim(),
+            Indication = Indication.Trim(),
+            StimulationType = StimulationModeCodes.TemporalInterference,
+            CurrentMilliamp = decimal.ToDouble(current),
+            DeliveryMode = PrescriptionDeliveryModes.Continuous,
+            TotalDurationMinutes = Math.Max(1, (int)Math.Ceiling(totalDuration / 60m)),
+            IntervalMinutes = null,
+            SessionDurationMinutes = null,
+            Course = Course.Trim(),
+            RampUpSeconds = decimal.ToInt32(decimal.Round(rampUp, 0, MidpointRounding.AwayFromZero)),
+            RampDownSeconds = decimal.ToInt32(decimal.Round(rampDown, 0, MidpointRounding.AwayFromZero)),
+            EvidenceGrade = EvidenceGrade.Trim(),
+            ChannelPolarities = null,
+            PulseTreatmentDurationSeconds = null,
+            PulseTreatmentDurationSecondsValue = null,
+            PulseWidthMilliseconds = null,
+            PulseRiseWidthMilliseconds = null,
+            PulseIntervalWidthMilliseconds = null,
+            DirectCurrentTotalDurationSecondsValue = decimal.ToDouble(totalDuration),
+            DirectCurrentIntervalSecondsValue = null,
+            DirectCurrentSingleDurationSecondsValue = null,
+            DirectCurrentRampUpSecondsValue = decimal.ToDouble(rampUp),
+            DirectCurrentRampDownSecondsValue = decimal.ToDouble(rampDown)
+        };
+        ErrorMessage = string.Empty;
+        return true;
+    }
+
+    private bool TryBuildTacs(out PrescriptionDefinition prescription)
+    {
+        prescription = Original;
+        if (!TryTacsParameter(TacsParameterKind.PeakCurrentMilliampere, CurrentMilliamp, out var current)
+            || !TryTacsParameter(TacsParameterKind.TotalDurationSeconds, TotalDurationMinutes, out var totalDuration)
+            || !TryTacsParameter(TacsParameterKind.RampUpSeconds, RampUpSeconds, out var rampUp)
+            || !TryTacsParameter(TacsParameterKind.RampDownSeconds, RampDownSecondsEntry, out var rampDown)
+            || !TryTacsParameter(TacsParameterKind.FrequencyHz, CarrierFrequencyHz, out var frequency))
+        {
+            return false;
+        }
+
+        if (rampUp + rampDown > totalDuration)
+        {
+            ErrorMessage = "刺激时间不能小于渐升时间与渐降时间之和。";
+            return false;
+        }
+
+        prescription = Original with
+        {
+            Name = Name.Trim(),
+            Indication = Indication.Trim(),
+            StimulationType = StimulationModeCodes.AlternatingCurrent,
+            CurrentMilliamp = decimal.ToDouble(current),
+            DeliveryMode = PrescriptionDeliveryModes.Continuous,
+            TotalDurationMinutes = Math.Max(1, (int)Math.Ceiling(totalDuration / 60m)),
+            IntervalMinutes = null,
+            SessionDurationMinutes = null,
+            Course = Course.Trim(),
+            RampUpSeconds = decimal.ToInt32(decimal.Round(rampUp, 0, MidpointRounding.AwayFromZero)),
+            RampDownSeconds = decimal.ToInt32(decimal.Round(rampDown, 0, MidpointRounding.AwayFromZero)),
+            EvidenceGrade = EvidenceGrade.Trim(),
+            ChannelPolarities = null,
+            TacsPeakCurrentMilliampereValue = decimal.ToDouble(current),
+            TacsRampUpSecondsValue = decimal.ToDouble(rampUp),
+            TacsRampDownSecondsValue = decimal.ToDouble(rampDown),
+            TacsFrequencyHzValue = decimal.ToInt32(frequency),
+            TacsTotalDurationSecondsValue = decimal.ToDouble(totalDuration),
+            TacsParameterVersion = 1,
+        };
+        ErrorMessage = string.Empty;
+        return true;
+    }
+
     private bool TryBuildMonophasicPulseCurrent(out PrescriptionDefinition prescription)
     {
         prescription = Original;
@@ -590,6 +754,7 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         sessionDurationValue = string.Empty;
         rampUpValue = string.Empty;
         rampDownValue = string.Empty;
+        CarrierFrequencyHz = string.Empty;
         OnPropertyChanged(nameof(IntervalMinutesEntry));
         OnPropertyChanged(nameof(SessionDurationMinutesEntry));
         OnPropertyChanged(nameof(RampUpSeconds));
@@ -600,16 +765,21 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsPulseCurrent));
         OnPropertyChanged(nameof(IsDirectCurrent));
+        OnPropertyChanged(nameof(IsTemporalInterference));
+        OnPropertyChanged(nameof(IsTacs));
         OnPropertyChanged(nameof(IsMonophasicPulseCurrent));
         OnPropertyChanged(nameof(IsDeliveryModeEnabled));
         OnPropertyChanged(nameof(IsIntervalMode));
         OnPropertyChanged(nameof(IsContinuousMode));
         OnPropertyChanged(nameof(IsRampDownEnabled));
         OnPropertyChanged(nameof(ShowDeliveryMode));
+        OnPropertyChanged(nameof(ShowInterval));
         OnPropertyChanged(nameof(ShowSingleDuration));
         OnPropertyChanged(nameof(DeliveryModeRowHeight));
+        OnPropertyChanged(nameof(IntervalRowHeight));
         OnPropertyChanged(nameof(SingleDurationRowHeight));
         OnPropertyChanged(nameof(RampDownRowHeight));
+        OnPropertyChanged(nameof(FrequencyRowHeight));
         OnPropertyChanged(nameof(TotalDurationLabel));
         OnPropertyChanged(nameof(IntervalLabel));
         OnPropertyChanged(nameof(SessionDurationLabel));
@@ -618,6 +788,7 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(IntervalMinutesEntry));
         OnPropertyChanged(nameof(SessionDurationMinutesEntry));
         OnPropertyChanged(nameof(RampDownSecondsEntry));
+        OnPropertyChanged(nameof(CarrierFrequencyHz));
     }
 
     private static string LoadTotalDuration(PrescriptionDefinition prescription, bool isNew)
@@ -635,7 +806,17 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
                 StimulationModeCodes.DirectCurrent,
                 StringComparison.Ordinal)
                 || prescription.IsMonophasicPulseCurrent
-                ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentTotalDurationSeconds)
+                || prescription.IsTacs
+                || string.Equals(
+                    prescription.StimulationType,
+                    StimulationModeCodes.TemporalInterference,
+                    StringComparison.Ordinal)
+                ? prescription.IsTacs
+                    ? TacsParameterRules.Normalize(
+                        TacsParameterKind.TotalDurationSeconds,
+                        prescription.TacsTotalDurationSeconds.ToString(CultureInfo.InvariantCulture),
+                        TacsParameterRules.DefaultTotalDurationSeconds).Value
+                    : DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentTotalDurationSeconds)
                 : prescription.TotalDurationMinutes.ToString(CultureInfo.InvariantCulture);
     }
 
@@ -653,6 +834,11 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
                 StimulationModeCodes.DirectCurrent,
                 StringComparison.Ordinal)
                 || prescription.IsMonophasicPulseCurrent
+                || prescription.IsTacs
+                || string.Equals(
+                    prescription.StimulationType,
+                    StimulationModeCodes.TemporalInterference,
+                    StringComparison.Ordinal)
                 ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentIntervalDurationSeconds)
                 : prescription.IntervalMinutes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     }
@@ -671,6 +857,11 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
                 StimulationModeCodes.DirectCurrent,
                 StringComparison.Ordinal)
                 || prescription.IsMonophasicPulseCurrent
+                || prescription.IsTacs
+                || string.Equals(
+                    prescription.StimulationType,
+                    StimulationModeCodes.TemporalInterference,
+                    StringComparison.Ordinal)
                 ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentSingleDurationSeconds)
                 : prescription.SessionDurationMinutes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     }
@@ -689,7 +880,17 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
                 StimulationModeCodes.DirectCurrent,
                 StringComparison.Ordinal)
                 || prescription.IsMonophasicPulseCurrent
-                ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentRampUpDurationSeconds)
+                || prescription.IsTacs
+                || string.Equals(
+                    prescription.StimulationType,
+                    StimulationModeCodes.TemporalInterference,
+                    StringComparison.Ordinal)
+                ? prescription.IsTacs
+                    ? TacsParameterRules.Normalize(
+                        TacsParameterKind.RampUpSeconds,
+                        prescription.TacsRampUpSeconds.ToString(CultureInfo.InvariantCulture),
+                        TacsParameterRules.DefaultRampUpSeconds).Value
+                    : DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentRampUpDurationSeconds)
                 : prescription.RampUpSeconds.ToString(CultureInfo.InvariantCulture);
     }
 
@@ -704,7 +905,17 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
                 prescription.StimulationType,
                 StimulationModeCodes.DirectCurrent,
                 StringComparison.Ordinal)
-            ? DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentRampDownDurationSeconds)
+            || string.Equals(
+                prescription.StimulationType,
+                StimulationModeCodes.TemporalInterference,
+                StringComparison.Ordinal)
+            || prescription.IsTacs
+            ? prescription.IsTacs
+                ? TacsParameterRules.Normalize(
+                    TacsParameterKind.RampDownSeconds,
+                    prescription.TacsRampDownSeconds.ToString(CultureInfo.InvariantCulture),
+                    TacsParameterRules.DefaultRampDownSeconds).Value
+                : DirectCurrentParameterRules.FormatTime(prescription.DirectCurrentRampDownDurationSeconds)
             : prescription.RampDownSeconds.ToString(CultureInfo.InvariantCulture);
     }
 
@@ -724,6 +935,27 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
             sessionDurationValue = DirectCurrentParameterRules.DefaultSingleDurationSeconds;
             RampUpSeconds = DirectCurrentParameterRules.DefaultRampUpSeconds;
             rampDownValue = DirectCurrentParameterRules.DefaultRampDownSeconds;
+        }
+        else if (IsTemporalInterference)
+        {
+            CurrentMilliamp = TiAlternatingCurrentParameterRules.DefaultPeakCurrentMilliampere;
+            DeliveryMode = PrescriptionDeliveryModes.Continuous;
+            TotalDurationMinutes = TiAlternatingCurrentParameterRules.DefaultTotalDurationSeconds;
+            intervalValue = string.Empty;
+            sessionDurationValue = string.Empty;
+            RampUpSeconds = TiAlternatingCurrentParameterRules.DefaultRampUpSeconds;
+            rampDownValue = TiAlternatingCurrentParameterRules.DefaultRampDownSeconds;
+        }
+        else if (IsTacs)
+        {
+            CurrentMilliamp = TacsParameterRules.DefaultPeakCurrentMilliampere;
+            DeliveryMode = PrescriptionDeliveryModes.Continuous;
+            TotalDurationMinutes = TacsParameterRules.DefaultTotalDurationSeconds;
+            intervalValue = string.Empty;
+            sessionDurationValue = string.Empty;
+            RampUpSeconds = TacsParameterRules.DefaultRampUpSeconds;
+            rampDownValue = TacsParameterRules.DefaultRampDownSeconds;
+            CarrierFrequencyHz = TacsParameterRules.DefaultFrequencyHz;
         }
         else if (IsPulseCurrent)
         {
@@ -757,6 +989,34 @@ public sealed class PrescriptionEditorViewModel : ObservableObject
         out double value)
     {
         if (DirectCurrentParameterRules.TryParseValidated(kind, text, out value, out var error))
+        {
+            return true;
+        }
+
+        ErrorMessage = error;
+        return false;
+    }
+
+    private bool TryTemporalInterferenceParameter(
+        TiAlternatingCurrentParameterKind kind,
+        string text,
+        out decimal value)
+    {
+        if (TiAlternatingCurrentParameterRules.TryParseValidated(kind, text, out value, out var error))
+        {
+            return true;
+        }
+
+        ErrorMessage = error;
+        return false;
+    }
+
+    private bool TryTacsParameter(
+        TacsParameterKind kind,
+        string text,
+        out decimal value)
+    {
+        if (TacsParameterRules.TryParseValidated(kind, text, out value, out var error))
         {
             return true;
         }

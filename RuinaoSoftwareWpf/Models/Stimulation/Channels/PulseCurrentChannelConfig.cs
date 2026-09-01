@@ -5,7 +5,7 @@ using System.Windows.Media;
 namespace RuinaoSoftwareWpf;
 
 /// <summary>
-/// 单个 tPCS 通道的界面参数。硬件协议接入前仅作为本次登录期间的编辑状态。
+/// 单个 tPCS 通道的界面参数与运行状态。
 /// </summary>
 public sealed class PulseCurrentChannelConfig : ObservableObject, IStimulationImpedanceChannel
 {
@@ -20,6 +20,7 @@ public sealed class PulseCurrentChannelConfig : ObservableObject, IStimulationIm
     private string remainingTime = "00:00:00";
     private bool isParameterEditingEnabled = true;
     private bool isStimulating;
+    private bool isStarting;
     private bool isSelected;
     private decimal? impedanceOhms;
 
@@ -132,6 +133,12 @@ public sealed class PulseCurrentChannelConfig : ObservableObject, IStimulationIm
                 OnPropertyChanged(nameof(StatusIndicatorBrush));
             }
         }
+    }
+
+    public bool IsStarting
+    {
+        get => isStarting;
+        set => SetProperty(ref isStarting, value);
     }
 
     public PulseCurrentWaveformState Waveform { get; } = new();
