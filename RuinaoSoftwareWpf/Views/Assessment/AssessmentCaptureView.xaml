@@ -11,6 +11,14 @@
              d:DesignHeight="760"
              d:DesignWidth="1280">
     <UserControl.Resources>
+        <SolidColorBrush x:Key="CaptureHeaderBackground" Color="#171D28" />
+        <SolidColorBrush x:Key="CaptureCanvasBackground" Color="#111722" />
+        <SolidColorBrush x:Key="CaptureSeparator" Color="#293241" />
+        <SolidColorBrush x:Key="CaptureAccent" Color="#D28A27" />
+        <SolidColorBrush x:Key="CaptureAction" Color="#A96517" />
+        <SolidColorBrush x:Key="CaptureActionHover" Color="#BE7820" />
+        <SolidColorBrush x:Key="CaptureActionPressed" Color="#8E5313" />
+
         <Style x:Key="SectionTitle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource Text}" />
             <Setter Property="FontSize" Value="15" />
@@ -36,8 +44,8 @@
             <Setter Property="CornerRadius" Value="4" />
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="Margin" Value="8,0,0,0" />
-            <Setter Property="Background" Value="#242A36" />
-            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+            <Setter Property="Background" Value="#202837" />
+            <Setter Property="BorderBrush" Value="{StaticResource CaptureSeparator}" />
             <Setter Property="BorderThickness" Value="1" />
         </Style>
 
@@ -51,9 +59,9 @@
         </Style>
 
         <Style x:Key="PrimaryCaptureButton" TargetType="Button">
-            <Setter Property="Background" Value="#7C4A12" />
-            <Setter Property="Foreground" Value="#FFFFFF" />
-            <Setter Property="BorderBrush" Value="{StaticResource Gold}" />
+            <Setter Property="Background" Value="{StaticResource CaptureAction}" />
+            <Setter Property="Foreground" Value="#FDF7EE" />
+            <Setter Property="BorderBrush" Value="{StaticResource CaptureAccent}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Padding" Value="22,8" />
@@ -73,10 +81,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#9B5F18" />
+                                <Setter Property="Background" Value="{StaticResource CaptureActionHover}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#623A0E" />
+                                <Setter Property="Background" Value="{StaticResource CaptureActionPressed}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -624,7 +632,9 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid x:Name="WorkbenchRoot" Margin="18,14">
+    <Grid x:Name="WorkbenchRoot"
+          Margin="18,14"
+          Background="{StaticResource CaptureCanvasBackground}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -633,9 +643,11 @@
 
         <Border x:Name="WorkbenchHeader"
                 Grid.Row="0"
-                Style="{StaticResource Card}"
+                Background="{StaticResource CaptureHeaderBackground}"
+                BorderThickness="0"
+                CornerRadius="0"
                 Padding="16,10"
-                Margin="0,0,0,12">
+                Margin="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -643,7 +655,7 @@
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Text="{Binding WorkspaceTitleText}"
-                           Foreground="{StaticResource Gold}"
+                           Foreground="{StaticResource CaptureAccent}"
                            FontSize="20"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center" />
@@ -654,8 +666,8 @@
                     <Border Style="{StaticResource InfoPill}">
                         <TextBlock Text="{Binding CurrentModuleBadgeText}" Foreground="{StaticResource Text}" FontSize="12" />
                     </Border>
-                    <Border Style="{StaticResource InfoPill}" Background="#173323" BorderBrush="#285A37">
-                        <TextBlock Text="{Binding WorkbenchStatusText}" Foreground="#7FE095" FontSize="12" />
+                    <Border Style="{StaticResource InfoPill}" Background="#153823" BorderBrush="#2A6C42">
+                        <TextBlock Text="{Binding WorkbenchStatusText}" Foreground="#72D58D" FontSize="12" />
                     </Border>
                 </StackPanel>
             </Grid>
@@ -678,15 +690,16 @@
 
                 <Border x:Name="ParadigmCard"
                         Grid.Row="0"
-                        Style="{StaticResource Card}"
-                        Padding="14"
+                        Background="{StaticResource CaptureCanvasBackground}"
+                        BorderThickness="0"
+                        CornerRadius="0"
+                        Padding="0"
                         Margin="0">
                     <Grid>
                         <Border x:Name="SharedDisplayFrame"
-                                Background="#0B0E14"
-                                BorderBrush="{StaticResource Line}"
-                                BorderThickness="1"
-                                CornerRadius="4">
+                                Background="{StaticResource CaptureCanvasBackground}"
+                                BorderThickness="0"
+                                CornerRadius="0">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
@@ -694,11 +707,11 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <DockPanel x:Name="SharedDisplayHeader" Margin="16,12,16,0">
+                                <DockPanel x:Name="SharedDisplayHeader" Margin="24,18,24,0">
                                     <StackPanel>
-                                        <TextBlock Text="{Binding SharedDisplayTitle}"
+                                        <TextBlock Text="{Binding CurrentModule}"
                                                    Foreground="{StaticResource Text}"
-                                                   FontSize="16"
+                                                   FontSize="18"
                                                    FontWeight="SemiBold" />
                                         <TextBlock Text="中央区域为公共显示容器：图片浏览、视频浏览、眼动校准等模块都复用此处；模块内部状态决定显示视频、图片或校准画布。"
                                                    Visibility="Collapsed"
@@ -709,13 +722,12 @@
 
                                 <Grid x:Name="ParadigmCanvasHost"
                                       Grid.Row="1"
-                                      Margin="16,10"
+                                      Margin="16,8,16,10"
                                       HorizontalAlignment="Stretch"
                                       VerticalAlignment="Stretch">
-                                    <Border Background="#11141D"
-                                            BorderBrush="#252B37"
-                                            BorderThickness="1"
-                                            CornerRadius="4">
+                                    <Border Background="{StaticResource CaptureCanvasBackground}"
+                                            BorderThickness="0"
+                                            CornerRadius="0">
                                         <Grid>
                                             <MediaElement x:Name="DemoMedia"
                                                           Source="{Binding DemoVideoUri}"

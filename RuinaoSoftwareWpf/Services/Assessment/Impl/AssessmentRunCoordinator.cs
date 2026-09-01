@@ -51,6 +51,6 @@ internal sealed class AssessmentRunCoordinator(
     private string GetCurrentPatientCode()
     {
         return patientService.CurrentPatient?.PatientCode
-            ?? throw new InvalidOperationException("请先新增或选择患者，再开始数字表型评估。");
+            ?? throw new InvalidOperationException("请先新增或选择患者，再开始数字表型采集。");
     }
 }

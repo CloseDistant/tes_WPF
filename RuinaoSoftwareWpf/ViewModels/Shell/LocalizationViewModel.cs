@@ -75,7 +75,6 @@ public sealed class LocalizationViewModel : ObservableObject
     public string NavigationText => T("Navigation");
     public string ControlText => T("Control");
     public string StimulationTypeTitleText => T("StimulationTypeTitle");
-    public string StimulationTypeHintText => T("StimulationTypeHint");
     public string TemporalInterferenceText => T("TemporalInterference");
     public string TranscranialDirectCurrentText => T("TranscranialDirectCurrent");
     public string TranscranialAlternatingCurrentText => T("TranscranialAlternatingCurrent");

@@ -4,7 +4,7 @@ using System.Windows.Input;
 using RuinaoSoftwareWpf.ApplicationContracts;
 
 /// <summary>
-/// 数字表型评估入口。这里只解析患者级 Run 状态，不承载任何采集模块业务。
+/// 数字表型采集入口。这里只解析患者级 Run 状态，不承载任何采集模块业务。
 /// </summary>
 public sealed class AssessmentEntryViewModel : ObservableObject
 {

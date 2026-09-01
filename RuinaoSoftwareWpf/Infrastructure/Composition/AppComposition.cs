@@ -186,7 +186,7 @@ public static class AppComposition
         services.AddSingleton<PrescriptionViewModel>(); // 公用处方管理页面
         services.AddSingleton<EegSignalCaptureViewModel>(); // EEG 采集面板
         services.AddSingleton<AssessmentCaptureViewModel>(); // 采集工作台：导航切换时保留模块进度
-        services.AddSingleton<AssessmentEntryViewModel>(); // 数字表型评估的患者级 Run 入口
+        services.AddSingleton<AssessmentEntryViewModel>(); // 数字表型采集的患者级 Run 入口
         services.AddSingleton<AssessmentFeatureHostViewModel>(); // 入口与采集工作台的单一页面宿主
         services.AddSingleton<AssessmentWorkbenchCoordinator>(); // 数字表型工作台流程协调器和模块 VM 容器
         services.AddSingleton<FemSimulationViewModel>();   // FEM 仿真面板

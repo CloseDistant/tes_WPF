@@ -269,7 +269,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     /// <summary>采集工作台 ViewModel。</summary>
     public AssessmentCaptureViewModel AssessmentCapture { get; }
 
-    /// <summary>数字表型评估入口与采集工作台宿主。</summary>
+    /// <summary>数字表型采集入口与采集工作台宿主。</summary>
     public AssessmentFeatureHostViewModel AssessmentFeature { get; }
 
     /// <summary>FEM 仿真页面 ViewModel。</summary>
