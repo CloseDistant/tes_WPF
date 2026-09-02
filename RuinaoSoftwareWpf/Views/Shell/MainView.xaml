@@ -39,6 +39,10 @@
             <views:AssessmentEntryView />
         </DataTemplate>
 
+        <DataTemplate DataType="{x:Type local:AssessmentPatientMatchingViewModel}">
+            <views:AssessmentPatientMatchingView />
+        </DataTemplate>
+
         <DataTemplate DataType="{x:Type local:AssessmentFeatureHostViewModel}">
             <ContentControl Content="{Binding CurrentContent}" />
         </DataTemplate>

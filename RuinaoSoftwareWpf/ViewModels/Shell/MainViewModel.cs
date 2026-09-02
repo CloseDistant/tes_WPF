@@ -115,6 +115,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         AssessmentCapture = assessmentCapture;
         AssessmentFeature = assessmentFeature;
         AssessmentFeature.Entry.PatientSelectionRequested += OnAssessmentPatientSelectionRequested;
+        AssessmentFeature.Entry.PatientMatchingRequested += OnAssessmentPatientMatchingRequested;
         FemSimulation = femSimulation;
         Device = device;
         Config = config;

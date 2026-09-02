@@ -14,6 +14,7 @@ public sealed class AssessmentEntryViewModel : ObservableObject
     private readonly ILoggingService logger;
     private readonly AsyncRelayCommand primaryActionCommand;
     private readonly AsyncRelayCommand selectPatientCommand;
+    private readonly AsyncRelayCommand matchPatientCommand;
     private AssessmentEntryState state = AssessmentEntryState.Loading;
     private AssessmentRunContext? activeRun;
     private string errorMessage = string.Empty;
@@ -39,6 +40,12 @@ public sealed class AssessmentEntryViewModel : ObservableObject
             () => patientService.CurrentPatient is null
                 && State is AssessmentEntryState.NoPatient or AssessmentEntryState.Error);
         SelectPatientCommand = selectPatientCommand;
+        matchPatientCommand = new AsyncRelayCommand(
+            ExecuteMatchPatientAsync,
+            () => State is AssessmentEntryState.NoPatient
+                or AssessmentEntryState.NoActiveRun
+                or AssessmentEntryState.Error);
+        MatchPatientCommand = matchPatientCommand;
         localization.LanguageChanged += (_, _) => NotifyTextChanged();
         patientService.CurrentPatientChanged += (_, _) => NotifyPatientChanged();
     }
@@ -47,9 +54,13 @@ public sealed class AssessmentEntryViewModel : ObservableObject
 
     public event EventHandler<AssessmentPatientSelectionRequestedEventArgs>? PatientSelectionRequested;
 
+    public event EventHandler<AssessmentPatientMatchingRequestedEventArgs>? PatientMatchingRequested;
+
     public ICommand PrimaryActionCommand { get; }
 
     public ICommand SelectPatientCommand { get; }
+
+    public ICommand MatchPatientCommand { get; }
 
     public AssessmentEntryState State
     {
@@ -63,9 +74,11 @@ public sealed class AssessmentEntryViewModel : ObservableObject
                 OnPropertyChanged(nameof(IsNoPatientState));
                 OnPropertyChanged(nameof(PrimaryActionText));
                 OnPropertyChanged(nameof(SelectPatientActionText));
+                OnPropertyChanged(nameof(MatchPatientActionText));
                 OnPropertyChanged(nameof(HasError));
                 primaryActionCommand.RaiseCanExecuteChanged();
                 selectPatientCommand.RaiseCanExecuteChanged();
+                matchPatientCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -94,6 +107,8 @@ public sealed class AssessmentEntryViewModel : ObservableObject
     public string SelectPatientActionText => State == AssessmentEntryState.SelectingPatient
         ? localization.Text("AssessmentEntrySelectingPatient")
         : localization.Text("AssessmentEntrySelectPatient");
+
+    public string MatchPatientActionText => localization.Text("AssessmentEntryMatchPatient");
 
     public string PrimaryActionText => State switch
     {
@@ -172,6 +187,27 @@ public sealed class AssessmentEntryViewModel : ObservableObject
         }
     }
 
+    public async Task ExecuteMatchPatientAsync(CancellationToken cancellationToken = default)
+    {
+        if (State is not (AssessmentEntryState.NoPatient
+            or AssessmentEntryState.NoActiveRun
+            or AssessmentEntryState.Error))
+        {
+            return;
+        }
+
+        ErrorMessage = string.Empty;
+        var request = new AssessmentPatientMatchingRequestedEventArgs(cancellationToken);
+        PatientMatchingRequested?.Invoke(this, request);
+        if (!request.IsHandled)
+        {
+            throw new InvalidOperationException("患者匹配入口尚未连接到主界面。");
+        }
+
+        await request.Completion;
+        await LoadAsync(cancellationToken);
+    }
+
     public async Task ExecutePrimaryActionAsync(CancellationToken cancellationToken = default)
     {
         if (State == AssessmentEntryState.Error)
@@ -223,6 +259,7 @@ public sealed class AssessmentEntryViewModel : ObservableObject
         OnPropertyChanged(nameof(IsPrimaryActionVisible));
         OnPropertyChanged(nameof(IsNoPatientState));
         selectPatientCommand.RaiseCanExecuteChanged();
+        matchPatientCommand.RaiseCanExecuteChanged();
     }
 
     private void NotifyTextChanged()
@@ -233,5 +270,6 @@ public sealed class AssessmentEntryViewModel : ObservableObject
         OnPropertyChanged(nameof(NoPatientTitleText));
         OnPropertyChanged(nameof(NoPatientDescriptionText));
         OnPropertyChanged(nameof(SelectPatientActionText));
+        OnPropertyChanged(nameof(MatchPatientActionText));
     }
 }

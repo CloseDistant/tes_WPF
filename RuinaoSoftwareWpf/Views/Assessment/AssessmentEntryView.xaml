@@ -105,23 +105,34 @@
                         BorderThickness="0,1,0,1"
                         Padding="26,16"
                         Margin="0,0,0,34">
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                        <TextBlock Text="{Binding CurrentPatientLabelText}"
-                                   Foreground="#95A4BC"
-                                   FontSize="13"
-                                   VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding CurrentPatientName}"
-                                   Foreground="#F1F3F6"
-                                   FontSize="13"
-                                   FontWeight="SemiBold"
-                                   Margin="24,0,0,0"
-                                   VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding CurrentPatientCode}"
-                                   Foreground="#95A4BC"
-                                   FontSize="13"
-                                   Margin="24,0,0,0"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
+                    <Grid>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <TextBlock Text="{Binding CurrentPatientLabelText}"
+                                       Foreground="#95A4BC"
+                                       FontSize="13"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding CurrentPatientName}"
+                                       Foreground="#F1F3F6"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Margin="24,0,0,0"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding CurrentPatientCode}"
+                                       Foreground="#95A4BC"
+                                       FontSize="13"
+                                       Margin="24,0,0,0"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Button Content="{Binding MatchPatientActionText}"
+                                Command="{Binding MatchPatientCommand}"
+                                Style="{StaticResource AssessmentEntrySelectPatientButton}"
+                                MinWidth="110"
+                                Height="32"
+                                Padding="16,5"
+                                FontSize="12"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center" />
+                    </Grid>
                 </Border>
 
                 <Button Content="{Binding PrimaryActionText}"
@@ -157,9 +168,15 @@
                            FontSize="14"
                            TextAlignment="Center"
                            Margin="0,12,0,30" />
-                <Button Content="{Binding SelectPatientActionText}"
-                        Command="{Binding SelectPatientCommand}"
-                        Style="{StaticResource AssessmentEntrySelectPatientButton}" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button Content="{Binding SelectPatientActionText}"
+                            Command="{Binding SelectPatientCommand}"
+                            Style="{StaticResource AssessmentEntrySelectPatientButton}" />
+                    <Button Content="{Binding MatchPatientActionText}"
+                            Command="{Binding MatchPatientCommand}"
+                            Style="{StaticResource AssessmentEntrySelectPatientButton}"
+                            Margin="12,0,0,0" />
+                </StackPanel>
                 <TextBlock Text="{Binding ErrorMessage}"
                            Foreground="#E47979"
                            FontSize="12"

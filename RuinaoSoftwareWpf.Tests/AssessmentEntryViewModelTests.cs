@@ -21,6 +21,25 @@ public sealed class AssessmentEntryViewModelTests
     }
 
     [Fact]
+    public async Task MatchPatientAsync_RaisesMatchingRequest()
+    {
+        var coordinator = new RecordingRunCoordinator();
+        var patientService = new FixedPatientService(null);
+        var viewModel = CreateViewModel(coordinator, patientService);
+        var raised = false;
+        viewModel.PatientMatchingRequested += (_, request) =>
+        {
+            raised = true;
+            request.IsHandled = true;
+        };
+
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+        await viewModel.ExecuteMatchPatientAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(raised);
+    }
+
+    [Fact]
     public async Task SelectPatientAsync_AfterSelection_ReloadsAssessmentEntry()
     {
         var coordinator = new RecordingRunCoordinator();

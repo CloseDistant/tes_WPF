@@ -13,6 +13,14 @@ public sealed partial class MainViewModel
         eventArgs.Completion = SelectOrCreatePatientForAssessmentAsync(eventArgs.CancellationToken);
     }
 
+    private void OnAssessmentPatientMatchingRequested(
+        object? sender,
+        AssessmentPatientMatchingRequestedEventArgs eventArgs)
+    {
+        eventArgs.IsHandled = true;
+        eventArgs.Completion = AssessmentFeature.ShowMatchingAsync(eventArgs.CancellationToken);
+    }
+
     private async Task SelectOrCreatePatientForAssessmentAsync(CancellationToken cancellationToken)
     {
         if (patientService.CurrentPatient is not null)

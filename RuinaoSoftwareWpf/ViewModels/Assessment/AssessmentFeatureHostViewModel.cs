@@ -8,20 +8,26 @@ using RuinaoSoftwareWpf.ApplicationContracts;
 public sealed class AssessmentFeatureHostViewModel : ObservableObject
 {
     private ObservableObject currentContent;
+    private TaskCompletionSource? matchingCompletion;
 
     public AssessmentFeatureHostViewModel(
         AssessmentEntryViewModel entry,
-        AssessmentCaptureViewModel workbench)
+        AssessmentCaptureViewModel workbench,
+        AssessmentPatientMatchingViewModel matching)
     {
         Entry = entry;
         Workbench = workbench;
+        Matching = matching;
         currentContent = entry;
         Entry.RunActivated += OnRunActivated;
+        Matching.BackRequested += OnMatchingBackRequested;
     }
 
     public AssessmentEntryViewModel Entry { get; }
 
     public AssessmentCaptureViewModel Workbench { get; }
+
+    public AssessmentPatientMatchingViewModel Matching { get; }
 
     public ObservableObject CurrentContent
     {
@@ -43,10 +49,31 @@ public sealed class AssessmentFeatureHostViewModel : ObservableObject
         await Entry.LoadAsync(cancellationToken);
     }
 
+    public void ShowMatching()
+    {
+        CurrentContent = Matching;
+        OnPropertyChanged(nameof(IsWorkbenchVisible));
+    }
+
+    public Task ShowMatchingAsync(CancellationToken cancellationToken = default)
+    {
+        ShowMatching();
+        matchingCompletion = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        return matchingCompletion.Task.WaitAsync(cancellationToken);
+    }
+
     private void OnRunActivated(object? sender, AssessmentRunContext run)
     {
         Workbench.ConfigureFormalRun(run);
         CurrentContent = Workbench;
         OnPropertyChanged(nameof(IsWorkbenchVisible));
+    }
+
+    private void OnMatchingBackRequested(object? sender, EventArgs e)
+    {
+        ShowEntry();
+        matchingCompletion?.TrySetResult();
+        matchingCompletion = null;
     }
 }
