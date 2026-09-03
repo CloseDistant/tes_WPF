@@ -1,7 +1,7 @@
 namespace RuinaoSoftwareWpf;
 
 /// <summary>
-/// 网新外部随访接口边界。当前阶段只接入接口 1 的患者分页查询。
+/// 网新外部随访接口边界。当前阶段接入患者分页查询和随访详情查询。
 /// </summary>
 public interface IExternalFollowUpService
 {
@@ -9,5 +9,9 @@ public interface IExternalFollowUpService
         string? phone,
         int pageNumber = 1,
         int pageSize = 10,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ExternalFollowUpDetail>> GetFollowUpDetailsAsync(
+        string phone,
         CancellationToken cancellationToken = default);
 }

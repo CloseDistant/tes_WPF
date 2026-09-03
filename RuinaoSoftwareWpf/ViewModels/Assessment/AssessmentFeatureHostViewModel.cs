@@ -55,12 +55,22 @@ public sealed class AssessmentFeatureHostViewModel : ObservableObject
         OnPropertyChanged(nameof(IsWorkbenchVisible));
     }
 
-    public Task ShowMatchingAsync(CancellationToken cancellationToken = default)
+    public async Task ShowMatchingAsync(CancellationToken cancellationToken = default)
     {
         ShowMatching();
         matchingCompletion = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        return matchingCompletion.Task.WaitAsync(cancellationToken);
+
+        try
+        {
+            // 进入匹配页面即按默认参数查询一次，避免操作人员还要重复点击“查询”。
+            await Matching.SearchAsync(cancellationToken).ConfigureAwait(false);
+            await matchingCompletion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            matchingCompletion = null;
+        }
     }
 
     private void OnRunActivated(object? sender, AssessmentRunContext run)

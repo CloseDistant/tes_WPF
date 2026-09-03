@@ -20,7 +20,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4"
+                                CornerRadius="6"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
@@ -34,6 +34,181 @@
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MatchingPagerArrowButton" TargetType="Button">
+            <Setter Property="Width" Value="38" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#7F8DA3" />
+            <Setter Property="FontSize" Value="25" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ArrowBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"
+                                              TextElement.FontSize="{TemplateBinding FontSize}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ArrowBorder" Property="Background" Value="#1A202C" />
+                                <Setter TargetName="ArrowBorder" Property="BorderBrush" Value="#30394A" />
+                                <Setter Property="Foreground" Value="#D8E0EC" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ArrowBorder" Property="Background" Value="#252D3B" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ArrowBorder" Property="Opacity" Value="0.35" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MatchingFollowUpSelectButton"
+               TargetType="Button"
+               BasedOn="{StaticResource MatchingOutlineButton}">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="MinWidth" Value="54" />
+            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Background" Value="#1A202C" />
+            <Setter Property="BorderBrush" Value="#3A4353" />
+        </Style>
+
+        <Style x:Key="MatchingPagerPageInput" TargetType="TextBox">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#F1F3F6" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="PageBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="PageBorder" Property="Background" Value="#1A202C" />
+                                <Setter TargetName="PageBorder" Property="BorderThickness" Value="1" />
+                                <Setter TargetName="PageBorder" Property="CornerRadius" Value="7" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MatchingPagerComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="#D8E0EC" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#252D3B" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#303B4E" />
+                    <Setter Property="Foreground" Value="#F1F3F6" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <DataTemplate x:Key="MatchingPagerPageSizeTemplate">
+            <TextBlock Text="{Binding StringFormat={}{0} 条 / 页}"
+                       Foreground="#8B9AB0"
+                       FontSize="13" />
+        </DataTemplate>
+
+        <Style x:Key="MatchingPagerComboBox" TargetType="ComboBox">
+            <Setter Property="Width" Value="108" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Foreground" Value="#8B9AB0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource MatchingPagerComboBoxItem}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="DropDownToggle"
+                                          Focusable="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}">
+                                <Grid>
+                                    <ContentPresenter Margin="0,0,22,0"
+                                                      HorizontalAlignment="Right"
+                                                      VerticalAlignment="Center"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      TextElement.Foreground="{TemplateBinding Foreground}" />
+                                    <Path Data="M 0 0 L 4 4 L 8 0"
+                                          Stroke="#7F8DA3"
+                                          StrokeThickness="1.5"
+                                          HorizontalAlignment="Right"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,2,0" />
+                                </Grid>
+                            </ToggleButton>
+                            <Popup x:Name="DropDown"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   PopupAnimation="Slide">
+                                <Border Background="#1A202C"
+                                        BorderBrush="#30394A"
+                                        BorderThickness="1"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <ScrollViewer MaxHeight="220">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" SourceName="DropDownToggle" Value="True">
+                                <Setter TargetName="DropDownToggle" Property="Background" Value="#1A202C" />
+                                <Setter Property="Foreground" Value="#D8E0EC" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="DropDownToggle" Property="Opacity" Value="0.55" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -129,6 +304,21 @@
                     <Setter Property="Background" Value="#202735" />
                 </Trigger>
             </Style.Triggers>
+        </Style>
+
+        <Style x:Key="MatchingPatientRowButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </UserControl.Resources>
 
@@ -232,24 +422,123 @@
                     <ItemsControl ItemsSource="{Binding Patients}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Style="{StaticResource MatchingRow}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="1.2*" />
-                                            <ColumnDefinition Width="1.6*" />
-                                            <ColumnDefinition Width="1*" />
-                                            <ColumnDefinition Width="1*" />
-                                            <ColumnDefinition Width="1.2*" />
-                                            <ColumnDefinition Width="1.2*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{Binding Name}" Foreground="#F1F3F6" FontSize="13" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Phone}" Foreground="#D8E0EC" FontSize="13" />
-                                        <TextBlock Grid.Column="2" Text="{Binding Type}" Foreground="#D8E0EC" FontSize="13" />
-                                        <TextBlock Grid.Column="3" Text="{Binding DepartmentName}" Foreground="#D8E0EC" FontSize="13" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Grid.Column="4" Text="{Binding BatchNumber}" Foreground="#D8E0EC" FontSize="13" />
-                                        <TextBlock Grid.Column="5" Text="{Binding PatientId}" Foreground="#D8E0EC" FontSize="13" TextTrimming="CharacterEllipsis" />
-                                    </Grid>
-                                </Border>
+                                <StackPanel>
+                                    <Button Command="{Binding DataContext.SelectPatientCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            Style="{StaticResource MatchingPatientRowButton}">
+                                        <Border Style="{StaticResource MatchingRow}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="1.2*" />
+                                                    <ColumnDefinition Width="1.6*" />
+                                                    <ColumnDefinition Width="1*" />
+                                                    <ColumnDefinition Width="1*" />
+                                                    <ColumnDefinition Width="1.2*" />
+                                                    <ColumnDefinition Width="1.2*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Name}" Foreground="#F1F3F6" FontSize="13" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Phone}" Foreground="#D8E0EC" FontSize="13" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Type}" Foreground="#D8E0EC" FontSize="13" />
+                                                <TextBlock Grid.Column="3" Text="{Binding DepartmentName}" Foreground="#D8E0EC" FontSize="13" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="4" Text="{Binding BatchNumber}" Foreground="#D8E0EC" FontSize="13" />
+                                                <TextBlock Grid.Column="5" Text="{Binding PatientId}" Foreground="#D8E0EC" FontSize="13" TextTrimming="CharacterEllipsis" />
+                                            </Grid>
+                                        </Border>
+                                    </Button>
+
+                                    <Border Background="#1B2230"
+                                            BorderBrush="#303B4E"
+                                            BorderThickness="1"
+                                            Margin="16,0,16,10"
+                                            Padding="14,10">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding DataContext.FollowUpTitleText, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                       Foreground="#D8E0EC"
+                                                       FontSize="13"
+                                                       Margin="0,0,0,8" />
+                                            <TextBlock Text="{Binding DataContext.FollowUpLoadingText, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                       Foreground="#8B9AB0"
+                                                       FontSize="12"
+                                                       Visibility="{Binding IsLoadingFollowUps, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                            <ItemsControl ItemsSource="{Binding FollowUps}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="0,5,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="1.4*" />
+                                                                <ColumnDefinition Width="1.5*" />
+                                                                <ColumnDefinition Width="1.1*" />
+                                                                <ColumnDefinition Width="1.1*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{Binding SettingName}" Foreground="#F1F3F6" FontSize="12" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding FollowUpStartTime}" Foreground="#AEB9CA" FontSize="12" />
+                                                            <StackPanel Grid.Column="2">
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="测评：" Foreground="#8B9AB0" FontSize="12" />
+                                                                    <TextBlock Text="{Binding FlowStatusName}" Foreground="#D8E0EC" FontSize="12" />
+                                                                </StackPanel>
+                                                                <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                                    <TextBlock Text="他评：" Foreground="#8B9AB0" FontSize="11" />
+                                                                    <TextBlock Text="{Binding QuestionnaireStatusName}" Foreground="#8B9AB0" FontSize="11" />
+                                                                </StackPanel>
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="3" Orientation="Horizontal">
+                                                                <TextBlock Text="detailId: " Foreground="#7F8DA3" FontSize="12" />
+                                                                <TextBlock Text="{Binding Id}" Foreground="#AEB9CA" FontSize="12" />
+                                                            </StackPanel>
+                                                            <Button Grid.Column="4"
+                                                                    Content="选择"
+                                                                    Command="{Binding DataContext.SelectFollowUpCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                    CommandParameter="{Binding}"
+                                                                    Style="{StaticResource MatchingFollowUpSelectButton}"
+                                                                    Margin="12,0,0,0" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock Text="{Binding DataContext.FollowUpEmptyText, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                       Foreground="#7F8DA3"
+                                                       FontSize="12"
+                                                       Margin="0,6,0,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasFollowUps}" Value="False">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsLoadingFollowUps}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding SelectedFollowUpSummary}"
+                                                       Foreground="#9CCB83"
+                                                       FontSize="12"
+                                                       Margin="0,8,0,0"
+                                                       Visibility="{Binding HasSelectedFollowUp, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                            <TextBlock Text="{Binding FollowUpError}"
+                                                       Foreground="#E47979"
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,6,0,0"
+                                                       Visibility="{Binding HasFollowUpError, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -264,6 +553,9 @@
                                 <Setter Property="Visibility" Value="Visible" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding HasResults}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsBusy}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed" />
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -299,65 +591,44 @@
                            FontSize="12"
                            VerticalAlignment="Center" />
                 <Button Grid.Column="1"
-                        Content="{Binding PreviousPageText}"
+                        Content="‹"
                         Command="{Binding PreviousPageCommand}"
-                        Style="{StaticResource MatchingOutlineButton}"
-                        MinWidth="72"
+                        Style="{StaticResource MatchingPagerArrowButton}"
                         Margin="8,0,0,0" />
                 <TextBox Grid.Column="2"
-                         Text="{Binding PageNumberInput, UpdateSourceTrigger=PropertyChanged}"
-                         Width="52"
-                         Height="34"
-                         Padding="8,5"
-                         HorizontalContentAlignment="Center"
-                         VerticalContentAlignment="Center"
-                         Background="#11141D"
-                         BorderBrush="#3A4353"
-                         BorderThickness="1"
-                         Foreground="#F1F3F6"
-                         FontSize="13"
-                         Margin="8,0,4,0" />
+                         Text="{Binding PageNumberInput, UpdateSourceTrigger=LostFocus}"
+                         Style="{StaticResource MatchingPagerPageInput}"
+                         ToolTip="输入页码后按 Enter 跳转"
+                         PreviewKeyDown="PageNumberInput_OnPreviewKeyDown"
+                         Margin="3,0,0,0" />
                 <TextBlock Grid.Column="3"
                            Text="/"
                            Foreground="#7F8DA3"
-                           FontSize="13"
+                           FontSize="15"
                            VerticalAlignment="Center"
-                           Margin="0,0,4,0" />
+                           Margin="0,0,2,0" />
                 <TextBlock Grid.Column="4"
                            Text="{Binding TotalPage}"
-                           Foreground="#D8E0EC"
-                           FontSize="13"
+                           Foreground="#7F8DA3"
+                           FontSize="15"
                            VerticalAlignment="Center"
-                           MinWidth="28" />
+                           MinWidth="24" />
                 <Button Grid.Column="5"
-                        Content="{Binding GoToPageText}"
-                        Command="{Binding GoToPageCommand}"
-                        Style="{StaticResource MatchingOutlineButton}"
-                        MinWidth="64"
-                        Margin="8,0,0,0" />
-                <Button Grid.Column="6"
-                        Content="{Binding NextPageText}"
+                        Content="›"
                         Command="{Binding NextPageCommand}"
-                        Style="{StaticResource MatchingOutlineButton}"
-                        MinWidth="72"
-                        Margin="8,0,0,0" />
-                <StackPanel Grid.Column="7"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center"
-                            Margin="16,0,0,0">
-                    <TextBlock Text="{Binding PageSizeText}"
-                               Foreground="#7F8DA3"
-                               FontSize="12"
-                               VerticalAlignment="Center"
-                               Margin="0,0,6,0" />
-                    <ComboBox ItemsSource="{Binding PageSizeOptions}"
-                              SelectedItem="{Binding SelectedPageSize}"
-                              Style="{StaticResource MatchingComboBox}"
-                              Width="64"
-                              Height="34"
-                              FontSize="12"
-                              VerticalContentAlignment="Center" />
-                </StackPanel>
+                        Style="{StaticResource MatchingPagerArrowButton}"
+                        Margin="3,0,0,0" />
+                <Border Grid.Column="6"
+                        Width="1"
+                        Height="24"
+                        Background="#2B3342"
+                        Margin="14,0,14,0" />
+                <ComboBox Grid.Column="7"
+                          ItemsSource="{Binding PageSizeOptions}"
+                          SelectedItem="{Binding SelectedPageSize}"
+                          Style="{StaticResource MatchingPagerComboBox}"
+                          ItemTemplate="{StaticResource MatchingPagerPageSizeTemplate}"
+                          VerticalContentAlignment="Center" />
             </Grid>
         </Grid>
     </Grid>

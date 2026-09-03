@@ -41,10 +41,7 @@ public sealed class AssessmentEntryViewModel : ObservableObject
                 && State is AssessmentEntryState.NoPatient or AssessmentEntryState.Error);
         SelectPatientCommand = selectPatientCommand;
         matchPatientCommand = new AsyncRelayCommand(
-            ExecuteMatchPatientAsync,
-            () => State is AssessmentEntryState.NoPatient
-                or AssessmentEntryState.NoActiveRun
-                or AssessmentEntryState.Error);
+            ExecuteMatchPatientAsync);
         MatchPatientCommand = matchPatientCommand;
         localization.LanguageChanged += (_, _) => NotifyTextChanged();
         patientService.CurrentPatientChanged += (_, _) => NotifyPatientChanged();
@@ -189,23 +186,27 @@ public sealed class AssessmentEntryViewModel : ObservableObject
 
     public async Task ExecuteMatchPatientAsync(CancellationToken cancellationToken = default)
     {
-        if (State is not (AssessmentEntryState.NoPatient
-            or AssessmentEntryState.NoActiveRun
-            or AssessmentEntryState.Error))
-        {
-            return;
-        }
-
         ErrorMessage = string.Empty;
-        var request = new AssessmentPatientMatchingRequestedEventArgs(cancellationToken);
-        PatientMatchingRequested?.Invoke(this, request);
-        if (!request.IsHandled)
+        try
         {
-            throw new InvalidOperationException("患者匹配入口尚未连接到主界面。");
-        }
+            var request = new AssessmentPatientMatchingRequestedEventArgs(cancellationToken);
+            PatientMatchingRequested?.Invoke(this, request);
+            if (!request.IsHandled)
+            {
+                throw new InvalidOperationException("患者匹配入口尚未连接到主界面。");
+            }
 
-        await request.Completion;
-        await LoadAsync(cancellationToken);
+            await request.Completion;
+            await LoadAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await LoadAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            ApplyError(localization.Text("AssessmentEntryPatientMatchingFailed"), exception);
+        }
     }
 
     public async Task ExecutePrimaryActionAsync(CancellationToken cancellationToken = default)

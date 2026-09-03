@@ -21,6 +21,15 @@ public sealed class AssessmentEntryViewModelTests
     }
 
     [Fact]
+    public void MatchPatientCommand_IsAvailableDuringEntryInitialization()
+    {
+        var viewModel = CreateViewModel(new RecordingRunCoordinator(), new FixedPatientService(null));
+
+        Assert.Equal(AssessmentEntryState.Loading, viewModel.State);
+        Assert.True(viewModel.MatchPatientCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task MatchPatientAsync_RaisesMatchingRequest()
     {
         var coordinator = new RecordingRunCoordinator();
@@ -37,6 +46,24 @@ public sealed class AssessmentEntryViewModelTests
         await viewModel.ExecuteMatchPatientAsync(TestContext.Current.CancellationToken);
 
         Assert.True(raised);
+    }
+
+    [Fact]
+    public async Task MatchPatientCommand_WithExistingPatientAndActiveRun_RemainsAvailable()
+    {
+        var existing = new AssessmentRunContext(
+            36,
+            "patient-a",
+            4,
+            AssessmentCaptureViewModel.TotalFormalModuleCount,
+            DateTimeOffset.UtcNow);
+        var coordinator = new RecordingRunCoordinator { ActiveRun = existing };
+        var viewModel = CreateViewModel(coordinator);
+
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(AssessmentEntryState.ActiveRun, viewModel.State);
+        Assert.True(viewModel.MatchPatientCommand.CanExecute(null));
     }
 
     [Fact]

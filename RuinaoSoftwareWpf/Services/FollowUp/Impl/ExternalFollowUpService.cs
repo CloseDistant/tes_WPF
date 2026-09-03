@@ -27,7 +27,7 @@ public sealed class ExternalFollowUpService : IExternalFollowUpService
         httpClient = new HttpClient
         {
             BaseAddress = new Uri(TestBaseAddress),
-            Timeout = TimeSpan.FromSeconds(20)
+            Timeout = TimeSpan.FromSeconds(15)
         };
     }
 
@@ -82,6 +82,41 @@ public sealed class ExternalFollowUpService : IExternalFollowUpService
             payload.Data.TotalPage,
             payload.Data.Total,
             payload.Data.Items ?? []);
+    }
+
+    public async Task<IReadOnlyList<ExternalFollowUpDetail>> GetFollowUpDetailsAsync(
+        string phone,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedPhone = phone?.Trim() ?? string.Empty;
+        if (normalizedPhone.Length == 0)
+        {
+            throw new ArgumentException("查询随访详情必须提供手机号。", nameof(phone));
+        }
+
+        using var response = await httpClient.PostAsJsonAsync(
+            "external/followup/listDetail",
+            new { phone = normalizedPhone },
+            JsonOptions,
+            cancellationToken).ConfigureAwait(false);
+
+        var payload = await response.Content.ReadFromJsonAsync<ApiResponse<List<ExternalFollowUpDetail>>>(
+            JsonOptions,
+            cancellationToken).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"随访详情请求失败（HTTP {(int)response.StatusCode}）。");
+        }
+
+        if (payload is null || !payload.Success || payload.Data is null)
+        {
+            throw new InvalidOperationException(payload?.Message ?? "随访详情接口返回无效数据。");
+        }
+
+        logger.Info($"外部随访详情查询完成：phoneLength={normalizedPhone.Length}，count={payload.Data.Count}");
+        return payload.Data;
     }
 
     private sealed record ApiResponse<T>(
