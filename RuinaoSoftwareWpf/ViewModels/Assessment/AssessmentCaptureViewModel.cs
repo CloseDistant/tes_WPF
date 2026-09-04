@@ -344,12 +344,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     public void ConfigureFormalRun(AssessmentRunContext run)
     {
         ArgumentNullException.ThrowIfNull(run);
-        if (run.TotalModuleCount != FormalModuleCount)
-        {
-            throw new InvalidOperationException(
-                $"评估模块数量不一致：run={run.TotalModuleCount}, client={FormalModuleCount}。");
-        }
-
         if (run.NextModuleIndex < 0 || run.NextModuleIndex >= FormalModuleCount)
         {
             throw new InvalidOperationException($"评估下一模块索引无效：{run.NextModuleIndex}。");

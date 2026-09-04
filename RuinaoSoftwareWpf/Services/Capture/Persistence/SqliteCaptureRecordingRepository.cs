@@ -493,7 +493,7 @@ public sealed class SqliteCaptureRecordingRepository :
             return null;
         }
 
-        ValidateRunShape(run, patientCode, totalModuleCount);
+        ValidateRunShape(run, patientCode);
         return ToRunContext(run);
     }
 
@@ -550,11 +550,15 @@ public sealed class SqliteCaptureRecordingRepository :
             var run = await context.AssessmentRuns
                 .FirstOrDefaultAsync(item => item.Id == runId, cancellationToken)
                 ?? throw new InvalidOperationException("当前评估已经不存在，请返回评估入口重新加载。");
-            ValidateRunShape(run, patientCode, totalModuleCount);
+            ValidateRunShape(run, patientCode);
             if (!string.Equals(run.Status, "in_progress", StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("当前评估已经结束，请返回评估入口重新加载。");
             }
+
+            // 模块数量不再作为继续评估的门槛；刷新为当前流程数量，
+            // 使旧记录也能按当前流程正确判断最终完成状态。
+            run.TotalModuleCount = totalModuleCount;
 
             var resumedAtUnixMs = resumedAt.ToUnixTimeMilliseconds();
             var interruptedAttempts = await context.AssessmentModuleAttempts
@@ -590,11 +594,14 @@ public sealed class SqliteCaptureRecordingRepository :
             var run = await context.AssessmentRuns
                 .FirstOrDefaultAsync(item => item.Id == request.RunId, cancellationToken)
                 ?? throw new InvalidOperationException("当前评估上下文不可用，请返回评估入口重新加载。");
-            ValidateRunShape(run, request.PatientCode, request.TotalModuleCount);
+            ValidateRunShape(run, request.PatientCode);
             if (!string.Equals(run.Status, "in_progress", StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("当前评估已经结束，请返回评估入口重新加载。");
             }
+
+            // 以当前正式流程数量维护完成判断，不阻止已有评估继续执行。
+            run.TotalModuleCount = request.TotalModuleCount;
 
             if (run.NextModuleIndex != request.ModuleIndex)
             {
@@ -655,17 +662,11 @@ public sealed class SqliteCaptureRecordingRepository :
 
     private static void ValidateRunShape(
         AssessmentRunEntity run,
-        string patientCode,
-        int totalModuleCount)
+        string patientCode)
     {
         if (!string.Equals(run.PatientCode, patientCode, StringComparison.Ordinal))
         {
             throw new InvalidOperationException("当前患者与评估记录不一致，请返回评估入口重新加载。");
-        }
-
-        if (run.TotalModuleCount != totalModuleCount)
-        {
-            throw new InvalidOperationException("当前未完成评估的模块数量与正式流程不一致，请先完成数据兼容处理。");
         }
     }
 

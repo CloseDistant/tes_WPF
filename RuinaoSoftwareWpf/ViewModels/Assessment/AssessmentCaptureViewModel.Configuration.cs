@@ -109,7 +109,6 @@ public sealed partial class AssessmentCaptureViewModel
 
     private static readonly CaptureWorkbenchModule[] CaptureWorkbenchModules =
     [
-        new(EyeCalibrationModuleCode, "ModuleEyeCalibration"),
         new(PictureBrowseModuleCode, "ModulePictureBrowse"),
         new(VideoBrowseModuleCode, "ModuleVideoBrowse"),
         new(VoiceBaselineModuleCode, "ModuleVoiceBaseline"),
