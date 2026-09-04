@@ -187,6 +187,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         EditPatientCommand = CreateHardwareCommand(_ => EditPatientAsync());
         SwitchPatientCommand = CreateHardwareCommand(_ => SwitchPatientAsync());
         CreatePatientCommand = CreateHardwareCommand(_ => CreatePatientAsync());
+        SwitchViewCommand = new RelayCommand(_ => toastService.ShowSuccess("切换用户视角", "切换成功"));
         EndCurrentSessionCommand = CreateHardwareCommand(_ => EndCurrentSessionAsync());
         NavigateCommand = new AsyncRelayCommand(async (parameter, cancellationToken) =>
         {
@@ -310,6 +311,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     public ICommand EditPatientCommand { get; }
     public ICommand SwitchPatientCommand { get; }
     public ICommand CreatePatientCommand { get; }
+    public ICommand SwitchViewCommand { get; }
     public ICommand EndCurrentSessionCommand { get; }
     public ICommand NavigateCommand { get; }
 
@@ -376,6 +378,14 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     public System.Windows.Visibility PatientMenuVisibility => CanManagePatients
         ? System.Windows.Visibility.Visible
         : System.Windows.Visibility.Collapsed;
+
+    /// <summary>
+    /// 患者菜单中的“切换用户视角”仅在数字表型采集导航项启用时显示。
+    /// 当前点击行为只反馈 Toast，后续接入真实视角切换时复用此命令。
+    /// </summary>
+    public Visibility SwitchViewMenuVisibility => featureVisibilityService.IsVisible(FeatureKeys.NavigationAssessment)
+        ? Visibility.Visible
+        : Visibility.Collapsed;
 
     public bool IsPatientMenuEnabled => CanManagePatients && !IsPatientOperationLocked;
 
@@ -969,6 +979,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     {
         BuildNavigationItems();
         OnPropertyChanged(nameof(SimulationMenuVisibility));
+        OnPropertyChanged(nameof(SwitchViewMenuVisibility));
 
         if (!IsPageVisible(CurrentPage))
         {

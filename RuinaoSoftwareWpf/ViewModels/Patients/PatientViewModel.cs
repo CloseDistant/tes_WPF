@@ -47,7 +47,7 @@ public sealed class PatientViewModel : ObservableObject
         PatientCode = patient.PatientCode;
         Name = patient.Name;
         Sex = patient.Sex.ToDisplayText();
-        Age = patient.Age.ToString();
+        Age = patient.BirthDate == DateOnly.MinValue ? "-" : patient.Age.ToString();
         Symptom = string.IsNullOrWhiteSpace(patient.ClinicalInfo) ? string.Empty : patient.ClinicalInfo;
     }
 }

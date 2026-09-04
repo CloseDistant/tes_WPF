@@ -12,13 +12,16 @@ public sealed class ExternalFollowUpPatientRowViewModel : ObservableObject
     private bool isLoadingFollowUps;
     private string followUpError = string.Empty;
     private ExternalFollowUpDetail? selectedFollowUp;
+    private bool isSelectingFollowUp;
 
     public ExternalFollowUpPatientRowViewModel(ExternalFollowUpPatient patient)
     {
         Patient = patient;
         SelectFollowUpCommand = new RelayCommand(
             parameter => SelectFollowUp(parameter),
-            parameter => parameter is ExternalFollowUpDetail detail && CanSelectFollowUp(detail));
+            parameter => !IsSelectingFollowUp
+                && parameter is ExternalFollowUpDetail detail
+                && CanSelectFollowUp(detail));
     }
 
     public ExternalFollowUpPatient Patient { get; }
@@ -49,9 +52,23 @@ public sealed class ExternalFollowUpPatientRowViewModel : ObservableObject
 
     public bool HasSelectedFollowUp => SelectedFollowUp is not null;
 
+    public bool IsSelectingFollowUp
+    {
+        get => isSelectingFollowUp;
+        private set
+        {
+            if (SetProperty(ref isSelectingFollowUp, value))
+            {
+                (SelectFollowUpCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
     public string SelectedFollowUpSummary => SelectedFollowUp is null
         ? string.Empty
         : $"已选择：{SelectedFollowUp.SettingName ?? SelectedFollowUp.Name ?? "随访"} · detailId {SelectedFollowUp.Id}";
+
+    public event EventHandler<ExternalFollowUpDetail>? FollowUpSelected;
 
     public bool IsExpanded
     {
@@ -110,7 +127,14 @@ public sealed class ExternalFollowUpPatientRowViewModel : ObservableObject
         if (parameter is ExternalFollowUpDetail detail && CanSelectFollowUp(detail))
         {
             SelectedFollowUp = detail;
+            IsSelectingFollowUp = true;
+            FollowUpSelected?.Invoke(this, detail);
         }
+    }
+
+    public void CompleteFollowUpSelection()
+    {
+        IsSelectingFollowUp = false;
     }
 
     private static bool CanSelectFollowUp(ExternalFollowUpDetail detail)
@@ -120,16 +144,6 @@ public sealed class ExternalFollowUpPatientRowViewModel : ObservableObject
             return false;
         }
 
-        if (string.Equals(detail.FlowStatusName, "已完成", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(detail.FlowStatusName, "已过期", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(detail.FlowStatusName, "已停止", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return !string.IsNullOrWhiteSpace(detail.FlowStatusName)
-            || (!string.Equals(detail.QuestionnaireStatusName, "已完成", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(detail.QuestionnaireStatusName, "已过期", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(detail.QuestionnaireStatusName, "已停止", StringComparison.OrdinalIgnoreCase));
+        return string.Equals(detail.FlowStatusName, "待测评", StringComparison.OrdinalIgnoreCase);
     }
 }

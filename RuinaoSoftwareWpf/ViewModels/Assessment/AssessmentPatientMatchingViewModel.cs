@@ -11,6 +11,7 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
 {
     private static readonly IReadOnlyList<int> pageSizeOptions = [10, 20, 50];
     private readonly IExternalFollowUpService externalFollowUpService;
+    private readonly IPatientService patientService;
     private readonly ILocalizationService localization;
     private readonly ILoggingService logger;
     private readonly IToastService toastService;
@@ -30,17 +31,20 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
     private int totalPage;
     private int selectedPageSize = 10;
     private bool isSearchCooldown;
+    private bool hasSearched;
     private CancellationTokenSource? activeSearchCts;
     private CancellationTokenSource? searchCooldownCts;
     private long requestVersion;
 
     public AssessmentPatientMatchingViewModel(
         IExternalFollowUpService externalFollowUpService,
+        IPatientService patientService,
         ILocalizationService localization,
         ILoggingService logger,
         IToastService toastService)
     {
         this.externalFollowUpService = externalFollowUpService;
+        this.patientService = patientService;
         this.localization = localization;
         this.logger = logger;
         this.toastService = toastService;
@@ -82,7 +86,40 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
 
     public event EventHandler? BackRequested;
 
+    public event EventHandler<ExternalFollowUpDetail>? FollowUpSelected;
+
     public ObservableCollection<ExternalFollowUpPatientRowViewModel> Patients { get; } = [];
+
+    public void PrepareForManualQuery()
+    {
+        Interlocked.Increment(ref requestVersion);
+
+        activeSearchCts?.Cancel();
+        activeSearchCts?.Dispose();
+        activeSearchCts = null;
+
+        searchCooldownCts?.Cancel();
+        searchCooldownCts?.Dispose();
+        searchCooldownCts = null;
+        IsSearchCooldown = false;
+        IsBusy = false;
+
+        Patients.Clear();
+        Total = 0;
+        TotalPage = 0;
+        PageNumber = 1;
+        PageNumberInput = "1";
+        PhoneQuery = patientService.CurrentPatient?.Phone?.Trim() ?? string.Empty;
+        ErrorMessage = string.Empty;
+        HasSearched = false;
+        if (PhoneQuery.Length > 0)
+        {
+            toastService.ShowInformation(
+                localization.Text("AssessmentPatientMatchingManualQueryHint"),
+                "提示");
+        }
+        OnPropertyChanged(nameof(HasResults));
+    }
 
     public ICommand SearchCommand { get; }
 
@@ -184,6 +221,7 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
             }
 
             OnPropertyChanged(nameof(SearchActionText));
+            OnPropertyChanged(nameof(ShowEmptyResult));
             previousPageCommand.RaiseCanExecuteChanged();
             nextPageCommand.RaiseCanExecuteChanged();
             goToPageCommand.RaiseCanExecuteChanged();
@@ -205,6 +243,20 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
     }
 
     public bool HasResults => Patients.Count > 0;
+
+    public bool HasSearched
+    {
+        get => hasSearched;
+        private set
+        {
+            if (SetProperty(ref hasSearched, value))
+            {
+                OnPropertyChanged(nameof(ShowEmptyResult));
+            }
+        }
+    }
+
+    public bool ShowEmptyResult => HasSearched && !HasResults && !IsBusy && !HasError;
 
     public long Total
     {
@@ -284,6 +336,7 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
             if (SetProperty(ref errorMessage, value))
             {
                 OnPropertyChanged(nameof(HasError));
+                OnPropertyChanged(nameof(ShowEmptyResult));
             }
         }
     }
@@ -364,7 +417,9 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
             Patients.Clear();
             foreach (var patient in result.Items)
             {
-                Patients.Add(new ExternalFollowUpPatientRowViewModel(patient));
+                var row = new ExternalFollowUpPatientRowViewModel(patient);
+                row.FollowUpSelected += OnFollowUpSelected;
+                Patients.Add(row);
             }
 
             Total = result.Total;
@@ -374,6 +429,8 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
                 ? 1
                 : Math.Clamp(NormalizePositiveInt(result.PageNumber, requestedPage), 1, TotalPage);
             OnPropertyChanged(nameof(HasResults));
+            HasSearched = true;
+            ReleaseSearchCooldown();
             if (result.Total > 0)
             {
                 toastService.ShowSuccess("查询完成", "患者列表已更新");
@@ -390,6 +447,7 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
         catch (Exception exception)
         {
             HandleSearchError(exception);
+            HasSearched = true;
         }
         finally
         {
@@ -426,6 +484,12 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
         var owner = searchCooldownCts = new CancellationTokenSource();
         IsSearchCooldown = true;
         _ = ReleaseSearchCooldownAsync(owner);
+    }
+
+    private void ReleaseSearchCooldown()
+    {
+        IsSearchCooldown = false;
+        searchCooldownCts?.Cancel();
     }
 
     private async Task ReleaseSearchCooldownAsync(CancellationTokenSource owner)
@@ -512,6 +576,90 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
         logger.Error("外部随访详情查询失败", exception);
     }
 
+    private async void OnFollowUpSelected(object? sender, ExternalFollowUpDetail detail)
+    {
+        if (sender is not ExternalFollowUpPatientRowViewModel row || detail.Id is not long detailId)
+        {
+            return;
+        }
+
+        try
+        {
+            var phone = row.Phone.Trim();
+            if (phone.Length == 0)
+            {
+                throw new InvalidOperationException("接口患者缺少手机号，无法匹配本地患者。");
+            }
+
+            var existing = await FindLocalPatientByPhoneAsync(phone, CancellationToken.None);
+            if (existing is null)
+            {
+                await patientService.CreatePatientAsync(
+                    new PatientSaveRequest(
+                        null,
+                        row.Name,
+                        PatientSex.Unknown,
+                        DateOnly.MinValue,
+                        null,
+                        phone,
+                        null,
+                        null,
+                        null,
+                        null));
+            }
+            else
+            {
+                var updated = await patientService.UpdatePatientAsync(
+                    new PatientSaveRequest(
+                        existing.PatientCode,
+                        row.Name,
+                        existing.Sex,
+                        existing.BirthDate,
+                        existing.IdCardNumber,
+                        existing.Phone,
+                        existing.EmergencyContactName,
+                        existing.EmergencyContactPhone,
+                        existing.HomeAddress,
+                        existing.ClinicalInfo));
+                await patientService.SwitchCurrentPatientAsync(updated.PatientCode);
+            }
+
+            toastService.ShowSuccess("患者已匹配", $"已使用患者：{row.Name}");
+            FollowUpSelected?.Invoke(this, detail);
+        }
+        catch (Exception exception)
+        {
+            HandleFollowUpError(exception);
+            toastService.ShowError("患者匹配失败", exception.Message);
+        }
+        finally
+        {
+            row.CompleteFollowUpSelection();
+        }
+    }
+
+    private async Task<PatientRecord?> FindLocalPatientByPhoneAsync(
+        string phone,
+        CancellationToken cancellationToken)
+    {
+        const int pageSize = 100;
+        var offset = 0;
+        while (true)
+        {
+            var page = await patientService.GetPatientsPageAsync(
+                new PageRequest(offset, pageSize),
+                cancellationToken);
+            var match = page.Items.FirstOrDefault(patient =>
+                string.Equals(patient.Phone?.Trim(), phone, StringComparison.Ordinal));
+            if (match is not null || !page.HasMore || page.Items.Count == 0)
+            {
+                return match;
+            }
+
+            offset += page.Items.Count;
+        }
+    }
+
     private static int NormalizePositiveInt(long value, int fallback)
     {
         if (value < 1)
@@ -546,6 +694,7 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
         OnPropertyChanged(nameof(SearchActionText));
         OnPropertyChanged(nameof(BackActionText));
         OnPropertyChanged(nameof(EmptyResultText));
+        OnPropertyChanged(nameof(ShowEmptyResult));
         OnPropertyChanged(nameof(ResultSummaryText));
         OnPropertyChanged(nameof(PageSummaryText));
         OnPropertyChanged(nameof(PreviousPageText));

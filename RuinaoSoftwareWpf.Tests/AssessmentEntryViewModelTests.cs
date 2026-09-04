@@ -87,6 +87,21 @@ public sealed class AssessmentEntryViewModelTests
     }
 
     [Fact]
+    public void SwitchingLocalPatient_ClearsPreviousMatchedFollowUp()
+    {
+        var patientService = new FixedPatientService(CreatePatient("patient-a"));
+        var viewModel = CreateViewModel(new RecordingRunCoordinator(), patientService);
+
+        viewModel.SetMatchedFollowUp(64);
+        Assert.True(viewModel.HasMatchedFollowUp);
+
+        patientService.SetCurrentPatient(CreatePatient("patient-b"));
+
+        Assert.False(viewModel.HasMatchedFollowUp);
+        Assert.Equal(string.Empty, viewModel.MatchedFollowUpText);
+    }
+
+    [Fact]
     public async Task LoadAsync_WithoutActiveRun_ShowsStartNewAssessment()
     {
         var coordinator = new RecordingRunCoordinator();

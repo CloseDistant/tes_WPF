@@ -385,12 +385,6 @@
                         Command="{Binding SearchCommand}"
                         Style="{StaticResource MatchingOutlineButton}"
                         Margin="12,0,0,0" />
-                <TextBlock Grid.Column="3"
-                           Text="{Binding PhoneQueryHintText}"
-                           Foreground="#7F8DA3"
-                           FontSize="12"
-                           VerticalAlignment="Center"
-                           Margin="14,0,0,0" />
             </Grid>
         </Border>
 
@@ -547,21 +541,8 @@
                                Foreground="#7F8DA3"
                                FontSize="14"
                                HorizontalAlignment="Center"
-                               Margin="0,40,0,0">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Visible" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding HasResults}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding IsBusy}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
+                               Margin="0,40,0,0"
+                               Visibility="{Binding ShowEmptyResult, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                     <TextBlock Text="{Binding ErrorMessage}"
                                Foreground="#E47979"

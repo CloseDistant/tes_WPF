@@ -37,6 +37,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private readonly FaceReadinessMonitor faceReadinessMonitor = new(
         TimeSpan.FromSeconds(1.5),
         Stopwatch.Frequency);
+    private long? matchedFollowUpId;
     private readonly DispatcherTimer calibrationTimer = new();
     private readonly DispatcherTimer pictureBrowseTimer = new();
     private readonly DispatcherTimer videoBrowseTimer = new();
@@ -203,6 +204,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         this.toastService = toastService;
         this.workbenchCoordinator = workbenchCoordinator;
         this.timeProvider = timeProvider;
+        patientService.CurrentPatientChanged += (_, _) => ClearMatchedFollowUpForPatientChange();
         calibrationSequenceFactory = new EyeCalibrationSequenceFactory(new Random());
         this.localization.LanguageChanged += (_, _) =>
         {
@@ -502,6 +504,32 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     public string SecondaryActionText => T("CaptureWorkspaceStart");
 
     public string WorkspaceTitleText => T("AssessmentCapture");
+
+    public bool HasMatchedFollowUp => matchedFollowUpId.HasValue && patientService.CurrentPatient is not null;
+
+    public string MatchedFollowUpText => matchedFollowUpId is long id
+        ? string.Format(localization.Text("AssessmentEntryMatchedFollowUp"), id)
+        : string.Empty;
+
+    public void SetMatchedFollowUp(long detailId)
+    {
+        matchedFollowUpId = detailId;
+        OnPropertyChanged(nameof(HasMatchedFollowUp));
+        OnPropertyChanged(nameof(MatchedFollowUpText));
+    }
+
+    private void ClearMatchedFollowUpForPatientChange()
+    {
+        // 匹配 ID 只对完成匹配的当前患者有效，切换本地患者后不能继续显示。
+        if (matchedFollowUpId is null)
+        {
+            return;
+        }
+
+        matchedFollowUpId = null;
+        OnPropertyChanged(nameof(HasMatchedFollowUp));
+        OnPropertyChanged(nameof(MatchedFollowUpText));
+    }
 
     public string CurrentModuleBadgeText => T("CaptureWorkspaceModuleBadge", CurrentModule);
 
@@ -2376,6 +2404,8 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         // 任意模块或步骤变化后，统一刷新这些派生绑定，避免局部状态不同步。
         OnPropertyChanged(nameof(CurrentDevStepText));
         OnPropertyChanged(nameof(WorkspaceTitleText));
+        OnPropertyChanged(nameof(MatchedFollowUpText));
+        OnPropertyChanged(nameof(HasMatchedFollowUp));
         OnPropertyChanged(nameof(CurrentModuleBadgeText));
         OnPropertyChanged(nameof(WorkbenchStatusText));
         OnPropertyChanged(nameof(ProcessTitleText));

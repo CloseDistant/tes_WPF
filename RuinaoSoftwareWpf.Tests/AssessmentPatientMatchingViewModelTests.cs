@@ -22,6 +22,24 @@ public sealed class AssessmentPatientMatchingViewModelTests
         Assert.Equal(1, viewModel.CurrentPage);
         Assert.Equal(3, viewModel.TotalPage);
         Assert.Equal(46, viewModel.Total);
+        Assert.False(viewModel.IsSearchCooldown);
+    }
+
+    [Fact]
+    public void PrepareForManualQuery_WhenCurrentPatientHasPhone_PrefillsPhoneWithoutSearching()
+    {
+        var service = new RecordingExternalFollowUpService();
+        var currentPatient = new PatientRecord(
+            "P1", "本地患者", PatientSex.Unknown, DateOnly.MinValue, 0,
+            null, " 13800000000 ", null, null, null, null,
+            DateTimeOffset.Now, DateTimeOffset.Now);
+        var viewModel = CreateViewModel(service, new NullPatientService(currentPatient));
+
+        viewModel.PrepareForManualQuery();
+
+        Assert.Equal("13800000000", viewModel.PhoneQuery);
+        Assert.Empty(service.Requests);
+        Assert.False(viewModel.ShowEmptyResult);
     }
 
     [Fact]
@@ -151,8 +169,28 @@ public sealed class AssessmentPatientMatchingViewModelTests
     }
 
     private static AssessmentPatientMatchingViewModel CreateViewModel(
-        RecordingExternalFollowUpService service) =>
-        new(service, new AppLocalizationService(), new NullLoggingService(), new NullToastService());
+        RecordingExternalFollowUpService service,
+        IPatientService? patientService = null) =>
+        new(service, patientService ?? new NullPatientService(), new AppLocalizationService(), new NullLoggingService(), new NullToastService());
+
+    private sealed class NullPatientService : IPatientService
+    {
+        public NullPatientService(PatientRecord? currentPatient = null)
+        {
+            CurrentPatient = currentPatient;
+        }
+
+        public event EventHandler? CurrentPatientChanged { add { } remove { } }
+        public PatientRecord? CurrentPatient { get; }
+        public Task InitializeAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<string> GenerateNextPatientCodeAsync(CancellationToken cancellationToken = default) => Task.FromResult("P0");
+        public Task<PatientRecord> CreatePatientAsync(PatientSaveRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PatientRecord("P0", request.Name, request.Sex ?? PatientSex.Unknown, request.BirthDate ?? DateOnly.MinValue, 0, request.IdCardNumber, request.Phone ?? string.Empty, request.EmergencyContactName, request.EmergencyContactPhone, request.HomeAddress, request.ClinicalInfo, DateTimeOffset.Now, DateTimeOffset.Now));
+        public Task<PatientRecord> UpdatePatientAsync(PatientSaveRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PageResult<PatientRecord>> GetPatientsPageAsync(PageRequest request, CancellationToken cancellationToken = default) => Task.FromResult(new PageResult<PatientRecord>([], false));
+        public Task<PatientRecord> SwitchCurrentPatientAsync(string patientCode, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> GetRequiredCurrentPatientCodeAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
 
     private sealed class RecordingExternalFollowUpService : IExternalFollowUpService
     {

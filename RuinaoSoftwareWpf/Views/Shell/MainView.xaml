@@ -411,6 +411,10 @@
                                                 Style="{StaticResource PatientDropDownItem}"
                                                 IsEnabled="{Binding IsPatientMenuEnabled}"
                                                 Command="{Binding CreatePatientCommand}" />
+                                        <Button Content="切换用户视角"
+                                                Style="{StaticResource PatientDropDownItem}"
+                                                Visibility="{Binding SwitchViewMenuVisibility}"
+                                                Command="{Binding SwitchViewCommand}" />
                                     </StackPanel>
                                 </Border>
                             </Popup>

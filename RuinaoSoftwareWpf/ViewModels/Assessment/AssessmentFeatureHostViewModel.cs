@@ -21,6 +21,7 @@ public sealed class AssessmentFeatureHostViewModel : ObservableObject
         currentContent = entry;
         Entry.RunActivated += OnRunActivated;
         Matching.BackRequested += OnMatchingBackRequested;
+        Matching.FollowUpSelected += OnMatchingFollowUpSelected;
     }
 
     public AssessmentEntryViewModel Entry { get; }
@@ -57,14 +58,14 @@ public sealed class AssessmentFeatureHostViewModel : ObservableObject
 
     public async Task ShowMatchingAsync(CancellationToken cancellationToken = default)
     {
+        Matching.PrepareForManualQuery();
         ShowMatching();
         matchingCompletion = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
 
         try
         {
-            // 进入匹配页面即按默认参数查询一次，避免操作人员还要重复点击“查询”。
-            await Matching.SearchAsync(cancellationToken).ConfigureAwait(false);
+            // 进入匹配页面不自动请求接口，由操作人员手动点击“查询”。
             await matchingCompletion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -82,6 +83,20 @@ public sealed class AssessmentFeatureHostViewModel : ObservableObject
 
     private void OnMatchingBackRequested(object? sender, EventArgs e)
     {
+        ShowEntry();
+        matchingCompletion?.TrySetResult();
+        matchingCompletion = null;
+    }
+
+    private void OnMatchingFollowUpSelected(object? sender, ExternalFollowUpDetail detail)
+    {
+        if (detail.Id is not long detailId)
+        {
+            return;
+        }
+
+        Entry.SetMatchedFollowUp(detailId);
+        Workbench.SetMatchedFollowUp(detailId);
         ShowEntry();
         matchingCompletion?.TrySetResult();
         matchingCompletion = null;

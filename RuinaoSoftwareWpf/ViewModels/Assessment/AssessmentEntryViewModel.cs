@@ -18,6 +18,7 @@ public sealed class AssessmentEntryViewModel : ObservableObject
     private AssessmentEntryState state = AssessmentEntryState.Loading;
     private AssessmentRunContext? activeRun;
     private string errorMessage = string.Empty;
+    private long? matchedFollowUpId;
 
     public AssessmentEntryViewModel(
         IAssessmentRunCoordinator runCoordinator,
@@ -44,7 +45,7 @@ public sealed class AssessmentEntryViewModel : ObservableObject
             ExecuteMatchPatientAsync);
         MatchPatientCommand = matchPatientCommand;
         localization.LanguageChanged += (_, _) => NotifyTextChanged();
-        patientService.CurrentPatientChanged += (_, _) => NotifyPatientChanged();
+        patientService.CurrentPatientChanged += (_, _) => HandleCurrentPatientChanged();
     }
 
     public event EventHandler<AssessmentRunContext>? RunActivated;
@@ -87,6 +88,12 @@ public sealed class AssessmentEntryViewModel : ObservableObject
     public string CurrentPatientName => patientService.CurrentPatient?.Name ?? "--";
 
     public string CurrentPatientCode => patientService.CurrentPatient?.PatientCode ?? "--";
+
+    public bool HasMatchedFollowUp => matchedFollowUpId.HasValue && patientService.CurrentPatient is not null;
+
+    public string MatchedFollowUpText => matchedFollowUpId is long id
+        ? string.Format(localization.Text("AssessmentEntryMatchedFollowUp"), id)
+        : string.Empty;
 
     public string NoPatientTitleText => localization.Text("AssessmentEntryNoPatientTitle");
 
@@ -172,6 +179,9 @@ public sealed class AssessmentEntryViewModel : ObservableObject
             }
 
             await request.Completion;
+            matchedFollowUpId = null;
+            OnPropertyChanged(nameof(HasMatchedFollowUp));
+            OnPropertyChanged(nameof(MatchedFollowUpText));
             await LoadAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -207,6 +217,13 @@ public sealed class AssessmentEntryViewModel : ObservableObject
         {
             ApplyError(localization.Text("AssessmentEntryPatientMatchingFailed"), exception);
         }
+    }
+
+    public void SetMatchedFollowUp(long detailId)
+    {
+        matchedFollowUpId = detailId;
+        OnPropertyChanged(nameof(HasMatchedFollowUp));
+        OnPropertyChanged(nameof(MatchedFollowUpText));
     }
 
     public async Task ExecutePrimaryActionAsync(CancellationToken cancellationToken = default)
@@ -263,6 +280,19 @@ public sealed class AssessmentEntryViewModel : ObservableObject
         matchPatientCommand.RaiseCanExecuteChanged();
     }
 
+    private void HandleCurrentPatientChanged()
+    {
+        // 匹配 ID 属于当前患者上下文；切换本地患者后必须清除，避免把原患者的 detailId 带给新患者。
+        if (matchedFollowUpId is not null)
+        {
+            matchedFollowUpId = null;
+            OnPropertyChanged(nameof(HasMatchedFollowUp));
+            OnPropertyChanged(nameof(MatchedFollowUpText));
+        }
+
+        NotifyPatientChanged();
+    }
+
     private void NotifyTextChanged()
     {
         OnPropertyChanged(nameof(PageTitleText));
@@ -272,5 +302,6 @@ public sealed class AssessmentEntryViewModel : ObservableObject
         OnPropertyChanged(nameof(NoPatientDescriptionText));
         OnPropertyChanged(nameof(SelectPatientActionText));
         OnPropertyChanged(nameof(MatchPatientActionText));
+        OnPropertyChanged(nameof(MatchedFollowUpText));
     }
 }

@@ -68,8 +68,8 @@ public sealed class LocalPatientService : IPatientService
                 UpdatedByUserId = owner.UserId,
                 PatientCode = patientCode,
                 Name = request.Name.Trim(),
-                Gender = request.Sex!.Value.ToStorageCode(),
-                BirthDateUnixMs = ToUnixMs(request.BirthDate!.Value),
+                Gender = request.Sex?.ToStorageCode(),
+                BirthDateUnixMs = ToUnixMsOrNull(request.BirthDate),
                 IdCardEncrypted = dataProtector.Protect(request.IdCardNumber),
                 PhoneEncrypted = dataProtector.Protect(request.Phone),
                 EmergencyContactName = Normalize(request.EmergencyContactName),
@@ -120,8 +120,8 @@ public sealed class LocalPatientService : IPatientService
                 ?? throw new InvalidOperationException($"未找到患者：{request.PatientCode}");
 
             entity.Name = request.Name.Trim();
-            entity.Gender = request.Sex!.Value.ToStorageCode();
-            entity.BirthDateUnixMs = ToUnixMs(request.BirthDate!.Value);
+            entity.Gender = request.Sex?.ToStorageCode();
+            entity.BirthDateUnixMs = ToUnixMsOrNull(request.BirthDate);
             entity.IdCardEncrypted = dataProtector.Protect(request.IdCardNumber);
             entity.PhoneEncrypted = dataProtector.Protect(request.Phone);
             entity.EmergencyContactName = Normalize(request.EmergencyContactName);
@@ -385,14 +385,29 @@ public sealed class LocalPatientService : IPatientService
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static long ToUnixMs(DateOnly date) => new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeZoneInfo.Local.GetUtcOffset(DateTime.Now)).ToUnixTimeMilliseconds();
+    private static long? ToUnixMsOrNull(DateOnly? date)
+    {
+        if (date is null || date.Value == DateOnly.MinValue)
+        {
+            return null;
+        }
+
+        return new DateTimeOffset(
+            date.Value.ToDateTime(TimeOnly.MinValue),
+            TimeZoneInfo.Local.GetUtcOffset(DateTime.Now)).ToUnixTimeMilliseconds();
+    }
 
     private static DateOnly FromUnixMs(long? unixMs) => unixMs is null or <= 0
-        ? new DateOnly(1999, 1, 1)
+        ? DateOnly.MinValue
         : DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeMilliseconds(unixMs.Value).LocalDateTime);
 
     public static int CalculateAge(DateOnly birthDate)
     {
+        if (birthDate == DateOnly.MinValue)
+        {
+            return 0;
+        }
+
         var today = DateOnly.FromDateTime(DateTime.Today);
         var age = today.Year - birthDate.Year;
         if (birthDate > today.AddYears(-age))

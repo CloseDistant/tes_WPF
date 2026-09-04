@@ -663,6 +663,17 @@
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding HasMatchedFollowUp, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Ellipse Width="8" Height="8" Fill="#63D391" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding MatchedFollowUpText}"
+                                   Foreground="#63D391"
+                                   FontSize="12"
+                                   Margin="6,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
                     <Border Style="{StaticResource InfoPill}">
                         <TextBlock Text="{Binding CurrentModuleBadgeText}" Foreground="{StaticResource Text}" FontSize="12" />
                     </Border>

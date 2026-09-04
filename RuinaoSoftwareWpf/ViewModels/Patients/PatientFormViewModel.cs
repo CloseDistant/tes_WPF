@@ -21,7 +21,9 @@ public sealed class PatientFormViewModel : ObservableObject
         PatientCode = patient?.PatientCode;
         Name = patient?.Name ?? string.Empty;
         Sex = patient?.Sex ?? PatientSex.Male;
-        BirthDateText = patient?.BirthDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
+        BirthDateText = patient is null || patient.BirthDate == DateOnly.MinValue
+            ? string.Empty
+            : patient.BirthDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         IdCardNumber = patient?.IdCardNumber ?? string.Empty;
         Phone = patient?.Phone ?? string.Empty;
         EmergencyContactName = patient?.EmergencyContactName ?? string.Empty;
