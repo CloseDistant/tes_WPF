@@ -38,6 +38,11 @@ internal sealed class AssessmentModuleLifecycleService : IAssessmentModule
             throw new ArgumentOutOfRangeException(nameof(request), "模块序号超出正式评估流程范围。");
         }
 
+        if (request.ModuleTypeId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(request), "模块缺少有效的稳定类型编号。");
+        }
+
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(request.RunId);
 
         return store.StartModuleAsync(request, timeProvider.GetUtcNow(), cancellationToken);

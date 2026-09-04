@@ -193,7 +193,7 @@ public sealed class AssessmentEntryViewModelTests
         public int GetActiveCount { get; private set; }
 
         public Task<AssessmentRunContext?> GetActiveRunAsync(
-            int totalModuleCount,
+            IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
             CancellationToken cancellationToken = default)
         {
             GetActiveCount++;
@@ -201,7 +201,7 @@ public sealed class AssessmentEntryViewModelTests
         }
 
         public Task<AssessmentRunContext> CreateRunAsync(
-            int totalModuleCount,
+            IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
             CancellationToken cancellationToken = default)
         {
             CreateCount++;
@@ -209,13 +209,13 @@ public sealed class AssessmentEntryViewModelTests
                 1,
                 "patient-a",
                 0,
-                totalModuleCount,
+                moduleFlow.Count,
                 DateTimeOffset.UtcNow));
         }
 
         public Task<AssessmentRunContext> ResumeRunAsync(
             long runId,
-            int totalModuleCount,
+            IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
             CancellationToken cancellationToken = default)
         {
             ResumedRunId = runId;

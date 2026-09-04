@@ -29,6 +29,16 @@ public sealed class AssessmentPersistenceModelTests
         Assert.Contains(
             moduleRecordEntity.GetIndexes(),
             index => index.IsUnique && index.Properties.SequenceEqual([attemptProperty]));
+
+        var runEntity = context.Model.FindEntityType(typeof(AssessmentRunEntity));
+        Assert.NotNull(runEntity?.FindProperty(nameof(AssessmentRunEntity.NextModuleTypeId)));
+
+        var runModuleEntity = context.Model.FindEntityType(typeof(AssessmentRunModuleEntity));
+        Assert.NotNull(runModuleEntity);
+        Assert.NotNull(runModuleEntity.FindProperty(nameof(AssessmentRunModuleEntity.ModuleTypeId)));
+
+        var attemptEntity = context.Model.FindEntityType(typeof(AssessmentModuleAttemptEntity));
+        Assert.NotNull(attemptEntity?.FindProperty(nameof(AssessmentModuleAttemptEntity.ModuleTypeId)));
     }
 
     [Fact]
@@ -57,7 +67,10 @@ public sealed class AssessmentPersistenceModelTests
             {
                 await connection.OpenAsync(TestContext.Current.CancellationToken);
                 Assert.True(await TableExistsAsync(connection, "assessment_runs"));
+                Assert.True(await TableExistsAsync(connection, "assessment_run_modules"));
                 Assert.True(await TableExistsAsync(connection, "assessment_module_attempts"));
+                Assert.True(await ColumnExistsAsync(connection, "assessment_runs", "next_module_type_id"));
+                Assert.True(await ColumnExistsAsync(connection, "assessment_module_attempts", "module_type_id"));
                 Assert.True(await ColumnExistsAsync(connection, "eeg_markers", "marker_code"));
                 Assert.True(await ColumnExistsAsync(
                     connection,

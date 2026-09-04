@@ -419,10 +419,7 @@ public sealed partial class AssessmentCaptureViewModel
 
             await assessmentModuleLifecycle.CompleteAsync(attempt.AttemptId, payloadJson);
             activeModuleAttempt = null;
-            if (activeRun is { } run)
-            {
-                activeRun = run with { NextModuleIndex = Math.Min(attempt.ModuleIndex + 1, FormalModuleCount) };
-            }
+            UpdateActiveRunAfterCurrentModuleCompletion();
 
             toastService.ShowSuccess("数据保存完成", $"{moduleName} 已保存，可以进入下一模块。");
             onSuccess();

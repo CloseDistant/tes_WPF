@@ -15,6 +15,12 @@ public sealed class SqliteCaptureRecordingRepository :
     IUnifiedSessionRepository,
     IAssessmentRunStore
 {
+    private const string RunModulePendingStatus = "pending";
+    private const string RunModuleRunningStatus = "running";
+    private const string RunModuleSavingStatus = "saving";
+    private const string RunModuleCompletedStatus = "completed";
+    private const string RunModuleRemovedStatus = "skipped_removed";
+
     private readonly ILoggingService logger;
     private readonly IPatientService patientService;
     private readonly IAppDatabaseInitializer databaseInitializer;
@@ -476,30 +482,43 @@ public sealed class SqliteCaptureRecordingRepository :
         }, cancellationToken);
     }
 
-    public async Task<AssessmentRunContext?> GetActiveRunAsync(
+    public Task<AssessmentRunContext?> GetActiveRunAsync(
         string patientCode,
-        int totalModuleCount,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
         CancellationToken cancellationToken = default)
     {
         var databasePath = AppDatabasePathProvider.MainDatabasePath;
-        await using var context = await OpenContextAsync(databasePath, cancellationToken);
-        var run = await context.AssessmentRuns
-            .AsNoTracking()
-            .Where(item => item.PatientCode == patientCode && item.Status == "in_progress")
-            .OrderByDescending(item => item.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (run is null)
+        return ExecuteWriteAsync(databasePath, async () =>
         {
-            return null;
-        }
+            await using var context = await OpenContextAsync(databasePath, cancellationToken);
+            var run = await context.AssessmentRuns
+                .Where(item => item.PatientCode == patientCode && item.Status == "in_progress")
+                .OrderByDescending(item => item.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (run is null)
+            {
+                return null;
+            }
 
-        ValidateRunShape(run, patientCode);
-        return ToRunContext(run);
+            ValidateRunShape(run, patientCode);
+            var nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var snapshot = await EnsureRunModuleSnapshotAsync(
+                context,
+                run,
+                moduleFlow,
+                nowUnixMs,
+                cancellationToken);
+            AdvancePastUnavailableModules(run, snapshot, moduleFlow, nowUnixMs);
+            await context.SaveChangesAsync(cancellationToken);
+            return string.Equals(run.Status, "in_progress", StringComparison.Ordinal)
+                ? ToRunContext(run, snapshot, moduleFlow)
+                : null;
+        }, cancellationToken);
     }
 
     public Task<AssessmentRunContext> CreateRunAsync(
         string patientCode,
-        int totalModuleCount,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
         DateTimeOffset startedAt,
         CancellationToken cancellationToken = default)
     {
@@ -522,23 +541,28 @@ public sealed class SqliteCaptureRecordingRepository :
             {
                 PatientCode = patientCode,
                 Status = "in_progress",
-                TotalModuleCount = totalModuleCount,
+                TotalModuleCount = moduleFlow.Count,
                 NextModuleIndex = 0,
+                NextModuleTypeId = moduleFlow[0].ModuleTypeId,
                 StartedAtUnixMs = startedAtUnixMs,
                 CreatedAtUnixMs = startedAtUnixMs,
                 UpdatedAtUnixMs = startedAtUnixMs
             };
             context.AssessmentRuns.Add(run);
             await context.SaveChangesAsync(cancellationToken);
+
+            var snapshot = CreateRunModuleSnapshot(run.Id, moduleFlow, 0, startedAtUnixMs);
+            context.AssessmentRunModules.AddRange(snapshot);
+            await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return ToRunContext(run);
+            return ToRunContext(run, snapshot, moduleFlow);
         }, cancellationToken);
     }
 
     public Task<AssessmentRunContext> ResumeRunAsync(
         long runId,
         string patientCode,
-        int totalModuleCount,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
         DateTimeOffset resumedAt,
         CancellationToken cancellationToken = default)
     {
@@ -556,11 +580,13 @@ public sealed class SqliteCaptureRecordingRepository :
                 throw new InvalidOperationException("当前评估已经结束，请返回评估入口重新加载。");
             }
 
-            // 模块数量不再作为继续评估的门槛；刷新为当前流程数量，
-            // 使旧记录也能按当前流程正确判断最终完成状态。
-            run.TotalModuleCount = totalModuleCount;
-
             var resumedAtUnixMs = resumedAt.ToUnixTimeMilliseconds();
+            var snapshot = await EnsureRunModuleSnapshotAsync(
+                context,
+                run,
+                moduleFlow,
+                resumedAtUnixMs,
+                cancellationToken);
             var interruptedAttempts = await context.AssessmentModuleAttempts
                 .Where(item => item.RunId == run.Id && (item.Status == "running" || item.Status == "saving"))
                 .ToListAsync(cancellationToken);
@@ -571,12 +597,24 @@ public sealed class SqliteCaptureRecordingRepository :
                 attempt.Message = "继续评估时发现未结束模块，本次尝试已作废并将从模块开头重新执行。";
                 attempt.EndedAtUnixMs = resumedAtUnixMs;
                 attempt.UpdatedAtUnixMs = resumedAtUnixMs;
+                var runModule = FindRunModule(snapshot, attempt.ModuleTypeId, attempt.ModuleCode, attempt.ModuleIndex);
+                if (runModule is not null && runModule.Status is RunModuleRunningStatus or RunModuleSavingStatus)
+                {
+                    runModule.Status = RunModulePendingStatus;
+                    runModule.UpdatedAtUnixMs = resumedAtUnixMs;
+                }
             }
 
+            AdvancePastUnavailableModules(run, snapshot, moduleFlow, resumedAtUnixMs);
             run.UpdatedAtUnixMs = resumedAtUnixMs;
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return ToRunContext(run);
+            if (!string.Equals(run.Status, "in_progress", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("当前评估已经没有可继续执行的模块。");
+            }
+
+            return ToRunContext(run, snapshot, moduleFlow);
         }, cancellationToken);
     }
 
@@ -600,12 +638,29 @@ public sealed class SqliteCaptureRecordingRepository :
                 throw new InvalidOperationException("当前评估已经结束，请返回评估入口重新加载。");
             }
 
-            // 以当前正式流程数量维护完成判断，不阻止已有评估继续执行。
-            run.TotalModuleCount = request.TotalModuleCount;
-
-            if (run.NextModuleIndex != request.ModuleIndex)
+            if (request.ModuleTypeId <= 0)
             {
-                throw new InvalidOperationException($"必须按顺序执行评估，当前应执行第 {run.NextModuleIndex + 1} 个模块。");
+                throw new InvalidOperationException("当前模块缺少稳定类型编号。");
+            }
+
+            if (run.NextModuleTypeId != request.ModuleTypeId)
+            {
+                throw new InvalidOperationException("必须按照本次评估保存的模块顺序执行。");
+            }
+
+            var runModule = await context.AssessmentRunModules.FirstOrDefaultAsync(
+                item => item.RunId == run.Id && item.ModuleTypeId == request.ModuleTypeId,
+                cancellationToken)
+                ?? throw new InvalidOperationException("当前模块不在本次评估的流程快照中。");
+            if (runModule.Sequence != request.ModuleIndex
+                || !string.Equals(runModule.ModuleCode, request.ModuleCode, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("当前模块身份与本次评估的流程快照不一致。");
+            }
+
+            if (runModule.Status != RunModulePendingStatus)
+            {
+                throw new InvalidOperationException($"当前模块状态不允许开始：{runModule.Status}。");
             }
 
             var hasActiveAttempt = await context.AssessmentModuleAttempts.AnyAsync(
@@ -617,7 +672,7 @@ public sealed class SqliteCaptureRecordingRepository :
             }
 
             var attemptNumber = await context.AssessmentModuleAttempts
-                .Where(item => item.RunId == run.Id && item.ModuleIndex == request.ModuleIndex)
+                .Where(item => item.RunId == run.Id && item.ModuleTypeId == request.ModuleTypeId)
                 .Select(item => (int?)item.AttemptNumber)
                 .MaxAsync(cancellationToken) ?? 0;
             var attempt = new AssessmentModuleAttemptEntity
@@ -626,6 +681,7 @@ public sealed class SqliteCaptureRecordingRepository :
                 SessionKey = request.SessionKey,
                 ModuleCode = request.ModuleCode,
                 ModuleName = request.ModuleName,
+                ModuleTypeId = request.ModuleTypeId,
                 ModuleIndex = request.ModuleIndex,
                 AttemptNumber = attemptNumber + 1,
                 Status = "running",
@@ -634,6 +690,8 @@ public sealed class SqliteCaptureRecordingRepository :
                 UpdatedAtUnixMs = startedAtUnixMs
             };
             context.AssessmentModuleAttempts.Add(attempt);
+            runModule.Status = RunModuleRunningStatus;
+            runModule.UpdatedAtUnixMs = startedAtUnixMs;
             run.UpdatedAtUnixMs = startedAtUnixMs;
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -643,21 +701,12 @@ public sealed class SqliteCaptureRecordingRepository :
                 attempt.AttemptNumber,
                 request.PatientCode,
                 request.SessionKey,
+                request.ModuleTypeId,
                 request.ModuleCode,
                 request.ModuleName,
                 request.ModuleIndex,
                 startedAt);
         }, cancellationToken);
-    }
-
-    private static AssessmentRunContext ToRunContext(AssessmentRunEntity run)
-    {
-        return new AssessmentRunContext(
-            run.Id,
-            run.PatientCode,
-            Math.Clamp(run.NextModuleIndex, 0, run.TotalModuleCount),
-            run.TotalModuleCount,
-            DateTimeOffset.FromUnixTimeMilliseconds(run.StartedAtUnixMs));
     }
 
     private static void ValidateRunShape(
@@ -668,6 +717,133 @@ public sealed class SqliteCaptureRecordingRepository :
         {
             throw new InvalidOperationException("当前患者与评估记录不一致，请返回评估入口重新加载。");
         }
+    }
+
+    private static List<AssessmentRunModuleEntity> CreateRunModuleSnapshot(
+        long runId,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
+        int completedModuleCount,
+        long createdAtUnixMs)
+    {
+        var completedCount = Math.Clamp(completedModuleCount, 0, moduleFlow.Count);
+        return moduleFlow.Select((module, sequence) => new AssessmentRunModuleEntity
+        {
+            RunId = runId,
+            ModuleTypeId = module.ModuleTypeId,
+            ModuleCode = module.ModuleCode,
+            Sequence = sequence,
+            Status = sequence < completedCount ? RunModuleCompletedStatus : RunModulePendingStatus,
+            CreatedAtUnixMs = createdAtUnixMs,
+            UpdatedAtUnixMs = createdAtUnixMs
+        }).ToList();
+    }
+
+    private static async Task<List<AssessmentRunModuleEntity>> EnsureRunModuleSnapshotAsync(
+        CaptureDbContext context,
+        AssessmentRunEntity run,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
+        long changedAtUnixMs,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = await context.AssessmentRunModules
+            .Where(item => item.RunId == run.Id)
+            .OrderBy(item => item.Sequence)
+            .ToListAsync(cancellationToken);
+        if (snapshot.Count > 0)
+        {
+            return snapshot;
+        }
+
+        // 旧数据库没有流程快照时，只在首次读取时按当前正式流程补建一次。
+        // 后续新增或调整顺序不会再修改该 Run 的既有快照。
+        snapshot = CreateRunModuleSnapshot(
+            run.Id,
+            moduleFlow,
+            Math.Clamp(run.NextModuleIndex, 0, moduleFlow.Count),
+            changedAtUnixMs);
+        context.AssessmentRunModules.AddRange(snapshot);
+        run.TotalModuleCount = snapshot.Count;
+        var next = snapshot.FirstOrDefault(item => item.Status == RunModulePendingStatus);
+        run.NextModuleIndex = next?.Sequence ?? snapshot.Count;
+        run.NextModuleTypeId = next?.ModuleTypeId;
+        return snapshot;
+    }
+
+    private static void AdvancePastUnavailableModules(
+        AssessmentRunEntity run,
+        IReadOnlyList<AssessmentRunModuleEntity> snapshot,
+        IReadOnlyList<AssessmentFlowModuleDefinition> availableFlow,
+        long changedAtUnixMs)
+    {
+        var availableTypeIds = availableFlow
+            .Select(static item => item.ModuleTypeId)
+            .ToHashSet();
+        foreach (var module in snapshot.OrderBy(static item => item.Sequence))
+        {
+            if (module.Status == RunModuleCompletedStatus || module.Status == RunModuleRemovedStatus)
+            {
+                continue;
+            }
+
+            if (!availableTypeIds.Contains(module.ModuleTypeId))
+            {
+                module.Status = RunModuleRemovedStatus;
+                module.UpdatedAtUnixMs = changedAtUnixMs;
+                continue;
+            }
+
+            run.NextModuleIndex = module.Sequence;
+            run.NextModuleTypeId = module.ModuleTypeId;
+            run.TotalModuleCount = snapshot.Count;
+            return;
+        }
+
+        run.NextModuleIndex = snapshot.Count;
+        run.NextModuleTypeId = null;
+        run.TotalModuleCount = snapshot.Count;
+        run.Status = "completed";
+        run.EndedAtUnixMs ??= changedAtUnixMs;
+    }
+
+    private static AssessmentRunModuleEntity? FindRunModule(
+        IEnumerable<AssessmentRunModuleEntity> snapshot,
+        int moduleTypeId,
+        string moduleCode,
+        int moduleIndex)
+    {
+        return snapshot.FirstOrDefault(item => moduleTypeId > 0 && item.ModuleTypeId == moduleTypeId)
+            ?? snapshot.FirstOrDefault(item => string.Equals(item.ModuleCode, moduleCode, StringComparison.Ordinal))
+            ?? snapshot.FirstOrDefault(item => item.Sequence == moduleIndex);
+    }
+
+    private static AssessmentRunContext ToRunContext(
+        AssessmentRunEntity run,
+        IReadOnlyList<AssessmentRunModuleEntity> snapshot,
+        IReadOnlyList<AssessmentFlowModuleDefinition> availableFlow)
+    {
+        var availableTypeIds = availableFlow
+            .Select(static item => item.ModuleTypeId)
+            .ToHashSet();
+        var executableFlow = snapshot
+            .Where(item => item.Status != RunModuleRemovedStatus && availableTypeIds.Contains(item.ModuleTypeId))
+            .OrderBy(static item => item.Sequence)
+            .Select(static item => new AssessmentRunModuleContext(
+                item.ModuleTypeId,
+                item.ModuleCode,
+                item.Sequence,
+                item.Status))
+            .ToArray();
+
+        return new AssessmentRunContext(
+            run.Id,
+            run.PatientCode,
+            run.NextModuleIndex,
+            run.TotalModuleCount,
+            DateTimeOffset.FromUnixTimeMilliseconds(run.StartedAtUnixMs))
+        {
+            NextModuleTypeId = run.NextModuleTypeId,
+            ModuleFlow = executableFlow
+        };
     }
 
     public Task MarkSavingAsync(
@@ -772,6 +948,21 @@ public sealed class SqliteCaptureRecordingRepository :
                 throw new InvalidOperationException("当前患者已变化，拒绝修改其他患者的评估尝试。");
             }
 
+            var snapshot = await context.AssessmentRunModules
+                .Where(item => item.RunId == run.Id)
+                .OrderBy(item => item.Sequence)
+                .ToListAsync(cancellationToken);
+            var runModule = FindRunModule(
+                    snapshot,
+                    attempt.ModuleTypeId,
+                    attempt.ModuleCode,
+                    attempt.ModuleIndex)
+                ?? throw new InvalidOperationException("当前评估模块缺少对应的流程快照记录。");
+            if (attempt.ModuleTypeId <= 0)
+            {
+                attempt.ModuleTypeId = runModule.ModuleTypeId;
+            }
+
             var changedAtUnixMs = changedAt.ToUnixTimeMilliseconds();
             attempt.Status = status;
             attempt.ResultJson = resultJson;
@@ -785,19 +976,44 @@ public sealed class SqliteCaptureRecordingRepository :
 
             if (advanceRun)
             {
-                if (run.NextModuleIndex != attempt.ModuleIndex)
+                if (run.NextModuleTypeId != runModule.ModuleTypeId)
                 {
                     throw new InvalidOperationException("评估进度与完成模块不一致，拒绝推进批次。");
                 }
 
-                run.NextModuleIndex++;
-                if (run.NextModuleIndex >= run.TotalModuleCount)
+                runModule.Status = RunModuleCompletedStatus;
+                runModule.UpdatedAtUnixMs = changedAtUnixMs;
+                var next = snapshot.FirstOrDefault(item =>
+                    item.Sequence > runModule.Sequence
+                    && item.Status == RunModulePendingStatus);
+                if (next is null)
                 {
+                    run.NextModuleIndex = snapshot.Count;
+                    run.NextModuleTypeId = null;
                     run.Status = "completed";
                     run.EndedAtUnixMs = changedAtUnixMs;
                 }
+                else
+                {
+                    run.NextModuleIndex = next.Sequence;
+                    run.NextModuleTypeId = next.ModuleTypeId;
+                }
+            }
+            else if (status == "saving")
+            {
+                runModule.Status = RunModuleSavingStatus;
+                runModule.UpdatedAtUnixMs = changedAtUnixMs;
+            }
+            else
+            {
+                // 取消或失败不推进流程，下一次仍从当前模块重新开始。
+                runModule.Status = RunModulePendingStatus;
+                runModule.UpdatedAtUnixMs = changedAtUnixMs;
+                run.NextModuleIndex = runModule.Sequence;
+                run.NextModuleTypeId = runModule.ModuleTypeId;
             }
 
+            run.TotalModuleCount = snapshot.Count;
             run.UpdatedAtUnixMs = changedAtUnixMs;
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

@@ -19,6 +19,7 @@ public sealed class AssessmentModuleLifecycleServiceTests
             "session-1",
             "eye_calibration",
             "眼动校准",
+            1,
             0,
             22);
 
@@ -42,6 +43,7 @@ public sealed class AssessmentModuleLifecycleServiceTests
             "session-1",
             "eye_calibration",
             "眼动校准",
+            1,
             0,
             22);
 
@@ -77,24 +79,24 @@ public sealed class AssessmentModuleLifecycleServiceTests
 
         public Task<AssessmentRunContext?> GetActiveRunAsync(
             string patientCode,
-            int totalModuleCount,
+            IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<AssessmentRunContext?>(null);
 
         public Task<AssessmentRunContext> CreateRunAsync(
             string patientCode,
-            int totalModuleCount,
+            IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
             DateTimeOffset startedAt,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(new AssessmentRunContext(7, patientCode, 0, totalModuleCount, startedAt));
+            Task.FromResult(new AssessmentRunContext(7, patientCode, 0, moduleFlow.Count, startedAt));
 
         public Task<AssessmentRunContext> ResumeRunAsync(
             long runId,
             string patientCode,
-            int totalModuleCount,
+            IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
             DateTimeOffset resumedAt,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(new AssessmentRunContext(runId, patientCode, 0, totalModuleCount, resumedAt));
+            Task.FromResult(new AssessmentRunContext(runId, patientCode, 0, moduleFlow.Count, resumedAt));
 
         public Task<AssessmentModuleRunContext> StartModuleAsync(
             AssessmentModuleStartRequest request,
@@ -108,6 +110,7 @@ public sealed class AssessmentModuleLifecycleServiceTests
                 1,
                 request.PatientCode,
                 request.SessionKey,
+                request.ModuleTypeId,
                 request.ModuleCode,
                 request.ModuleName,
                 request.ModuleIndex,

@@ -1,5 +1,7 @@
 ﻿namespace RuinaoSoftwareWpf;
 
+using RuinaoSoftwareWpf.ApplicationContracts;
+
 /// <summary>
 /// 采集工作台 ViewModel 的流程状态与内置模块配置。
 /// 先通过 partial 文件把配置从主 VM 中拆出，后续可以继续替换为配置文件、
@@ -53,7 +55,11 @@ public sealed partial class AssessmentCaptureViewModel
     /// 采集工作台模块定义。
     /// Code 用于业务判断、数据库记录和文件夹命名；DisplayNameKey 只负责界面显示。
     /// </summary>
-    private sealed record CaptureWorkbenchModule(string Code, string DisplayNameKey, bool IsDevelopmentOnly = false);
+    private sealed record CaptureWorkbenchModule(
+        int ModuleTypeId,
+        string Code,
+        string DisplayNameKey,
+        bool IsDevelopmentOnly = false);
 
     private const string EyeCalibrationModuleCode = "eye_calibration";
     private const string PictureBrowseModuleCode = "picture_browse";
@@ -109,31 +115,40 @@ public sealed partial class AssessmentCaptureViewModel
 
     private static readonly CaptureWorkbenchModule[] CaptureWorkbenchModules =
     [
-        new(PictureBrowseModuleCode, "ModulePictureBrowse"),
-        new(VideoBrowseModuleCode, "ModuleVideoBrowse"),
-        new(VoiceBaselineModuleCode, "ModuleVoiceBaseline"),
-        new(WordReadingModuleCode, "ModuleWordReading"),
-        new(ShortTextReadingModuleCode, "ModuleShortTextReading"),
-        new(EmotionQuestionModuleCode, "ModuleEmotionQuestion"),
-        new(DotProbeModuleCode, "ModuleDotProbe"),
-        new(EmotionOddballModuleCode, "ModuleEmotionOddball"),
-        new(EmotionLetterSearchModuleCode, "ModuleEmotionLetterSearch"),
-        new(EmotionStroopModuleCode, "ModuleEmotionStroop"),
-        new(BasicInfoModuleCode, "ModuleBasicInfo"),
-        new(QuestionnaireAModuleCode, "ModuleQuestionnaireA"),
-        new(QuestionnaireBModuleCode, "ModuleQuestionnaireB"),
-        new(QuestionnaireCModuleCode, "ModuleQuestionnaireC"),
-        new(QuestionnaireDModuleCode, "ModuleQuestionnaireD"),
-        new(QuestionnaireEModuleCode, "ModuleQuestionnaireE"),
-        new(QuestionnaireFModuleCode, "ModuleQuestionnaireF"),
-        new(QuestionnaireGModuleCode, "ModuleQuestionnaireG"),
-        new(QuestionnaireHModuleCode, "ModuleQuestionnaireH"),
-        new(QuestionnaireIModuleCode, "ModuleQuestionnaireI"),
-        new(QuestionnaireJModuleCode, "ModuleQuestionnaireJ"),
+        new(AssessmentModuleTypeIds.PictureBrowse, PictureBrowseModuleCode, "ModulePictureBrowse"),
+        new(AssessmentModuleTypeIds.VideoBrowse, VideoBrowseModuleCode, "ModuleVideoBrowse"),
+        new(AssessmentModuleTypeIds.VoiceBaseline, VoiceBaselineModuleCode, "ModuleVoiceBaseline"),
+        new(AssessmentModuleTypeIds.WordReading, WordReadingModuleCode, "ModuleWordReading"),
+        new(AssessmentModuleTypeIds.ShortTextReading, ShortTextReadingModuleCode, "ModuleShortTextReading"),
+        new(AssessmentModuleTypeIds.EmotionQuestion, EmotionQuestionModuleCode, "ModuleEmotionQuestion"),
+        new(AssessmentModuleTypeIds.DotProbe, DotProbeModuleCode, "ModuleDotProbe"),
+        new(AssessmentModuleTypeIds.EmotionOddball, EmotionOddballModuleCode, "ModuleEmotionOddball"),
+        new(AssessmentModuleTypeIds.EmotionLetterSearch, EmotionLetterSearchModuleCode, "ModuleEmotionLetterSearch"),
+        new(AssessmentModuleTypeIds.EmotionStroop, EmotionStroopModuleCode, "ModuleEmotionStroop"),
+        new(AssessmentModuleTypeIds.BasicInformation, BasicInfoModuleCode, "ModuleBasicInfo"),
+        new(AssessmentModuleTypeIds.QuestionnaireA, QuestionnaireAModuleCode, "ModuleQuestionnaireA"),
+        new(AssessmentModuleTypeIds.QuestionnaireB, QuestionnaireBModuleCode, "ModuleQuestionnaireB"),
+        new(AssessmentModuleTypeIds.QuestionnaireC, QuestionnaireCModuleCode, "ModuleQuestionnaireC"),
+        new(AssessmentModuleTypeIds.QuestionnaireD, QuestionnaireDModuleCode, "ModuleQuestionnaireD"),
+        new(AssessmentModuleTypeIds.QuestionnaireE, QuestionnaireEModuleCode, "ModuleQuestionnaireE"),
+        new(AssessmentModuleTypeIds.QuestionnaireF, QuestionnaireFModuleCode, "ModuleQuestionnaireF"),
+        new(AssessmentModuleTypeIds.QuestionnaireG, QuestionnaireGModuleCode, "ModuleQuestionnaireG"),
+        new(AssessmentModuleTypeIds.QuestionnaireH, QuestionnaireHModuleCode, "ModuleQuestionnaireH"),
+        new(AssessmentModuleTypeIds.QuestionnaireI, QuestionnaireIModuleCode, "ModuleQuestionnaireI"),
+        new(AssessmentModuleTypeIds.QuestionnaireJ, QuestionnaireJModuleCode, "ModuleQuestionnaireJ"),
 #if DEBUG
-        new(SyncTestModuleCode, "ModuleSyncTest", true),
+        new(AssessmentModuleTypeIds.SynchronizationTest, SyncTestModuleCode, "ModuleSyncTest", true),
 #endif
     ];
+
+    private static readonly IReadOnlyList<AssessmentFlowModuleDefinition> FormalModuleFlowDefinitions =
+        Array.AsReadOnly(CaptureWorkbenchModules
+            .Where(static module => !module.IsDevelopmentOnly)
+            .Select(static module => new AssessmentFlowModuleDefinition(module.ModuleTypeId, module.Code))
+            .ToArray());
+
+    public static IReadOnlyList<AssessmentFlowModuleDefinition> FormalModuleFlow =>
+        FormalModuleFlowDefinitions;
 
     /// <summary>
     /// 图片浏览第三步内部状态。

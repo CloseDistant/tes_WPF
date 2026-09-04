@@ -41,6 +41,8 @@ internal sealed class CaptureDbContext : DbContext
 
     public DbSet<AssessmentRunEntity> AssessmentRuns => Set<AssessmentRunEntity>();
 
+    public DbSet<AssessmentRunModuleEntity> AssessmentRunModules => Set<AssessmentRunModuleEntity>();
+
     public DbSet<AssessmentModuleAttemptEntity> AssessmentModuleAttempts => Set<AssessmentModuleAttemptEntity>();
 
     public DbSet<AssessmentModuleRecordEntity> AssessmentModuleRecords => Set<AssessmentModuleRecordEntity>();

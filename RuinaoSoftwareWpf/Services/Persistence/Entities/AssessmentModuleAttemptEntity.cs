@@ -7,6 +7,7 @@ internal sealed class AssessmentModuleAttemptEntity
     public string SessionKey { get; set; } = string.Empty;
     public string ModuleCode { get; set; } = string.Empty;
     public string ModuleName { get; set; } = string.Empty;
+    public int ModuleTypeId { get; set; }
     public int ModuleIndex { get; set; }
     public int AttemptNumber { get; set; }
     public string Status { get; set; } = string.Empty;

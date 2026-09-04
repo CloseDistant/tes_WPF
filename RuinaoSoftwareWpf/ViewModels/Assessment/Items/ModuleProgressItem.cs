@@ -21,9 +21,18 @@ public sealed class ModuleProgressItem : ObservableObject
     private Brush borderBrush = TransparentBrush;
     private string name;
 
-    public ModuleProgressItem(int index, string code, string displayNameKey, string name, bool isDevelopmentOnly)
+    public ModuleProgressItem(
+        int index,
+        int sequence,
+        int moduleTypeId,
+        string code,
+        string displayNameKey,
+        string name,
+        bool isDevelopmentOnly)
     {
         Index = index;
+        Sequence = sequence;
+        ModuleTypeId = moduleTypeId;
         Code = code;
         DisplayNameKey = displayNameKey;
         this.name = name;
@@ -31,6 +40,10 @@ public sealed class ModuleProgressItem : ObservableObject
     }
 
     public int Index { get; }
+
+    public int Sequence { get; }
+
+    public int ModuleTypeId { get; }
 
     public int DisplayIndex => Index + 1;
 

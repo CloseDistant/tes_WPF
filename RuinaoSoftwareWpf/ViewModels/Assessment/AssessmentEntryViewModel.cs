@@ -147,7 +147,7 @@ public sealed class AssessmentEntryViewModel : ObservableObject
         try
         {
             activeRun = await runCoordinator.GetActiveRunAsync(
-                AssessmentCaptureViewModel.TotalFormalModuleCount,
+                AssessmentCaptureViewModel.FormalModuleFlow,
                 cancellationToken);
             State = activeRun is null
                 ? AssessmentEntryState.NoActiveRun
@@ -241,7 +241,7 @@ public sealed class AssessmentEntryViewModel : ObservableObject
             {
                 State = AssessmentEntryState.Starting;
                 run = await runCoordinator.CreateRunAsync(
-                    AssessmentCaptureViewModel.TotalFormalModuleCount,
+                    AssessmentCaptureViewModel.FormalModuleFlow,
                     cancellationToken);
             }
             else
@@ -249,7 +249,7 @@ public sealed class AssessmentEntryViewModel : ObservableObject
                 State = AssessmentEntryState.Recovering;
                 run = await runCoordinator.ResumeRunAsync(
                     activeRun.RunId,
-                    AssessmentCaptureViewModel.TotalFormalModuleCount,
+                    AssessmentCaptureViewModel.FormalModuleFlow,
                     cancellationToken);
             }
 

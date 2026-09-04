@@ -8,15 +8,15 @@ using RuinaoSoftwareWpf.ApplicationContracts;
 public interface IAssessmentRunCoordinator
 {
     Task<AssessmentRunContext?> GetActiveRunAsync(
-        int totalModuleCount,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
         CancellationToken cancellationToken = default);
 
     Task<AssessmentRunContext> CreateRunAsync(
-        int totalModuleCount,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
         CancellationToken cancellationToken = default);
 
     Task<AssessmentRunContext> ResumeRunAsync(
         long runId,
-        int totalModuleCount,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
         CancellationToken cancellationToken = default);
 }

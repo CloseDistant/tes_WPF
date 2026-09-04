@@ -6,19 +6,19 @@ public interface IAssessmentRunStore
 {
     Task<AssessmentRunContext?> GetActiveRunAsync(
         string patientCode,
-        int totalModuleCount,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
         CancellationToken cancellationToken = default);
 
     Task<AssessmentRunContext> CreateRunAsync(
         string patientCode,
-        int totalModuleCount,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
         DateTimeOffset startedAt,
         CancellationToken cancellationToken = default);
 
     Task<AssessmentRunContext> ResumeRunAsync(
         long runId,
         string patientCode,
-        int totalModuleCount,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
         DateTimeOffset resumedAt,
         CancellationToken cancellationToken = default);
 

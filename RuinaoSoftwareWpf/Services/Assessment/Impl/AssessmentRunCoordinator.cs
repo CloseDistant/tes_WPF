@@ -11,41 +11,58 @@ internal sealed class AssessmentRunCoordinator(
     TimeProvider timeProvider) : IAssessmentRunCoordinator
 {
     public Task<AssessmentRunContext?> GetActiveRunAsync(
-        int totalModuleCount,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
         CancellationToken cancellationToken = default)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(totalModuleCount);
+        ValidateModuleFlow(moduleFlow);
         var patientCode = GetCurrentPatientCode();
-        return store.GetActiveRunAsync(patientCode, totalModuleCount, cancellationToken);
+        return store.GetActiveRunAsync(patientCode, moduleFlow, cancellationToken);
     }
 
     public Task<AssessmentRunContext> CreateRunAsync(
-        int totalModuleCount,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
         CancellationToken cancellationToken = default)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(totalModuleCount);
+        ValidateModuleFlow(moduleFlow);
         var patientCode = GetCurrentPatientCode();
         return store.CreateRunAsync(
             patientCode,
-            totalModuleCount,
+            moduleFlow,
             timeProvider.GetUtcNow(),
             cancellationToken);
     }
 
     public Task<AssessmentRunContext> ResumeRunAsync(
         long runId,
-        int totalModuleCount,
+        IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow,
         CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(runId);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(totalModuleCount);
+        ValidateModuleFlow(moduleFlow);
         var patientCode = GetCurrentPatientCode();
         return store.ResumeRunAsync(
             runId,
             patientCode,
-            totalModuleCount,
+            moduleFlow,
             timeProvider.GetUtcNow(),
             cancellationToken);
+    }
+
+    private static void ValidateModuleFlow(IReadOnlyList<AssessmentFlowModuleDefinition> moduleFlow)
+    {
+        ArgumentNullException.ThrowIfNull(moduleFlow);
+        if (moduleFlow.Count == 0)
+        {
+            throw new ArgumentException("正式评估流程至少需要一个模块。", nameof(moduleFlow));
+        }
+
+        if (moduleFlow.Any(static module => module.ModuleTypeId <= 0
+                || string.IsNullOrWhiteSpace(module.ModuleCode))
+            || moduleFlow.Select(static module => module.ModuleTypeId).Distinct().Count() != moduleFlow.Count
+            || moduleFlow.Select(static module => module.ModuleCode).Distinct(StringComparer.Ordinal).Count() != moduleFlow.Count)
+        {
+            throw new ArgumentException("正式评估流程包含无效或重复的模块身份。", nameof(moduleFlow));
+        }
     }
 
     private string GetCurrentPatientCode()

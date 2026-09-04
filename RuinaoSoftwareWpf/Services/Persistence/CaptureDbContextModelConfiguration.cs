@@ -19,6 +19,7 @@ internal static class CaptureDbContextModelConfiguration
         ConfigureStimulationChannelTreatment(modelBuilder);
         ConfigureAssessmentSession(modelBuilder);
         ConfigureAssessmentRun(modelBuilder);
+        ConfigureAssessmentRunModule(modelBuilder);
         ConfigureAssessmentModuleAttempt(modelBuilder);
         ConfigureAssessmentModuleRecord(modelBuilder);
         ConfigureAssessmentEvent(modelBuilder);
@@ -280,10 +281,32 @@ internal static class CaptureDbContextModelConfiguration
         entity.Property(item => item.Status).HasColumnName("status");
         entity.Property(item => item.TotalModuleCount).HasColumnName("total_module_count");
         entity.Property(item => item.NextModuleIndex).HasColumnName("next_module_index");
+        entity.Property(item => item.NextModuleTypeId).HasColumnName("next_module_type_id");
         entity.Property(item => item.StartedAtUnixMs).HasColumnName("started_at_unix_ms");
         entity.Property(item => item.EndedAtUnixMs).HasColumnName("ended_at_unix_ms");
         entity.Property(item => item.CreatedAtUnixMs).HasColumnName("created_at_unix_ms");
         entity.Property(item => item.UpdatedAtUnixMs).HasColumnName("updated_at_unix_ms");
+    }
+
+    private static void ConfigureAssessmentRunModule(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<AssessmentRunModuleEntity>();
+        entity.ToTable("assessment_run_modules");
+        entity.HasKey(item => item.Id);
+        entity.HasIndex(item => new { item.RunId, item.Sequence }).IsUnique();
+        entity.HasIndex(item => new { item.RunId, item.ModuleTypeId }).IsUnique();
+        entity.HasIndex(item => new { item.RunId, item.Status });
+        entity.Property(item => item.RunId).HasColumnName("run_id");
+        entity.Property(item => item.ModuleTypeId).HasColumnName("module_type_id");
+        entity.Property(item => item.ModuleCode).HasColumnName("module_code");
+        entity.Property(item => item.Sequence).HasColumnName("sequence");
+        entity.Property(item => item.Status).HasColumnName("status");
+        entity.Property(item => item.CreatedAtUnixMs).HasColumnName("created_at_unix_ms");
+        entity.Property(item => item.UpdatedAtUnixMs).HasColumnName("updated_at_unix_ms");
+        entity.HasOne(item => item.Run)
+            .WithMany()
+            .HasForeignKey(item => item.RunId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureAssessmentModuleAttempt(ModelBuilder modelBuilder)
@@ -291,12 +314,13 @@ internal static class CaptureDbContextModelConfiguration
         var entity = modelBuilder.Entity<AssessmentModuleAttemptEntity>();
         entity.ToTable("assessment_module_attempts");
         entity.HasKey(item => item.Id);
-        entity.HasIndex(item => new { item.RunId, item.ModuleIndex, item.AttemptNumber }).IsUnique();
+        entity.HasIndex(item => new { item.RunId, item.ModuleTypeId, item.AttemptNumber }).IsUnique();
         entity.HasIndex(item => new { item.RunId, item.Status });
         entity.Property(item => item.RunId).HasColumnName("run_id");
         entity.Property(item => item.SessionKey).HasColumnName("session_key");
         entity.Property(item => item.ModuleCode).HasColumnName("module_code");
         entity.Property(item => item.ModuleName).HasColumnName("module_name");
+        entity.Property(item => item.ModuleTypeId).HasColumnName("module_type_id");
         entity.Property(item => item.ModuleIndex).HasColumnName("module_index");
         entity.Property(item => item.AttemptNumber).HasColumnName("attempt_number");
         entity.Property(item => item.Status).HasColumnName("status");

@@ -166,7 +166,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private long? activeDevelopmentMediaSessionId;
     private string? activeDevelopmentMediaModuleCode;
 
-    private static int FormalModuleCount => CaptureWorkbenchModules.Count(static module => !module.IsDevelopmentOnly);
+    private static int FormalModuleCount => FormalModuleFlowDefinitions.Count;
 
     public static int TotalFormalModuleCount => FormalModuleCount;
 
@@ -346,9 +346,21 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     public void ConfigureFormalRun(AssessmentRunContext run)
     {
         ArgumentNullException.ThrowIfNull(run);
-        if (run.NextModuleIndex < 0 || run.NextModuleIndex >= FormalModuleCount)
+        if (run.ModuleFlow.Count == 0 || run.NextModuleTypeId is not int nextModuleTypeId)
         {
-            throw new InvalidOperationException($"评估下一模块索引无效：{run.NextModuleIndex}。");
+            throw new InvalidOperationException("当前评估没有可继续执行的模块。");
+        }
+
+        LoadFormalRunModuleProgressItems(run.ModuleFlow);
+        var nextModuleIndex = ModuleProgressItems
+            .Select((item, index) => (item, index))
+            .Where(pair => pair.item.ModuleTypeId == nextModuleTypeId)
+            .Select(pair => pair.index)
+            .DefaultIfEmpty(-1)
+            .First();
+        if (nextModuleIndex < 0)
+        {
+            throw new InvalidOperationException($"当前评估的下一模块类型不存在：{nextModuleTypeId}。");
         }
 
         activeRun = run;
@@ -361,7 +373,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         ResetBasicInfoFormState(clearValues: true);
         ResetQuestionnaireState(clearAnswers: true);
 
-        currentModuleIndex = run.NextModuleIndex;
+        currentModuleIndex = nextModuleIndex;
         MoveToStep(IsFormModuleCode(CurrentModuleCode)
             ? CaptureWorkbenchStep.ModuleExecution
             : CaptureWorkbenchStep.Demo);
@@ -390,7 +402,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     {
         if (activeModuleAttempt is not null)
         {
-            if (activeModuleAttempt.ModuleIndex != currentModuleIndex)
+            if (activeModuleAttempt.ModuleTypeId != CurrentModuleTypeId)
             {
                 throw new InvalidOperationException("上一模块尝试尚未结束，不能启动其他模块。");
             }
@@ -413,8 +425,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
                 sessionKey,
                 CurrentModuleCode,
                 CurrentModule,
-                currentModuleIndex,
-                FormalModuleCount),
+                CurrentModuleTypeId,
+                CurrentModuleSequence,
+                ModuleProgressItems.Count(static item => !item.IsDevelopmentOnly)),
             cancellationToken);
         isModuleSaveFailed = false;
         UpdateModuleProgressItems();
@@ -488,6 +501,14 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     public string CurrentModuleCode => ModuleProgressItems.Count == 0
         ? EyeCalibrationModuleCode
         : ModuleProgressItems[currentModuleIndex].Code;
+
+    public int CurrentModuleTypeId => ModuleProgressItems.Count == 0
+        ? AssessmentModuleTypeIds.EyeCalibration
+        : ModuleProgressItems[currentModuleIndex].ModuleTypeId;
+
+    private int CurrentModuleSequence => ModuleProgressItems.Count == 0
+        ? 0
+        : ModuleProgressItems[currentModuleIndex].Sequence;
 
     public string CurrentModule => ModuleProgressItems.Count == 0
         ? T("ModuleEyeCalibration")
@@ -1926,10 +1947,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
             }
 
             isModuleSaveFailed = false;
-            if (activeRun is { } run)
-            {
-                activeRun = run with { NextModuleIndex = Math.Min(attempt.ModuleIndex + 1, FormalModuleCount) };
-            }
+            UpdateActiveRunAfterCurrentModuleCompletion();
 
             currentStep = CaptureWorkbenchStep.Completed;
             StageNoticeText = "数据保存完成，请手动进入下一模块。";
@@ -2066,7 +2084,8 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         await pendingLifecycleOperation.WaitAsync(cancellationToken);
         if (currentStep != CaptureWorkbenchStep.Completed
             || activeModuleAttempt is not null
-            || currentModuleIndex + 1 >= FormalModuleCount)
+            || currentModuleIndex + 1 >= ModuleProgressItems.Count
+            || ModuleProgressItems[currentModuleIndex + 1].IsDevelopmentOnly)
         {
             return;
         }
@@ -2216,14 +2235,45 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     private void LoadModuleProgressItems()
     {
-        workbenchCoordinator.Configure(CaptureWorkbenchModules.Select(module =>
-            (module.Code, module.DisplayNameKey, module.IsDevelopmentOnly)));
+        LoadModuleProgressItems(CaptureWorkbenchModules.Select((module, sequence) =>
+            (module, sequence)));
+    }
+
+    private void LoadFormalRunModuleProgressItems(IReadOnlyList<AssessmentRunModuleContext> moduleFlow)
+    {
+        var definitions = new List<(CaptureWorkbenchModule module, int sequence)>();
+        foreach (var item in moduleFlow.OrderBy(static item => item.Sequence))
+        {
+            var module = CaptureWorkbenchModules.FirstOrDefault(candidate =>
+                candidate.ModuleTypeId == item.ModuleTypeId);
+            if (module is not null)
+            {
+                definitions.Add((module, item.Sequence));
+            }
+        }
+
+        if (definitions.Count == 0)
+        {
+            throw new InvalidOperationException("本次评估流程中的模块在当前软件中均不可用。");
+        }
+
+        LoadModuleProgressItems(definitions);
+    }
+
+    private void LoadModuleProgressItems(IEnumerable<(CaptureWorkbenchModule module, int sequence)> definitions)
+    {
+        var orderedDefinitions = definitions.ToArray();
+        workbenchCoordinator.Configure(orderedDefinitions.Select(item =>
+            (item.module.Code, item.module.DisplayNameKey, item.module.IsDevelopmentOnly)));
         ModuleProgressItems.Clear();
         for (var i = 0; i < workbenchCoordinator.Modules.Count; i++)
         {
             var module = workbenchCoordinator.Modules[i];
+            var definition = orderedDefinitions[i];
             ModuleProgressItems.Add(new ModuleProgressItem(
                 i,
+                definition.sequence,
+                definition.module.ModuleTypeId,
                 module.Code,
                 module.DisplayNameKey,
                 T(module.DisplayNameKey),
@@ -2231,6 +2281,32 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         }
 
         UpdateModuleProgressItems();
+    }
+
+    private void UpdateActiveRunAfterCurrentModuleCompletion()
+    {
+        if (activeRun is not { } run)
+        {
+            return;
+        }
+
+        var nextIndex = currentModuleIndex + 1;
+        if (nextIndex < ModuleProgressItems.Count)
+        {
+            var next = ModuleProgressItems[nextIndex];
+            activeRun = run with
+            {
+                NextModuleIndex = next.Sequence,
+                NextModuleTypeId = next.ModuleTypeId
+            };
+            return;
+        }
+
+        activeRun = run with
+        {
+            NextModuleIndex = run.TotalModuleCount,
+            NextModuleTypeId = null
+        };
     }
 
     private void UpdateModuleProgressItems()
