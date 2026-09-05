@@ -4,6 +4,8 @@ public interface ICaptureMediaService
 {
     event EventHandler<CaptureMediaCompleted>? Completed;
 
+    event EventHandler<CaptureAudioLevel>? AudioLevelAvailable;
+
     bool IsCapturing { get; }
 
     CaptureMediaSession? CurrentSession { get; }

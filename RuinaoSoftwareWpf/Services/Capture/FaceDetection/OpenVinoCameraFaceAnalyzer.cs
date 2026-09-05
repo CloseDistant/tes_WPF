@@ -13,7 +13,7 @@ using System.IO;
 /// </summary>
 public sealed class OpenVinoCameraFaceAnalyzer : ICameraFaceAnalyzer
 {
-    private const double FaceDetectionConfidence = 0.65;
+    private const double FaceDetectionConfidence = 0.55;
     private const double PoseInputPaddingRatio = 0.12;
     private const double LandmarkHorizontalPaddingRatio = 0.06;
     private const double LandmarkTopPaddingRatio = 0.04;

@@ -355,7 +355,7 @@ public sealed class DirectCurrentWaveformSurface : FrameworkElement
             text,
             CultureInfo.CurrentUICulture,
             FlowDirection.LeftToRight,
-            new Typeface("Microsoft YaHei UI"),
+            new Typeface("Source Han Sans SC"),
             size,
             brush,
             1);

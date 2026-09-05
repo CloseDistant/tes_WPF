@@ -177,7 +177,9 @@ public sealed class AssessmentPatientMatchingViewModel : ObservableObject
     public string PhoneQuery
     {
         get => phoneQuery;
-        set => SetProperty(ref phoneQuery, value);
+        set => SetProperty(
+            ref phoneQuery,
+            PhoneQueryInputPolicy.Normalize(value, PhoneQueryInputPolicy.MatchingMaximumLength));
     }
 
     public string PageNumberInput

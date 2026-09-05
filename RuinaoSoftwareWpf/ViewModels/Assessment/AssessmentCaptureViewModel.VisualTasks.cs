@@ -24,10 +24,13 @@ public sealed partial class AssessmentCaptureViewModel
     private void ShowNextCalibrationFrame()
     {
         calibrationTimer.Stop();
+        var now = timeProvider.GetUtcNow();
+        CompleteCalibrationPoint(now);
         if (calibrationFrames.Count == 0)
         {
             IsCalibrationMarkerVisible = false;
             CalibrationAnimationSequence++;
+
             MoveToStep(CaptureWorkbenchStep.Completed);
             NotifyStageChanged();
             return;
@@ -47,14 +50,15 @@ public sealed partial class AssessmentCaptureViewModel
         CalibrationMoveDurationMilliseconds = (int)Math.Round(frame.MoveDuration.TotalMilliseconds);
         IsCalibrationMarkerVisible = true;
         CalibrationAnimationSequence++;
-        RecordCalibrationFrameEvent(frame);
+        activeCalibrationFrame = frame;
+        activeCalibrationFrameStartedAt = now;
+        RecordCalibrationFrameEvent(frame, now);
         calibrationTimer.Interval = frame.Duration;
         calibrationTimer.Start();
     }
 
-    private void RecordCalibrationFrameEvent(CalibrationFrame frame)
+    private void RecordCalibrationFrameEvent(CalibrationFrame frame, DateTimeOffset startedAt)
     {
-        var startedAt = DateTimeOffset.Now;
         if (frame.Kind == CalibrationFrameKind.Point)
         {
             RecordModuleEventSafely(
@@ -95,10 +99,45 @@ public sealed partial class AssessmentCaptureViewModel
             null);
     }
 
+    private void CompleteCalibrationPoint(DateTimeOffset endedAt)
+    {
+        if (activeCalibrationFrame is not { Kind: CalibrationFrameKind.Point } frame
+            || activeCalibrationFrameStartedAt is not { } startedAt)
+        {
+            activeCalibrationFrame = null;
+            activeCalibrationFrameStartedAt = null;
+            return;
+        }
+
+        RecordModuleEventSafely(
+            "eye_calibration_point_ended",
+            $"眼动校准第 {frame.TrialIndex} 轮第 {frame.PointIndex} 点结束",
+            new
+            {
+                trialIndex = frame.TrialIndex,
+                pointIndex = frame.PointIndex,
+                displayNumber = frame.Text,
+                positionType = frame.Region.HasValue ? (frame.Region == 1 ? "upper" : "lower") : "grid",
+                region = frame.Region,
+                xRatio = Math.Round(frame.X / 100d, 4),
+                yRatio = Math.Round(frame.Y / 100d, 4),
+                pointShownAtUnixMs = startedAt.ToUnixTimeMilliseconds(),
+                pointHiddenAtUnixMs = endedAt.ToUnixTimeMilliseconds(),
+                durationMs = Math.Max(0, (long)(endedAt - startedAt).TotalMilliseconds)
+            },
+            startedAt,
+            endedAt);
+
+        activeCalibrationFrame = null;
+        activeCalibrationFrameStartedAt = null;
+    }
+
     private void ResetCalibrationSequence()
     {
         calibrationTimer.Stop();
         calibrationFrames.Clear();
+        activeCalibrationFrame = null;
+        activeCalibrationFrameStartedAt = null;
         calibrationTrialIndex = 1;
         CalibrationText = "+";
         CalibrationMarkerColor = EyeCalibrationSequenceFactory.CrossColor;
@@ -109,20 +148,6 @@ public sealed partial class AssessmentCaptureViewModel
         CalibrationAnimationSequence++;
         OnPropertyChanged(nameof(CalibrationTrialTitle));
     }
-
-    /// <summary>
-    /// 图片浏览当前固定素材顺序对应的图片类型。
-    /// 业务含义暂未确定，先按需求记录 30 张图片的 1/2/3 类型，后续可用于数据库事件或结果分析。
-    /// </summary>
-    private static readonly int[] PictureBrowseImageTypeSequence =
-    [
-        1, 2, 3, 3, 2,
-        1, 2, 3, 1, 3,
-        1, 2, 1, 2, 3,
-        2, 1, 3, 3, 2,
-        1, 3, 1, 2, 1,
-        2, 3, 3, 2, 1
-    ];
 
     /// <summary>
     /// 视频浏览素材类型映射。
@@ -137,10 +162,6 @@ public sealed partial class AssessmentCaptureViewModel
             ["zx29.mp4"] = 1
         };
 
-    private PictureBrowseItem[] PictureBrowseItems => PictureBrowseImagePaths
-        .Select((path, index) => new PictureBrowseItem(path, GetPictureBrowseImageType(index)))
-        .ToArray();
-
     private VideoBrowseItem[] VideoBrowseItems => VideoBrowseVideoPaths
         .Select(CreateVideoBrowseItem)
         .ToArray();
@@ -151,24 +172,19 @@ public sealed partial class AssessmentCaptureViewModel
         return new VideoBrowseItem(videoPath, GetVideoBrowseType(fileName));
     }
 
-    private string[] PictureBrowseImagePaths => Directory.Exists(PictureBrowseDirectory)
-        ? Directory.GetFiles(PictureBrowseDirectory, "*.png").OrderBy(static path => path, StringComparer.OrdinalIgnoreCase).ToArray()
-        : [];
-
     private static string PictureBrowseDirectory => ResolveAssetPath("Assets", "CaptureWorkbench", "PictureBrowse");
+
+    private static string PictureBrowseManifestPath => ResolveAssetPath(
+        "Assets",
+        "CaptureWorkbench",
+        "PictureBrowse",
+        PictureBrowseSequenceCatalog.ManifestFileName);
 
     private string[] VideoBrowseVideoPaths => Directory.Exists(VideoBrowseDirectory)
         ? Directory.GetFiles(VideoBrowseDirectory, "*.mp4").OrderBy(static path => path, StringComparer.OrdinalIgnoreCase).ToArray()
         : [];
 
     private static string VideoBrowseDirectory => ResolveAssetPath("Assets", "CaptureWorkbench", "VideoBrowse");
-
-    private static int GetPictureBrowseImageType(int zeroBasedIndex)
-    {
-        return zeroBasedIndex >= 0 && zeroBasedIndex < PictureBrowseImageTypeSequence.Length
-            ? PictureBrowseImageTypeSequence[zeroBasedIndex]
-            : 0;
-    }
 
     private static int GetVideoBrowseType(string fileName)
     {
@@ -183,36 +199,68 @@ public sealed partial class AssessmentCaptureViewModel
             || moduleCode.StartsWith("questionnaire_", StringComparison.Ordinal);
     }
 
+    private static string PictureBrowseValenceCode(int valenceType)
+    {
+        return valenceType switch
+        {
+            1 => "P",
+            2 => "U",
+            3 => "N",
+            _ => string.Empty
+        };
+    }
+
     /// <summary>
-    /// 初始化图片浏览序列。
-    /// 图片按素材库文件名前缀排序，当前前缀来自创建时间排序后的复制结果。
+    /// 初始化图片浏览序列。版本及顺序均来自发布包清单，运行时不再打乱。
     /// </summary>
     private void BeginPictureBrowseSequence()
     {
         calibrationTimer.Stop();
         pictureBrowseTimer.Stop();
         pictureBrowseIndex = 0;
+        pictureBrowseRestRemainingSeconds = 0;
+        pictureBrowseRestPaused = false;
+        pictureBrowseFixationStartedAt = null;
+        pictureBrowseImageStartedAt = null;
+        pictureBrowseRestStartedAt = null;
+        pictureBrowseFinalBlankStartedAt = null;
         PictureBrowseImagePath = string.Empty;
         PictureBrowseRestText = string.Empty;
 
-        if (PictureBrowseItems.Length == 0)
-        {
-            pictureBrowsePhase = PictureBrowsePhase.Idle;
-            PictureBrowseStatusText = "未找到图片浏览素材";
-            StageNoticeText = "未找到图片浏览素材，请检查素材库 Assets/CaptureWorkbench/PictureBrowse。";
-            MoveToStep(CaptureWorkbenchStep.FaceCheck);
-            return;
-        }
+        var run = activeRun;
+        pictureBrowseVersion = run is { } active
+            ? PictureBrowseSequenceCatalog.ResolveStableVersion(active.RunId, active.PatientCode)
+            : "A";
+        var catalog = PictureBrowseSequenceCatalog.Load(PictureBrowseManifestPath, PictureBrowseDirectory);
+        pictureBrowseItems = catalog.Get(pictureBrowseVersion).ToArray();
 
-        pictureBrowsePhase = PictureBrowsePhase.Blank;
-        PictureBrowseStatusText = $"准备展示第 1 / {PictureBrowseItems.Length} 张";
-        pictureBrowseTimer.Interval = TimeSpan.FromMilliseconds(300);
+        pictureBrowsePhase = PictureBrowsePhase.Fixation;
+        PictureBrowseStatusText = $"准备展示第 1 / {pictureBrowseItems.Length} 张";
+        pictureBrowseFixationStartedAt = timeProvider.GetUtcNow();
+        RecordModuleEventSafely(
+            "picture_browse_sequence_started",
+            $"图片浏览 {pictureBrowseVersion} 套序列开始",
+            new
+            {
+                version = pictureBrowseVersion,
+                total = pictureBrowseItems.Length,
+                fixationDurationMs = PictureBrowseFixationMilliseconds,
+                imageDurationMs = PictureBrowseImageMilliseconds,
+                restAfterPosition = 15,
+                restDurationSeconds = PictureBrowseRestSeconds,
+                finalBlankDurationMs = PictureBrowseFinalBlankMilliseconds,
+                startedAtUnixMs = UnixMilliseconds(pictureBrowseFixationStartedAt)
+            },
+            pictureBrowseFixationStartedAt,
+            null);
+        pictureBrowseTimer.Interval = TimeSpan.FromMilliseconds(PictureBrowseFixationMilliseconds);
         pictureBrowseTimer.Start();
+        NotifyStageChanged();
     }
 
     /// <summary>
-    /// 推进图片浏览内部状态。
-    /// 规则：图片 6 秒、空屏 2.5 秒，第 12 和 24 张后强制休息 12 秒并自动继续。
+    /// 推进图片浏览内部状态：注视点 1 秒、图片 6 秒，第 15 张后休息 10 秒，
+    /// 最后一张结束后灰色空白屏 500ms，再停止录制。
     /// </summary>
     private void AdvancePictureBrowse()
     {
@@ -224,16 +272,21 @@ public sealed partial class AssessmentCaptureViewModel
             return;
         }
 
-        var items = PictureBrowseItems;
+        var items = pictureBrowseItems;
         if (items.Length == 0)
         {
-            PictureBrowseStatusText = "未找到图片浏览素材";
-            NotifyStageChanged();
-            return;
+            throw new InvalidOperationException("图片浏览序列为空。" );
         }
+
+        var now = timeProvider.GetUtcNow();
 
         if (pictureBrowsePhase == PictureBrowsePhase.Resting)
         {
+            if (pictureBrowseRestPaused)
+            {
+                return;
+            }
+
             if (pictureBrowseRestRemainingSeconds > 1)
             {
                 pictureBrowseRestRemainingSeconds--;
@@ -244,30 +297,79 @@ public sealed partial class AssessmentCaptureViewModel
                 return;
             }
 
-            pictureBrowsePhase = PictureBrowsePhase.Blank;
             pictureBrowseRestRemainingSeconds = 0;
+            RecordModuleEventSafely(
+                "picture_browse_rest_ended",
+                "图片浏览第 15 张后休息结束",
+                new
+                {
+                    completedPosition = 15,
+                    endedAtUnixMs = now.ToUnixTimeMilliseconds()
+                },
+                pictureBrowseRestStartedAt,
+                now);
+            pictureBrowseRestStartedAt = null;
             PictureBrowseRestText = string.Empty;
-            PictureBrowseStatusText = $"休息结束，准备继续展示第 {pictureBrowseIndex + 1} / {items.Length} 张";
-            pictureBrowseTimer.Interval = TimeSpan.FromMilliseconds(300);
-            pictureBrowseTimer.Start();
-            NotifyStageChanged();
+            BeginPictureBrowseFixation(now);
             return;
         }
 
-        if (pictureBrowsePhase is PictureBrowsePhase.Idle or PictureBrowsePhase.Blank)
+        if (pictureBrowsePhase == PictureBrowsePhase.FinalBlank)
         {
-            if (pictureBrowseIndex >= items.Length)
-            {
-                CompletePictureBrowse();
-                return;
-            }
+            RecordModuleEventSafely(
+                "picture_browse_final_blank_ended",
+                "图片浏览最后灰色空白屏结束",
+                new
+                {
+                    durationMs = PictureBrowseFinalBlankMilliseconds,
+                    endedAtUnixMs = now.ToUnixTimeMilliseconds()
+                },
+                pictureBrowseFinalBlankStartedAt,
+                now);
+            CompletePictureBrowse(now);
+            return;
+        }
+
+        if (pictureBrowsePhase == PictureBrowsePhase.Fixation)
+        {
+            var fixationStartedAt = pictureBrowseFixationStartedAt ?? now;
+            pictureBrowseFixationStartedAt = null;
+            RecordModuleEventSafely(
+                "picture_browse_fixation_ended",
+                $"图片浏览第 {pictureBrowseIndex + 1} 张注视点结束",
+                new
+                {
+                    position = pictureBrowseIndex + 1,
+                    fixationStartedAtUnixMs = fixationStartedAt.ToUnixTimeMilliseconds(),
+                    fixationEndedAtUnixMs = now.ToUnixTimeMilliseconds(),
+                    durationMs = Math.Max(0, (long)(now - fixationStartedAt).TotalMilliseconds)
+                },
+                fixationStartedAt,
+                now);
 
             var item = items[pictureBrowseIndex];
             pictureBrowsePhase = PictureBrowsePhase.ShowingImage;
+            pictureBrowseImageStartedAt = now;
             PictureBrowseImagePath = item.ImagePath;
-            CurrentPictureBrowseImageType = item.ImageType;
+            CurrentPictureBrowseImageType = item.ValenceType;
             PictureBrowseStatusText = $"图片 {pictureBrowseIndex + 1} / {items.Length}";
-            pictureBrowseTimer.Interval = TimeSpan.FromMilliseconds(6000);
+            RecordModuleEventSafely(
+                "picture_browse_image_started",
+                $"图片浏览第 {item.Position} 张图片出现",
+                new
+                {
+                    version = item.Version,
+                    position = item.Position,
+                    block6 = item.Block6,
+                    fileName = item.FileName,
+                    valence = item.Valence,
+                    valenceCode = PictureBrowseValenceCode(item.ValenceType),
+                    valenceType = item.ValenceType,
+                    imageShownAtUnixMs = now.ToUnixTimeMilliseconds()
+                },
+                now,
+                null);
+            pictureBrowseTimer.Interval = TimeSpan.FromMilliseconds(PictureBrowseImageMilliseconds);
             pictureBrowseTimer.Start();
             NotifyStageChanged();
             return;
@@ -275,40 +377,107 @@ public sealed partial class AssessmentCaptureViewModel
 
         if (pictureBrowsePhase == PictureBrowsePhase.ShowingImage)
         {
+            var item = items[pictureBrowseIndex];
+            var imageStartedAt = pictureBrowseImageStartedAt ?? now;
+            RecordModuleEventSafely(
+                "picture_browse_image_ended",
+                $"图片浏览第 {item.Position} 张图片消失",
+                new
+                {
+                    version = item.Version,
+                    position = item.Position,
+                    block6 = item.Block6,
+                    fileName = item.FileName,
+                    valence = item.Valence,
+                    valenceCode = PictureBrowseValenceCode(item.ValenceType),
+                    valenceType = item.ValenceType,
+                    imageShownAtUnixMs = imageStartedAt.ToUnixTimeMilliseconds(),
+                    imageHiddenAtUnixMs = now.ToUnixTimeMilliseconds(),
+                    durationMs = Math.Max(0, (long)(now - imageStartedAt).TotalMilliseconds)
+                },
+                imageStartedAt,
+                now);
+            pictureBrowseImageStartedAt = null;
             pictureBrowseIndex++;
             PictureBrowseImagePath = string.Empty;
             CurrentPictureBrowseImageType = null;
 
             if (pictureBrowseIndex >= items.Length)
             {
-                CompletePictureBrowse();
+                pictureBrowsePhase = PictureBrowsePhase.FinalBlank;
+                pictureBrowseFinalBlankStartedAt = now;
+                PictureBrowseStatusText = string.Empty;
+                RecordModuleEventSafely(
+                    "picture_browse_final_blank_started",
+                    "图片浏览进入最后灰色空白屏",
+                    new
+                    {
+                        durationMs = PictureBrowseFinalBlankMilliseconds,
+                        startedAtUnixMs = now.ToUnixTimeMilliseconds()
+                    },
+                    now,
+                    null);
+                pictureBrowseTimer.Interval = TimeSpan.FromMilliseconds(PictureBrowseFinalBlankMilliseconds);
+                pictureBrowseTimer.Start();
+                NotifyStageChanged();
                 return;
             }
 
-            if (pictureBrowseIndex % 12 == 0)
+            if (pictureBrowseIndex == 15)
             {
                 pictureBrowsePhase = PictureBrowsePhase.Resting;
-                pictureBrowseRestRemainingSeconds = CaptureWorkbenchForcedRestSeconds;
+                pictureBrowseRestRemainingSeconds = PictureBrowseRestSeconds;
+                pictureBrowseRestStartedAt = now;
                 UpdatePictureBrowseRestText(items.Length);
                 PictureBrowseStatusText = $"强制休息中：已完成 {pictureBrowseIndex} / {items.Length} 张";
+                RecordModuleEventSafely(
+                    "picture_browse_rest_started",
+                    "图片浏览第 15 张后进入 10 秒休息",
+                    new
+                    {
+                        completedPosition = pictureBrowseIndex,
+                        durationSeconds = PictureBrowseRestSeconds,
+                        startedAtUnixMs = now.ToUnixTimeMilliseconds()
+                    },
+                    now,
+                    null);
                 pictureBrowseTimer.Interval = TimeSpan.FromSeconds(1);
                 pictureBrowseTimer.Start();
                 NotifyStageChanged();
                 return;
             }
 
-            pictureBrowsePhase = PictureBrowsePhase.Blank;
-            PictureBrowseStatusText = string.Empty;
-            pictureBrowseTimer.Interval = TimeSpan.FromMilliseconds(2500);
-            pictureBrowseTimer.Start();
-            NotifyStageChanged();
+            BeginPictureBrowseFixation(now);
+            return;
         }
+
+        if (pictureBrowsePhase == PictureBrowsePhase.Idle)
+        {
+            BeginPictureBrowseFixation(now);
+        }
+    }
+
+    private void BeginPictureBrowseFixation(DateTimeOffset startedAt)
+    {
+        if (pictureBrowseIndex >= pictureBrowseItems.Length)
+        {
+            return;
+        }
+
+        pictureBrowsePhase = PictureBrowsePhase.Fixation;
+        pictureBrowseFixationStartedAt = startedAt;
+        PictureBrowseImagePath = string.Empty;
+        CurrentPictureBrowseImageType = null;
+        PictureBrowseStatusText = $"准备展示第 {pictureBrowseIndex + 1} / {pictureBrowseItems.Length} 张";
+        pictureBrowseTimer.Interval = TimeSpan.FromMilliseconds(PictureBrowseFixationMilliseconds);
+        pictureBrowseTimer.Start();
+        NotifyStageChanged();
     }
 
     /// <summary>
     /// 图片浏览全部素材展示完成，进入模块完成阶段。
     /// </summary>
-    private void CompletePictureBrowse()
+    private void CompletePictureBrowse(DateTimeOffset completedAt)
     {
         pictureBrowseTimer.Stop();
         pictureBrowsePhase = PictureBrowsePhase.Completed;
@@ -317,13 +486,76 @@ public sealed partial class AssessmentCaptureViewModel
         CurrentPictureBrowseImageType = null;
         PictureBrowseStatusText = "图片浏览完成";
         PictureBrowseRestText = string.Empty;
+        RecordModuleEventSafely(
+            "picture_browse_sequence_completed",
+            $"图片浏览 {pictureBrowseVersion} 套序列完成",
+            new
+            {
+                version = pictureBrowseVersion,
+                total = pictureBrowseItems.Length,
+                completedAtUnixMs = completedAt.ToUnixTimeMilliseconds()
+            },
+            completedAt,
+            completedAt);
         MoveToStep(CaptureWorkbenchStep.Completed);
         NotifyStageChanged();
     }
 
     private void UpdatePictureBrowseRestText(int totalCount)
     {
-        PictureBrowseRestText = $"已完成 {pictureBrowseIndex} / {totalCount} 张图片\n剩余 {pictureBrowseRestRemainingSeconds} 秒后自动继续。";
+        var pauseText = pictureBrowseRestPaused ? "\n检测到人脸位置变化，请调整后继续。" : string.Empty;
+        PictureBrowseRestText = $"已完成 {pictureBrowseIndex} / {totalCount} 张图片\n剩余 {pictureBrowseRestRemainingSeconds} 秒后自动继续。{pauseText}";
+    }
+
+    internal void ObservePictureBrowseRestFace(
+        CameraFaceState state,
+        bool isPrimaryFaceInsideGuide,
+        DateTimeOffset observedAt)
+    {
+        if (!IsPictureResting || pictureBrowseRestRemainingSeconds > 5)
+        {
+            return;
+        }
+
+        var isReady = state == CameraFaceState.Normal && isPrimaryFaceInsideGuide;
+        if (!isReady && !pictureBrowseRestPaused)
+        {
+            pictureBrowseRestPaused = true;
+            pictureBrowseTimer.Stop();
+            UpdatePictureBrowseRestText(pictureBrowseItems.Length);
+            RecordModuleEventSafely(
+                "picture_browse_rest_face_check_failed",
+                "图片浏览休息末段人脸取景未通过，暂停倒计时",
+                new
+                {
+                    remainingSeconds = pictureBrowseRestRemainingSeconds,
+                    failedAtUnixMs = observedAt.ToUnixTimeMilliseconds()
+                },
+                observedAt,
+                null);
+            NotifyStageChanged();
+            return;
+        }
+
+        if (isReady && pictureBrowseRestPaused)
+        {
+            pictureBrowseRestPaused = false;
+            UpdatePictureBrowseRestText(pictureBrowseItems.Length);
+            var resumedAt = observedAt;
+            RecordModuleEventSafely(
+                "picture_browse_rest_face_check_recovered",
+                "图片浏览休息末段人脸取景恢复，继续倒计时",
+                new
+                {
+                    remainingSeconds = pictureBrowseRestRemainingSeconds,
+                    recoveredAtUnixMs = resumedAt.ToUnixTimeMilliseconds()
+                },
+                resumedAt,
+                null);
+            pictureBrowseTimer.Interval = TimeSpan.FromSeconds(1);
+            pictureBrowseTimer.Start();
+            NotifyStageChanged();
+        }
     }
 
     /// <summary>

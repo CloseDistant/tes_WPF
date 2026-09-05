@@ -6,12 +6,12 @@ public sealed class EmotionQuestionTimingRulesTests
 {
     [Theory]
     [InlineData(0, 0)]
-    [InlineData(29_999, 0)]
-    [InlineData(30_000, 1)]
+    [InlineData(19_999, 0)]
+    [InlineData(20_000, 1)]
     [InlineData(119_999, 1)]
     [InlineData(120_000, 2)]
     [InlineData(125_000, 2)]
-    public void EvaluateAnswer_UsesConfirmedThirtyAndOneHundredTwentySecondBoundaries(
+    public void EvaluateAnswer_UsesTwentyAndOneHundredTwentySecondBoundaries(
         int elapsedMilliseconds,
         int expected)
     {
@@ -22,12 +22,12 @@ public sealed class EmotionQuestionTimingRulesTests
     }
 
     [Theory]
-    [InlineData(0, 30, 30)]
-    [InlineData(1, 30, 30)]
-    [InlineData(29_001, 30, 1)]
-    [InlineData(30_000, 30, 0)]
-    [InlineData(11_001, 12, 1)]
-    [InlineData(12_000, 12, 0)]
+    [InlineData(0, 20, 20)]
+    [InlineData(1, 20, 20)]
+    [InlineData(19_001, 20, 1)]
+    [InlineData(20_000, 20, 0)]
+    [InlineData(59_001, 60, 1)]
+    [InlineData(60_000, 60, 0)]
     public void RemainingSeconds_RoundsUpWithoutEndingAStageEarly(
         int elapsedMilliseconds,
         int durationSeconds,
@@ -41,10 +41,19 @@ public sealed class EmotionQuestionTimingRulesTests
     }
 
     [Fact]
-    public void ConfirmedDurations_RemainThirtyOneHundredTwentyAndTwelveSeconds()
+    public void ConfirmedDurations_AreTwentyOneHundredTwentyAndSixtySeconds()
     {
-        Assert.Equal(30, EmotionQuestionTimingRules.MinimumAnswerSeconds);
+        Assert.Equal(20, EmotionQuestionTimingRules.MinimumAnswerSeconds);
         Assert.Equal(120, EmotionQuestionTimingRules.MaximumAnswerSeconds);
-        Assert.Equal(12, AssessmentCaptureViewModel.CaptureWorkbenchForcedRestSeconds);
+        Assert.Equal(60, EmotionQuestionTimingRules.MaximumThinkingSeconds);
+    }
+
+    [Theory]
+    [InlineData(59_999, false)]
+    [InlineData(60_000, true)]
+    [InlineData(61_000, true)]
+    public void Thinking_AutoStartsAtSixtySeconds(int milliseconds, bool expected)
+    {
+        Assert.Equal(expected, EmotionQuestionTimingRules.ShouldStartAnswer(TimeSpan.FromMilliseconds(milliseconds)));
     }
 }

@@ -132,7 +132,8 @@ public sealed class OpenVinoCameraFaceAnalyzerTests
             "Assets",
             "CaptureWorkbench",
             "EmotionStroop",
-            "fxmk98454s108.png");
+            "Formal",
+            "fxmk454s010.png");
         using var frame = Cv2.ImRead(imagePath);
 
         var result = analyzer.Analyze(

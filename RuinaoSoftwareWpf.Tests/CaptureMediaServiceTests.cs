@@ -85,6 +85,12 @@ public sealed class CaptureMediaServiceTests
 
         public event EventHandler<CaptureRecordingCompletedEventArgs>? RecordingCompleted;
 
+        public event EventHandler<CaptureAudioLevel>? AudioLevelAvailable
+        {
+            add { }
+            remove { }
+        }
+
         public bool IsRecording { get; private set; }
 
         public CaptureSessionInfo? CurrentSession => IsRecording ? Session : null;

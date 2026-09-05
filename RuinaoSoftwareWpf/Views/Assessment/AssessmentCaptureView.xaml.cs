@@ -4,6 +4,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using System.Windows.Input;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -46,6 +47,29 @@ public partial class AssessmentCaptureView : UserControl
     private bool isStartingFormalPresentation;
     private bool isCaptureDetailsOpen = true;
     private bool captureDetailsOpenBeforeFormal = true;
+    private Window? keyboardOwnerWindow;
+    private SpaceShortcutSnapshot? armedSpaceShortcut;
+
+    private enum SpaceShortcutAction
+    {
+        PlayDemo,
+        EnterFaceCheck,
+        StartFormalModule,
+        StartVoiceBaseline,
+        FinishVoiceBaseline,
+        StartWordReading,
+        StartShortTextReading,
+        StartEmotionQuestion,
+        CompleteEmotionQuestion,
+        StartSyncTest,
+        RetryModule,
+        NextModule
+    }
+
+    private sealed record SpaceShortcutSnapshot(
+        SpaceShortcutAction Action,
+        int ModuleTypeId,
+        string StepText);
 
     public AssessmentCaptureView()
     {
@@ -63,6 +87,11 @@ public partial class AssessmentCaptureView : UserControl
 
     private async void AssessmentCaptureView_Loaded(object sender, RoutedEventArgs e)
     {
+        AttachKeyboardShortcutHandler();
+        CompositionTarget.Rendering += OnCompositionTargetRendering;
+        // 将键盘焦点放在采集工作台根节点，避免按钮/MediaElement 保留焦点时
+        // 字母键只进入控件内部而没有进入任务快捷键处理链。
+        Focus();
         ConfigureDevelopmentDetails();
         SetCaptureDetailsOpen(true);
         AttachCalibrationAnimationViewModel(ViewModel);
@@ -90,7 +119,305 @@ public partial class AssessmentCaptureView : UserControl
 
     private async void AssessmentCaptureView_Unloaded(object sender, RoutedEventArgs e)
     {
+        CompositionTarget.Rendering -= OnCompositionTargetRendering;
+        DetachKeyboardShortcutHandler();
         await StopPageActivitiesForUnloadAsync();
+    }
+
+    private void OnCompositionTargetRendering(object? sender, EventArgs e)
+    {
+        // 以真正进入渲染管线的首帧作为刺激起始时刻；ViewModel 仍保留状态切换时刻兜底。
+        ViewModel?.MarkEmotionStroopStimulusRendered();
+    }
+
+    private void AttachKeyboardShortcutHandler()
+    {
+        DetachKeyboardShortcutHandler();
+        keyboardOwnerWindow = Window.GetWindow(this);
+        if (keyboardOwnerWindow is not null)
+        {
+            // 用 AddHandler 并打开 handledEventsToo：媒体控件、按钮和输入框可能先把
+            // PreviewKeyDown 标记为 Handled，普通事件订阅在这种情况下收不到按键。
+            keyboardOwnerWindow.AddHandler(
+                Keyboard.PreviewKeyDownEvent,
+                new KeyEventHandler(OnOwnerWindowPreviewKeyDown),
+                handledEventsToo: true);
+            keyboardOwnerWindow.AddHandler(
+                Keyboard.PreviewKeyUpEvent,
+                new KeyEventHandler(OnOwnerWindowPreviewKeyUp),
+                handledEventsToo: true);
+        }
+    }
+
+    private void DetachKeyboardShortcutHandler()
+    {
+        if (keyboardOwnerWindow is not null)
+        {
+            keyboardOwnerWindow.RemoveHandler(
+                Keyboard.PreviewKeyDownEvent,
+                new KeyEventHandler(OnOwnerWindowPreviewKeyDown));
+            keyboardOwnerWindow.RemoveHandler(
+                Keyboard.PreviewKeyUpEvent,
+                new KeyEventHandler(OnOwnerWindowPreviewKeyUp));
+            keyboardOwnerWindow = null;
+        }
+
+        armedSpaceShortcut = null;
+    }
+
+    private void OnOwnerWindowPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        // Stroop 的 F/J 是正式刺激反应键，必须优先于隐藏控件遗留的键盘焦点处理。
+        // KeyUp 还会再次兜底，避免某些媒体控件只放行按键释放事件。
+        if (TryHandleEmotionStroopKey(e))
+        {
+            return;
+        }
+
+        if (e.Key != Key.Space || e.IsRepeat || IsTextInputFocused())
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (armedSpaceShortcut is not null || ViewModel is not { } viewModel)
+        {
+            return;
+        }
+
+        if (TryGetSpaceShortcutAction(viewModel, out var action))
+        {
+            armedSpaceShortcut = new SpaceShortcutSnapshot(
+                action,
+                viewModel.CurrentModuleTypeId,
+                viewModel.CurrentDevStepText);
+        }
+    }
+
+    private async void OnOwnerWindowPreviewKeyUp(object sender, KeyEventArgs e)
+    {
+        // 部分 WPF 原生媒体/输入控件会吞掉字母键的 KeyDown，但仍会冒泡 KeyUp；
+        // 因此 F/J 必须在释放事件再次尝试，ViewModel 内部保证只记录第一次有效反应。
+        if (TryHandleEmotionStroopKey(e))
+        {
+            return;
+        }
+
+        if (e.Key != Key.Space)
+        {
+            return;
+        }
+
+        var snapshot = armedSpaceShortcut;
+        armedSpaceShortcut = null;
+        if (IsTextInputFocused())
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (ViewModel is not { } viewModel)
+        {
+            return;
+        }
+
+        // 按钮获得焦点时，部分 WPF 控件会吞掉 PreviewKeyDown，导致没有快照；
+        // KeyUp 仍是一次明确的用户操作，此时直接按当前可提交状态完成本题。
+        if (snapshot is null && viewModel.CanCompleteEmotionQuestionAnswer)
+        {
+            await ExecuteSpaceShortcutAsync(SpaceShortcutAction.CompleteEmotionQuestion, viewModel);
+            return;
+        }
+
+        if (snapshot is null
+            || viewModel.CurrentModuleTypeId != snapshot.ModuleTypeId
+            || !string.Equals(viewModel.CurrentDevStepText, snapshot.StepText, StringComparison.Ordinal)
+            || !TryGetSpaceShortcutAction(viewModel, out var currentAction)
+            || currentAction != snapshot.Action)
+        {
+            return;
+        }
+
+        await ExecuteSpaceShortcutAsync(snapshot.Action, viewModel);
+    }
+
+    private bool TryHandleEmotionStroopKey(KeyEventArgs e)
+    {
+        if (e.IsRepeat || ViewModel is not { IsEmotionStroopModule: true, IsEmotionStroopStimulusVisible: true } stroopViewModel)
+        {
+            return false;
+        }
+
+        // Key.System 出现在 Alt 组合键中，普通 F/J 则直接使用 Key。
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        var response = key switch
+        {
+            Key.F => EmotionStroopResponse.Positive,
+            Key.J => EmotionStroopResponse.Negative,
+            _ => (EmotionStroopResponse?)null
+        };
+        if (response is null)
+        {
+            return false;
+        }
+
+        e.Handled = true;
+        stroopViewModel.SubmitEmotionStroopKeyboardResponse(response.Value);
+        return true;
+    }
+
+    private static bool IsTextInputFocused()
+    {
+        var focused = Keyboard.FocusedElement;
+        return focused is System.Windows.Controls.Primitives.TextBoxBase
+            or PasswordBox
+            or ComboBox;
+    }
+
+    private static bool TryGetSpaceShortcutAction(
+        AssessmentCaptureViewModel viewModel,
+        out SpaceShortcutAction action)
+    {
+        if (viewModel.ShowDemoPlayAction)
+        {
+            action = SpaceShortcutAction.PlayDemo;
+            return true;
+        }
+
+        if (viewModel.ShowEmotionStroopPracticeStartAction)
+        {
+            action = SpaceShortcutAction.StartFormalModule;
+            return true;
+        }
+
+        if (viewModel.ShowEmotionStroopFormalStartAction)
+        {
+            action = SpaceShortcutAction.StartFormalModule;
+            return true;
+        }
+
+        if (viewModel.ShowFaceCheckAction)
+        {
+            action = SpaceShortcutAction.EnterFaceCheck;
+            return true;
+        }
+
+        if (viewModel.IsFaceStep && viewModel.IsFaceReady)
+        {
+            action = SpaceShortcutAction.StartFormalModule;
+            return true;
+        }
+
+        if (viewModel.ShowVoiceBaselineStartAction)
+        {
+            action = SpaceShortcutAction.StartVoiceBaseline;
+            return true;
+        }
+
+        if (viewModel.CanFinishVoiceBaselineSegment)
+        {
+            action = SpaceShortcutAction.FinishVoiceBaseline;
+            return true;
+        }
+
+        if (viewModel.ShowWordReadingStartAction)
+        {
+            action = SpaceShortcutAction.StartWordReading;
+            return true;
+        }
+
+        if (viewModel.ShowShortTextReadingStartAction)
+        {
+            action = SpaceShortcutAction.StartShortTextReading;
+            return true;
+        }
+
+        if (viewModel.IsEmotionQuestionWaiting)
+        {
+            action = SpaceShortcutAction.StartEmotionQuestion;
+            return true;
+        }
+
+        if (viewModel.CanCompleteEmotionQuestionAnswer)
+        {
+            action = SpaceShortcutAction.CompleteEmotionQuestion;
+            return true;
+        }
+
+        if (viewModel.ShowSyncTestStartAction)
+        {
+            action = SpaceShortcutAction.StartSyncTest;
+            return true;
+        }
+
+        if (viewModel.IsModuleSaveFailed && viewModel.RetryFailedModuleCommand.CanExecute(null))
+        {
+            action = SpaceShortcutAction.RetryModule;
+            return true;
+        }
+
+        if (viewModel.IsCompletionStage && viewModel.GoNextModuleCommand.CanExecute(null))
+        {
+            action = SpaceShortcutAction.NextModule;
+            return true;
+        }
+
+        action = default;
+        return false;
+    }
+
+    private async Task ExecuteSpaceShortcutAsync(
+        SpaceShortcutAction action,
+        AssessmentCaptureViewModel viewModel)
+    {
+        switch (action)
+        {
+            case SpaceShortcutAction.PlayDemo:
+                PlayDemoButton_Click(this, new RoutedEventArgs());
+                break;
+            case SpaceShortcutAction.EnterFaceCheck:
+            case SpaceShortcutAction.StartFormalModule:
+                if (viewModel.ShowEmotionStroopPracticeStartAction)
+                {
+                    viewModel.StartEmotionStroopPracticeCommand.Execute(null);
+                }
+                else if (viewModel.ShowEmotionStroopFormalStartAction)
+                {
+                    await StartEmotionStroopFormalButtonAsync(viewModel);
+                }
+                else
+                {
+                    await StartCalibrationButtonAsync(viewModel);
+                }
+                break;
+            case SpaceShortcutAction.StartVoiceBaseline:
+                await StartVoiceBaselineButtonAsync(viewModel);
+                break;
+            case SpaceShortcutAction.FinishVoiceBaseline:
+                viewModel.FinishVoiceBaselineSegment();
+                break;
+            case SpaceShortcutAction.StartWordReading:
+                StartWordReadingButton_Click(this, new RoutedEventArgs());
+                break;
+            case SpaceShortcutAction.StartShortTextReading:
+                viewModel.StartShortTextReadingCommand.Execute(null);
+                break;
+            case SpaceShortcutAction.StartEmotionQuestion:
+                viewModel.StartEmotionQuestionCommand.Execute(null);
+                break;
+            case SpaceShortcutAction.CompleteEmotionQuestion:
+                viewModel.CompleteEmotionQuestionAnswerCommand.Execute(null);
+                break;
+            case SpaceShortcutAction.StartSyncTest:
+                await StartSyncTestAsync(viewModel);
+                break;
+            case SpaceShortcutAction.RetryModule:
+                viewModel.RetryFailedModuleCommand.Execute(null);
+                break;
+            case SpaceShortcutAction.NextModule:
+                viewModel.GoNextModuleCommand.Execute(null);
+                break;
+        }
     }
 
     private async Task StopPageActivitiesForUnloadAsync()
@@ -210,6 +537,7 @@ public partial class AssessmentCaptureView : UserControl
 
         captureDetailsOpenBeforeFormal = isCaptureDetailsOpen;
         isFormalPresentationActive = true;
+        Keyboard.ClearFocus();
         mainWindow.EnterAssessmentPresentationMode();
 
         WorkbenchRoot.Margin = new Thickness(0);
@@ -227,6 +555,7 @@ public partial class AssessmentCaptureView : UserControl
 
         // 等待无边框全屏布局真正提交后再启动范式时间轴，避免首个刺激帧在布局切换中丢失。
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+        Focus();
     }
 
     private void ExitFormalPresentationMode()
@@ -296,6 +625,23 @@ public partial class AssessmentCaptureView : UserControl
         var availableHeight = WorkbenchContent.ActualHeight;
         if (availableWidth <= 0 || availableHeight <= 0)
         {
+            return;
+        }
+
+        // 图片浏览素材按屏幕可用区域完整适配（不裁切、不拉伸）；校准画面也复用同一全屏容器。
+        if (ViewModel?.IsPictureBrowseModule == true)
+        {
+            ParadigmCard.Width = availableWidth;
+            ParadigmCard.Height = availableHeight;
+            ParadigmCard.HorizontalAlignment = HorizontalAlignment.Center;
+            ParadigmCard.VerticalAlignment = VerticalAlignment.Center;
+
+            // 图片展示区域按目标设备的物理屏幕比例设置为 50% 宽、60% 高。
+            // WPF ActualWidth/ActualHeight 已是当前 DPI 下的逻辑尺寸，使用百分比
+            // 可自动适配 150% 缩放及后续不同分辨率；Image 用 Uniform 保证原图比例，
+            // 不拉伸、不裁切，也不会放大到超过该展示区域。
+            PictureBrowseImage.Width = availableWidth * 0.5d;
+            PictureBrowseImage.Height = availableHeight * 0.6d;
             return;
         }
 
@@ -376,11 +722,20 @@ public partial class AssessmentCaptureView : UserControl
         CalibrationMarkerTransform.Y = top;
     }
 
-    private void PlayDemoButton_Click(object sender, System.Windows.RoutedEventArgs e)
+    private async void PlayDemoButton_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         var viewModel = ViewModel;
         if (viewModel is null)
         {
+            return;
+        }
+
+        if (viewModel.IsInstructionStage)
+        {
+            // 图片浏览仅显示文字指导语；点击“进入面部取景”直接进入人脸准备阶段，
+            // 不再经过“继续”这一层中间状态。
+            viewModel.BeginFaceCheck();
+            await StartCameraPreviewAsync();
             return;
         }
 
@@ -408,12 +763,14 @@ public partial class AssessmentCaptureView : UserControl
 
     private async void StartCalibrationButton_Click(object sender, System.Windows.RoutedEventArgs e)
     {
-        var viewModel = ViewModel;
-        if (viewModel is null)
+        if (ViewModel is { } viewModel)
         {
-            return;
+            await StartCalibrationButtonAsync(viewModel);
         }
+    }
 
+    private async Task StartCalibrationButtonAsync(AssessmentCaptureViewModel viewModel)
+    {
         playbackTimer.Stop();
         DemoMedia.Stop();
         VideoBrowseMedia.Stop();
@@ -450,7 +807,37 @@ public partial class AssessmentCaptureView : UserControl
 
         try
         {
-            await BeginModuleRecordingSessionAsync(viewModel);
+            if (viewModel.IsEmotionStroopModule)
+            {
+                isStartingFormalPresentation = true;
+                try
+                {
+                    await EnterFormalPresentationModeAsync();
+                    viewModel.StartCurrentModule();
+                }
+                finally
+                {
+                    // Stroop 分支会在这里直接返回，必须与通用启动路径一样复位标志。
+                    // 否则人脸检测中断切回 FaceCheck 时会被误判为“仍在进入全屏”，
+                    // 从而跳过 ExitFormalPresentationMode，导致侧边栏永久不可用。
+                    isStartingFormalPresentation = false;
+                    UpdateFormalPresentationForCurrentStage();
+                }
+                return;
+            }
+
+            if (viewModel.IsVoiceBaselineModule || viewModel.IsShortTextReadingModule)
+            {
+                var sessionName = await viewModel.GetOrStartUnifiedSessionKeyAsync();
+                if (!viewModel.IsDevelopmentModuleOverride)
+                {
+                    await viewModel.BeginCurrentModuleAttemptAsync(sessionName);
+                }
+            }
+            else
+            {
+                await BeginModuleRecordingSessionAsync(viewModel);
+            }
         }
         catch (AssessmentModuleStartException exception)
         {
@@ -487,12 +874,41 @@ public partial class AssessmentCaptureView : UserControl
 
     private async void StartSyncTestButton_Click(object sender, RoutedEventArgs e)
     {
-        var viewModel = ViewModel;
-        if (viewModel is null)
+        if (ViewModel is { } viewModel)
         {
-            return;
+            await StartSyncTestAsync(viewModel);
         }
+    }
 
+    private async void StartEmotionStroopFormalButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } viewModel)
+        {
+            await StartEmotionStroopFormalButtonAsync(viewModel);
+        }
+    }
+
+    private async Task StartEmotionStroopFormalButtonAsync(AssessmentCaptureViewModel viewModel)
+    {
+        try
+        {
+            await BeginModuleRecordingSessionAsync(viewModel);
+            viewModel.StartEmotionStroopFormal();
+        }
+        catch (AssessmentModuleStartException exception)
+        {
+            viewModel.ShowStageNotice($"当前评估模块无法启动：{exception.InnerException?.Message ?? exception.Message}");
+        }
+        catch (Exception exception)
+        {
+            StopModuleRecording(viewModel, CaptureMediaStopReason.Failed, exception.Message);
+            await viewModel.FailCurrentModuleAttemptAsync("MEDIA_START_FAILED", exception.Message);
+            viewModel.ShowStageNotice($"正式采集启动失败：{exception.Message}");
+        }
+    }
+
+    private async Task StartSyncTestAsync(AssessmentCaptureViewModel viewModel)
+    {
         playbackTimer.Stop();
         DemoMedia.Stop();
         VideoBrowseMedia.Stop();
@@ -533,14 +949,34 @@ public partial class AssessmentCaptureView : UserControl
         viewModel.StartSyncTest();
     }
 
-    private void StartVoiceBaselineButton_Click(object sender, RoutedEventArgs e)
+    private async void StartVoiceBaselineButton_Click(object sender, RoutedEventArgs e)
     {
-        ViewModel?.StartVoiceBaselineFirstSegment();
+        if (ViewModel is { } viewModel)
+        {
+            await StartVoiceBaselineButtonAsync(viewModel);
+        }
+    }
+
+    private static async Task StartVoiceBaselineButtonAsync(AssessmentCaptureViewModel viewModel)
+    {
+        try
+        {
+            await viewModel.StartVoiceBaselineFirstSegmentAsync();
+        }
+        catch (Exception exception)
+        {
+            viewModel.ShowStageNotice($"语音基线录制启动失败：{exception.Message}");
+        }
     }
 
     private void StartWordReadingButton_Click(object sender, RoutedEventArgs e)
     {
         ViewModel?.StartWordReadingFirstGroup();
+    }
+
+    private void FinishVoiceBaselineButton_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel?.FinishVoiceBaselineSegment();
     }
 
     private async void RefreshCameraButton_Click(object sender, RoutedEventArgs e)
@@ -816,6 +1252,10 @@ public partial class AssessmentCaptureView : UserControl
             status.State,
             status.IsPrimaryFaceInsideGuide,
             status.AnalyzedAtTimestamp);
+        viewModel.ObservePictureBrowseRestFace(
+            status.State,
+            status.IsPrimaryFaceInsideGuide,
+            status.CapturedAt);
         var monitorUpdate = viewModel.ObserveFaceCondition(status.State, status.AnalyzedAtTimestamp);
         var faceStatusText = FaceStateText(viewModel, status.State);
         if (status.State == CameraFaceState.Normal && !status.IsPrimaryFaceInsideGuide)

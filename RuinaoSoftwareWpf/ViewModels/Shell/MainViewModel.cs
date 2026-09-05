@@ -24,6 +24,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     private readonly IAccountService accountService;
     private readonly IFeatureVisibilityService featureVisibilityService;
     private readonly IStartupSettingsService startupSettingsService;
+    private readonly IUserViewModeService userViewModeService;
     private readonly ISoftwareActivationService softwareActivationService;
     private readonly IPatientService patientService;
     private readonly IStimulationStateMachine stimulationStateMachine;
@@ -59,6 +60,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         IAccountService accountService,
         IFeatureVisibilityService featureVisibilityService,
         IStartupSettingsService startupSettingsService,
+        IUserViewModeService userViewModeService,
         ISoftwareActivationService softwareActivationService,
         IPatientService patientService,
         IStimulationStateMachine stimulationStateMachine,
@@ -92,6 +94,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         this.accountService = accountService;
         this.featureVisibilityService = featureVisibilityService;
         this.startupSettingsService = startupSettingsService;
+        this.userViewModeService = userViewModeService;
         this.softwareActivationService = softwareActivationService;
         this.patientService = patientService;
         this.stimulationStateMachine = stimulationStateMachine;
@@ -187,7 +190,34 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         EditPatientCommand = CreateHardwareCommand(_ => EditPatientAsync());
         SwitchPatientCommand = CreateHardwareCommand(_ => SwitchPatientAsync());
         CreatePatientCommand = CreateHardwareCommand(_ => CreatePatientAsync());
-        SwitchViewCommand = new RelayCommand(_ => toastService.ShowSuccess("切换用户视角", "切换成功"));
+        SwitchViewCommand = new AsyncRelayCommand(
+            async cancellationToken =>
+            {
+                if (AssessmentCapture.ShouldConfirmLeavingWorkbench)
+                {
+                    toastService.ShowInformation("当前采集正在进行，完成或退出当前模块后才能切换患者视角。", "无法切换视角");
+                    return;
+                }
+
+                var nextMode = userViewModeService.CurrentMode == UserViewMode.Patient
+                    ? UserViewMode.Operator
+                    : UserViewMode.Patient;
+                await userViewModeService.SetModeAsync(nextMode, cancellationToken);
+
+                if (CurrentPage == AppPage.AssessmentCapture)
+                {
+                    await RestorePreferredViewModeAsync(cancellationToken);
+                }
+                else
+                {
+                    await NavigateAsync(AppPage.AssessmentCapture, cancellationToken);
+                }
+            },
+            onError: exception =>
+            {
+                logger.Error("切换用户视角失败", exception);
+                toastService.ShowError("切换失败", exception.Message);
+            });
         EndCurrentSessionCommand = CreateHardwareCommand(_ => EndCurrentSessionAsync());
         NavigateCommand = new AsyncRelayCommand(async (parameter, cancellationToken) =>
         {
@@ -241,7 +271,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         initializationTask = Task.WhenAll(
             InitializeAccountAsync(),
             InitializePatientAsync(),
-            InitializeFeatureVisibilityAsync());
+            InitializeFeatureVisibilityAsync(),
+            userViewModeService.InitializeAsync());
     }
 
     /// <summary>左侧导航 ViewModel。</summary>
@@ -315,6 +346,37 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
     public ICommand EndCurrentSessionCommand { get; }
     public ICommand NavigateCommand { get; }
 
+    /// <summary>
+    /// 登录成功后恢复上次保存的视角。当前患者只在本次登录会话内保留，
+    /// 重新登录后必须重新选择患者，因此患者视角始终从欢迎页开始。
+    /// </summary>
+    public async Task RestorePreferredViewModeAsync(CancellationToken cancellationToken = default)
+    {
+        await userViewModeService.InitializeAsync(cancellationToken);
+        await patientService.InitializeAsync(cancellationToken);
+        ShowPreferredAssessmentLanding();
+        if (userViewModeService.CurrentMode == UserViewMode.Patient
+            && patientService.CurrentPatient is null)
+        {
+            return;
+        }
+
+        await AssessmentFeature.ShowEntryAsync(cancellationToken);
+    }
+
+    private void ShowPreferredAssessmentLanding()
+    {
+        if (userViewModeService.CurrentMode == UserViewMode.Patient
+            && patientService.CurrentPatient is null)
+        {
+            AssessmentFeature.ShowPatientWelcome();
+        }
+        else
+        {
+            AssessmentFeature.ShowEntry();
+        }
+    }
+
     public string CurrentSessionSummary => sessionLifecycleCoordinator.CurrentSession is { } session
         ? $"Session：{session.SessionKey}"
         : "Session：未开始";
@@ -381,7 +443,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
     /// <summary>
     /// 患者菜单中的“切换用户视角”仅在数字表型采集导航项启用时显示。
-    /// 当前点击行为只反馈 Toast，后续接入真实视角切换时复用此命令。
+    /// 点击后在管理端和患者端视角之间双向切换，并保存最后一次选择。
     /// </summary>
     public Visibility SwitchViewMenuVisibility => featureVisibilityService.IsVisible(FeatureKeys.NavigationAssessment)
         ? Visibility.Visible
@@ -783,7 +845,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
         ChangeCurrentPage(page);
         if (page == AppPage.AssessmentCapture)
         {
-            await AssessmentFeature.ShowEntryAsync(cancellationToken);
+            await RestorePreferredViewModeAsync(cancellationToken);
         }
     }
 
@@ -806,7 +868,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainUiContext
 
         if (page == AppPage.AssessmentCapture)
         {
-            AssessmentFeature.ShowEntry();
+            ShowPreferredAssessmentLanding();
         }
 
         var nextPageViewModel = page == AppPage.Control

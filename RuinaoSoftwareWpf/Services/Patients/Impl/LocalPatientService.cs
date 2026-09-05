@@ -15,6 +15,7 @@ public sealed class LocalPatientService : IPatientService
     private bool ready;
     private PatientRecord? currentPatient;
     private long? currentPatientOwnerUserId;
+    private long? initializedUserId;
 
     public LocalPatientService(
         ILoggingService logger,
@@ -30,7 +31,7 @@ public sealed class LocalPatientService : IPatientService
         this.dataProtector = dataProtector;
         this.accountService = accountService;
         this.authorizationService = authorizationService;
-        this.accountService.CurrentUserChanged += (_, _) => ClearCurrentPatient();
+        this.accountService.CurrentUserChanged += (_, _) => HandleCurrentUserChanged();
     }
 
     public event EventHandler? CurrentPatientChanged;
@@ -40,7 +41,25 @@ public sealed class LocalPatientService : IPatientService
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await EnsureReadyAsync(cancellationToken);
+
+        var currentUser = accountService.CurrentUser;
+        if (currentUser is null)
+        {
+            ClearCurrentPatient();
+            initializedUserId = null;
+            return;
+        }
+
+        // 当前患者只属于本次登录会话。切换模块时 InitializeAsync 会再次调用，
+        // 但通过已初始化用户标记保留内存中的当前患者；重新登录时由
+        // CurrentUserChanged 清空状态并重置该标记，不从数据库恢复患者。
+        if (initializedUserId == currentUser.UserId)
+        {
+            return;
+        }
+
         ClearCurrentPatient();
+        initializedUserId = currentUser.UserId;
     }
 
     public Task<PatientRecord> CreatePatientAsync(PatientSaveRequest request, CancellationToken cancellationToken = default)
@@ -198,8 +217,8 @@ public sealed class LocalPatientService : IPatientService
             var owner = RequirePatientManager();
             await using var context = new CaptureDbContext(AppDatabasePathProvider.MainDatabasePath);
             var entity = await context.Patients.FirstOrDefaultAsync(
-                    item => item.PatientCode == patientCode && item.OwnerUserId == owner.UserId,
-                    cancellationToken)
+                item => item.PatientCode == patientCode && item.OwnerUserId == owner.UserId,
+                cancellationToken)
                 ?? throw new InvalidOperationException($"未找到患者：{patientCode}");
             currentPatient = ToRecord(entity);
             currentPatientOwnerUserId = owner.UserId;
@@ -334,6 +353,12 @@ public sealed class LocalPatientService : IPatientService
     private CurrentUserInfo RequirePatientManager()
     {
         return authorizationService.Demand(AppPermission.ManagePatients);
+    }
+
+    private void HandleCurrentUserChanged()
+    {
+        initializedUserId = null;
+        ClearCurrentPatient();
     }
 
     private void ClearCurrentPatient()

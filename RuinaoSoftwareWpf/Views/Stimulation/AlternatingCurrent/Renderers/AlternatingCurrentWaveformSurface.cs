@@ -268,7 +268,7 @@ public sealed class AlternatingCurrentWaveformSurface : FrameworkElement
             text,
             CultureInfo.CurrentUICulture,
             FlowDirection.LeftToRight,
-            new Typeface("Microsoft YaHei UI"),
+            new Typeface("Source Han Sans SC"),
             size,
             AxisTextBrush,
             1);

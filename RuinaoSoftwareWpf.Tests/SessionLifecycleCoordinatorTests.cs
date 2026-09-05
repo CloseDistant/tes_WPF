@@ -180,6 +180,12 @@ public sealed class SessionLifecycleCoordinatorTests
             remove { }
         }
 
+        public event EventHandler<CaptureAudioLevel>? AudioLevelAvailable
+        {
+            add { }
+            remove { }
+        }
+
         public bool IsCapturing => false;
 
         public CaptureMediaSession? CurrentSession => null;

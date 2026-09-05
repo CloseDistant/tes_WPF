@@ -89,14 +89,9 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0"
-                BorderBrush="#303643"
-                BorderThickness="0,0,0,1"
-                Padding="0,0,0,18">
+        <Border Grid.Row="0" Style="{StaticResource AssessmentPageHeader}">
             <TextBlock Text="{Binding PageTitleText}"
-                       Foreground="#F1F3F6"
-                       FontSize="24"
-                       FontWeight="SemiBold" />
+                       Style="{StaticResource AssessmentPageTitle}" />
         </Border>
 
         <Grid Grid.Row="1" Margin="0,0,0,28">
@@ -183,11 +178,10 @@
                            FontSize="14"
                            TextAlignment="Center"
                            Margin="0,12,0,30" />
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button Content="{Binding SelectPatientActionText}"
-                            Command="{Binding SelectPatientCommand}"
-                            Style="{StaticResource AssessmentEntrySelectPatientButton}" />
-                </StackPanel>
+                <Button Content="{Binding SelectPatientActionText}"
+                        Command="{Binding SelectPatientCommand}"
+                        Style="{StaticResource AssessmentEntrySelectPatientButton}"
+                        HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding ErrorMessage}"
                            Foreground="#E47979"
                            FontSize="12"

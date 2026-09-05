@@ -35,7 +35,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         TimeSpan.FromSeconds(3),
         Stopwatch.Frequency);
     private readonly FaceReadinessMonitor faceReadinessMonitor = new(
-        TimeSpan.FromSeconds(1.5),
+        TimeSpan.FromSeconds(1),
         Stopwatch.Frequency);
     private long? matchedFollowUpId;
     private readonly DispatcherTimer calibrationTimer = new();
@@ -47,6 +47,8 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private readonly EyeCalibrationSequenceFactory calibrationSequenceFactory;
     private readonly Random videoBrowseRandom = new();
     private readonly Queue<CalibrationFrame> calibrationFrames = new();
+    private CalibrationFrame? activeCalibrationFrame;
+    private DateTimeOffset? activeCalibrationFrameStartedAt;
     private static readonly Brush ActiveStepBrush = new SolidColorBrush(Color.FromRgb(208, 144, 62));
     private static readonly Brush DemoStepBrush = new SolidColorBrush(Color.FromRgb(75, 119, 216));
     private static readonly Brush InactiveStepBrush = new SolidColorBrush(Color.FromRgb(48, 54, 69));
@@ -108,14 +110,21 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private string stageNoticeText = string.Empty;
     private FaceReadinessState faceReadinessState = FaceReadinessState.NotReady;
     private double faceReadinessProgressPercent;
-    private double faceReadinessRemainingSeconds = 1.5;
+    private double faceReadinessRemainingSeconds = 1;
     private string faceReadinessReasonText = string.Empty;
     private string pictureBrowseImagePath = string.Empty;
     private string pictureBrowseStatusText = "待开始";
     private string pictureBrowseRestText = string.Empty;
     private PictureBrowsePhase pictureBrowsePhase = PictureBrowsePhase.Idle;
+    private PictureBrowseSequenceItem[] pictureBrowseItems = [];
+    private string pictureBrowseVersion = string.Empty;
     private int pictureBrowseIndex;
     private int pictureBrowseRestRemainingSeconds;
+    private bool pictureBrowseRestPaused;
+    private DateTimeOffset? pictureBrowseFixationStartedAt;
+    private DateTimeOffset? pictureBrowseImageStartedAt;
+    private DateTimeOffset? pictureBrowseRestStartedAt;
+    private DateTimeOffset? pictureBrowseFinalBlankStartedAt;
     private int? currentPictureBrowseImageType;
     private VideoBrowsePhase videoBrowsePhase = VideoBrowsePhase.Idle;
     private VideoBrowseItem[] videoBrowseItems = [];
@@ -130,6 +139,13 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     private int voiceBaselineIndex;
     private int voiceBaselineRemainingSeconds;
     private DateTimeOffset? currentVoiceBaselineStartedAt;
+    private DateTimeOffset? voiceBaselineDetectionWindowStartedAt;
+    private DateTimeOffset? voiceBaselineDetectionWindowEndedAt;
+    private DateTimeOffset? voiceBaselineVoiceDetectedAt;
+    private bool voiceBaselineHasVoice;
+    private bool voiceBaselineVoiceDetectionFinalized;
+    private bool voiceBaselineMediaFinalizing;
+    private long? voiceBaselineActiveMediaSessionId;
     private string voiceBaselineStatusText = string.Empty;
     private string voiceBaselineRestText = string.Empty;
     private WordReadingPhase wordReadingPhase = WordReadingPhase.Idle;
@@ -212,6 +228,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
             NotifyStageChanged();
         };
         captureMediaService.Completed += OnRecordingCompleted;
+        captureMediaService.AudioLevelAvailable += OnAudioLevelAvailable;
         DevNextStepCommand = new RelayCommand(_ => MoveToNextDevStep());
         GoNextModuleCommand = new AsyncRelayCommand(_ => GoNextModuleAsync());
         RetryFailedModuleCommand = new RelayCommand(_ => ResetFailedModule());
@@ -229,7 +246,10 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         PreviousQuestionnaireQuestionCommand = new RelayCommand(_ => GoToPreviousQuestionnaireQuestion());
         NextQuestionnaireQuestionCommand = new RelayCommand(_ => GoToNextQuestionnaireQuestion());
         SubmitQuestionnaireCommand = new AsyncRelayCommand(_ => SubmitQuestionnaireAsync());
-        StartShortTextReadingCommand = new RelayCommand(_ => StartShortTextReadingFirstPassage());
+        StartShortTextReadingCommand = new AsyncRelayCommand(
+            StartShortTextReadingActionAsync,
+            () => CanExecuteShortTextReadingAction,
+            exception => ShowStageNotice($"短文朗读启动失败：{exception.Message}"));
         InitializeEmotionQuestionModule();
         InitializeDotProbeModule();
         InitializeEmotionOddballModule();
@@ -254,7 +274,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         voiceBaselineTimer.Tick += (_, _) => AdvanceVoiceBaseline();
         wordReadingTimer.Interval = TimeSpan.FromSeconds(1);
         wordReadingTimer.Tick += (_, _) => AdvanceWordReading();
-        shortTextReadingTimer.Interval = TimeSpan.FromSeconds(1);
+        // Use a finer UI tick so the displayed whole-second countdown is painted
+        // before each boundary instead of occasionally skipping the first value.
+        shortTextReadingTimer.Interval = TimeSpan.FromMilliseconds(16);
         shortTextReadingTimer.Tick += (_, _) => AdvanceShortTextReading();
         syncTestTimer.Interval = TimeSpan.FromSeconds(1);
         syncTestTimer.Tick += (_, _) => AdvanceSyncTest();
@@ -518,7 +540,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         ? ModuleProgressItems[currentModuleIndex + 1].Name
         : T("CaptureWorkspaceEnd");
 
-    public string PrimaryActionText => isDemoCompleted ? T("CaptureWorkspaceReplayDemo") : T("CaptureWorkspacePlayDemo");
+    public string PrimaryActionText => isDemoCompleted
+        ? T("CaptureWorkspaceReplayDemo")
+        : T("CaptureWorkspacePlayDemo");
 
     public string SkipDemoButtonText => T("CaptureWorkspaceSkipDemo");
 
@@ -677,6 +701,13 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public bool IsDemoStage => currentStep == CaptureWorkbenchStep.Demo;
 
+    /// <summary>V3 正式模块统一使用指导语页，不再播放演示视频。</summary>
+    public bool IsInstructionStage => IsDemoStage && !IsFormModule && !IsSyncTestModule;
+
+    public bool IsDemoMediaStage => IsDemoStage && !IsInstructionStage;
+
+    public string InstructionText => localization.IsChinese ? "指导语" : "Instructions";
+
     public bool IsDemoPlaying => isDemoPlaying;
 
     public bool IsDemoCompleted => isDemoCompleted;
@@ -792,7 +823,10 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public bool IsPictureShowing => IsPictureBrowseStage && pictureBrowsePhase == PictureBrowsePhase.ShowingImage;
 
-    public bool IsPictureBlank => IsPictureBrowseStage && pictureBrowsePhase == PictureBrowsePhase.Blank;
+    public bool IsPictureFixation => IsPictureBrowseStage && pictureBrowsePhase == PictureBrowsePhase.Fixation;
+
+    public bool IsPictureBlank => IsPictureBrowseStage
+        && pictureBrowsePhase is PictureBrowsePhase.Blank or PictureBrowsePhase.FinalBlank;
 
     public bool IsPictureResting => IsPictureBrowseStage && pictureBrowsePhase == PictureBrowsePhase.Resting;
 
@@ -808,13 +842,23 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public bool IsVoiceBaselineWaiting => IsVoiceBaselineStage && voiceBaselinePhase == VoiceBaselinePhase.WaitingToStart;
 
+    public bool IsVoiceBaselinePreparing => IsVoiceBaselineStage && voiceBaselinePhase == VoiceBaselinePhase.Preparing;
+
     public bool IsVoiceBaselineRecording => IsVoiceBaselineStage && voiceBaselinePhase == VoiceBaselinePhase.Recording;
 
     public bool IsVoiceBaselineResting => IsVoiceBaselineStage && voiceBaselinePhase == VoiceBaselinePhase.Resting;
 
-    public bool IsVoiceBaselinePromptVisible => IsVoiceBaselineStage && voiceBaselinePhase != VoiceBaselinePhase.Resting;
+    public bool IsVoiceBaselinePromptVisible => IsVoiceBaselineStage;
 
-    public bool ShowVoiceBaselineStartAction => IsVoiceBaselineWaiting && voiceBaselineIndex == 0;
+    public bool ShowVoiceBaselineStartAction => IsVoiceBaselineWaiting
+        && voiceBaselineIndex < VoiceBaselineItems.Length
+        && !voiceBaselineMediaFinalizing;
+
+    public bool CanFinishVoiceBaselineSegment => IsVoiceBaselineRecording
+        && voiceBaselineRemainingSeconds <= VoiceBaselineMaximumSegmentSeconds - VoiceBaselineMinimumSegmentSeconds
+        && !voiceBaselineMediaFinalizing;
+
+    public string VoiceBaselineFinishButtonText => T("CaptureWorkspaceVoiceBaselineFinish");
 
     public bool IsWordReadingWaiting => IsWordReadingStage && wordReadingPhase == WordReadingPhase.WaitingToStart;
 
@@ -846,7 +890,10 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
     public bool IsGenericFallbackStage => IsFallbackStage && !IsCompletionStage && !IsFaceStep;
 
-    public bool ShowDemoPlayAction => IsDemoStep && !isDemoPlaying && !isDemoCompleted;
+    public bool ShowDemoPlayAction => IsDemoStep
+        && !IsInstructionStage
+        && !isDemoPlaying
+        && !isDemoCompleted;
 
     public bool ShowDevelopmentSkipDemoAction =>
         IsDevelopmentModuleNavigationEnabled
@@ -855,7 +902,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         && activeModuleAttempt is null
         && !captureMediaService.IsCapturing;
 
-    public bool ShowFaceCheckAction => IsDemoStep && isDemoCompleted && !IsFormModule;
+    public bool ShowFaceCheckAction => IsDemoStep
+        && !IsFormModule
+        && (isDemoCompleted || IsInstructionStage);
 
     public string FaceReadinessTitleText => T("CaptureWorkspaceFaceReadinessTitle");
 
@@ -898,7 +947,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         && (currentStep == CaptureWorkbenchStep.Demo
             || currentStep == CaptureWorkbenchStep.FaceCheck && IsFaceReady);
 
-    public bool HasStageNotice => !string.IsNullOrWhiteSpace(stageNoticeText);
+    // Short-text pages are intentionally distraction-free; their legacy bottom
+    // notice must never be rendered even when a previous stage left text behind.
+    public bool HasStageNotice => !IsShortTextReadingStage && !string.IsNullOrWhiteSpace(stageNoticeText);
 
     public bool HasSelectedCamera => !IsUnavailableCameraValue(SelectedCameraDevice);
 
@@ -1053,6 +1104,16 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     public string VoiceBaselinePromptText => voiceBaselineIndex >= 0 && voiceBaselineIndex < VoiceBaselineItems.Length
         ? VoiceBaselineItems[voiceBaselineIndex].PromptText
         : T("CaptureWorkspaceVoiceBaselineCompleted");
+
+    public string VoiceBaselineSyllableText => voiceBaselinePhase switch
+    {
+        VoiceBaselinePhase.WaitingToStart => string.Empty,
+        VoiceBaselinePhase.Preparing => T("CaptureWorkspaceVoiceBaselinePrepareDisplay"),
+        VoiceBaselinePhase.Resting => T("CaptureWorkspaceVoiceBaselineRestCountdown", voiceBaselineRemainingSeconds),
+        _ when voiceBaselineIndex >= 0 && voiceBaselineIndex < VoiceBaselineItems.Length
+            => VoiceBaselineItems[voiceBaselineIndex].PromptText,
+        _ => string.Empty
+    };
 
     public string VoiceBaselineTitleText => T("CaptureWorkspaceVoiceBaseline");
 
@@ -1441,6 +1502,13 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
             return new FaceConditionMonitorUpdate(state, TimeSpan.Zero, false);
         }
 
+        // 图片浏览休息末段由专用取景检查暂停倒计时；休息期间不应因全局异常监视器直接作废整段录制。
+        if (IsPictureResting)
+        {
+            faceConditionMonitor.Reset();
+            return new FaceConditionMonitorUpdate(state, TimeSpan.Zero, false);
+        }
+
         var update = faceConditionMonitor.Observe(state, timestamp);
         if (update.JustConfirmed)
         {
@@ -1466,7 +1534,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
             return new FaceReadinessUpdate(
                 FaceReadinessState.NotReady,
                 TimeSpan.Zero,
-                TimeSpan.FromSeconds(1.5),
+                TimeSpan.FromSeconds(1),
                 0);
         }
 
@@ -1486,7 +1554,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
             new FaceReadinessUpdate(
                 FaceReadinessState.NotReady,
                 TimeSpan.Zero,
-                TimeSpan.FromSeconds(1.5),
+                TimeSpan.FromSeconds(1),
                 0),
             string.Empty);
     }
@@ -1547,15 +1615,18 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     /// </summary>
     public void BeginFaceCheck()
     {
-        if (!isDemoCompleted)
+        if (!isDemoCompleted && !IsInstructionStage)
         {
             return;
         }
 
+        isDemoCompleted = true;
         MoveToStep(CaptureWorkbenchStep.FaceCheck);
         isDemoPlaying = false;
         StopModuleExecutionTimers();
-        StageNoticeText = T("CaptureWorkspaceFaceCheckNotice");
+        // Face readiness is communicated by the live preview/status controls;
+        // do not render the legacy bottom instructional notice.
+        StageNoticeText = string.Empty;
         NotifyStageChanged();
     }
 
@@ -1697,20 +1768,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     }
 
     /// <summary>
-    /// 第一段语音由用户手动点击开始。
-    /// 后续语音段由休息倒计时结束后自动开始，不再出现手动按钮。
-    /// </summary>
-    public void StartVoiceBaselineFirstSegment()
-    {
-        if (!IsVoiceBaselineWaiting || voiceBaselineIndex != 0)
-        {
-            return;
-        }
-
-        StartVoiceBaselineSegment();
-    }
-
-    /// <summary>
     /// 第一组词语由用户手动点击开始。
     /// 后续词组由休息倒计时结束后自动开始，不再出现手动按钮。
     /// </summary>
@@ -1806,11 +1863,150 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         pendingLifecycleOperation = HandleRecordingCompletedAsync(pendingLifecycleOperation, args);
     }
 
+    private void OnAudioLevelAvailable(object? sender, CaptureAudioLevel level)
+    {
+        if (!IsVoiceBaselineRecording
+            || voiceBaselineHasVoice
+            || voiceBaselineVoiceDetectionFinalized
+            || voiceBaselineDetectionWindowStartedAt is not { } windowStart)
+        {
+            return;
+        }
+
+        var windowEnd = voiceBaselineDetectionWindowEndedAt ?? windowStart.AddSeconds(VoiceBaselineVoiceDetectionWindowSeconds);
+        if (level.CapturedAt < windowStart || level.CapturedAt > windowEnd)
+        {
+            return;
+        }
+
+        if (level.Rms < VoiceBaselineVoicePresenceRmsThreshold
+            && level.Peak < VoiceBaselineVoicePresenceRmsThreshold * 2)
+        {
+            return;
+        }
+
+        voiceBaselineHasVoice = true;
+        voiceBaselineVoiceDetectedAt = level.CapturedAt;
+        RecordModuleEventSafely(
+            "voice_baseline_voice_detected",
+            $"语音基线第 {voiceBaselineIndex + 1} 段检测到声音",
+            new
+            {
+                segmentIndex = voiceBaselineIndex + 1,
+                detectedAtUnixMs = level.CapturedAt.ToUnixTimeMilliseconds(),
+                rms = level.Rms,
+                peak = level.Peak,
+                voiceDetectionWindowStartedAtUnixMs = windowStart.ToUnixTimeMilliseconds(),
+                voiceDetectionWindowEndedAtUnixMs = windowEnd.ToUnixTimeMilliseconds(),
+                voiceDetectionThreshold = VoiceBaselineVoicePresenceRmsThreshold
+            },
+            level.CapturedAt,
+            level.CapturedAt);
+        _ = RunOnUiThreadAsync(NotifyStageChanged);
+    }
+
+    private async Task<bool> HandleVoiceBaselineRecordingCompletedAsync(CaptureMediaCompleted args)
+    {
+        if (!IsVoiceBaselineModule
+            || voiceBaselineActiveMediaSessionId != args.Session.SessionId)
+        {
+            return false;
+        }
+
+        voiceBaselineActiveMediaSessionId = null;
+        voiceBaselineMediaFinalizing = false;
+        if (args.Status is CaptureMediaCompletionStatus.Completed
+            or CaptureMediaCompletionStatus.CompletedWithWarnings)
+        {
+            if (voiceBaselineIndex < VoiceBaselineItems.Length - 1)
+            {
+                voiceBaselineIndex++;
+                currentVoiceBaselineStartedAt = null;
+                voiceBaselinePhase = VoiceBaselinePhase.Resting;
+                voiceBaselineRemainingSeconds = VoiceBaselineRestSeconds;
+                VoiceBaselineStatusText = $"已完成 {voiceBaselineIndex} / {VoiceBaselineItems.Length} 段";
+                UpdateVoiceBaselineRestText();
+                var restStartedAt = DateTimeOffset.Now;
+                RecordModuleEventSafely(
+                    "voice_baseline_rest_started",
+                    "语音基线两段之间休息开始",
+                    new
+                    {
+                        completedSegmentCount = voiceBaselineIndex,
+                        remainingSegmentCount = VoiceBaselineItems.Length - voiceBaselineIndex,
+                        restSeconds = VoiceBaselineRestSeconds,
+                        startedAtUnixMs = restStartedAt.ToUnixTimeMilliseconds()
+                    },
+                    restStartedAt,
+                    null);
+                voiceBaselineTimer.Start();
+                await RunOnUiThreadAsync(NotifyStageChanged);
+                return true;
+            }
+
+            var attempt = activeModuleAttempt;
+            if (attempt is not null)
+            {
+                await assessmentModuleLifecycle.CompleteAsync(
+                    attempt.AttemptId,
+                    JsonSerializer.Serialize(new
+                    {
+                        args.Session.SessionId,
+                        args.Session.OutputDirectory,
+                        CompletionStatus = args.Status.ToString(),
+                        args.ErrorCode,
+                        args.Message
+                    })).ConfigureAwait(false);
+                await RunOnUiThreadAsync(() => ApplyRecordingCompletion(attempt, args));
+            }
+            else
+            {
+                await RunOnUiThreadAsync(() => ApplyDevelopmentRecordingCompletion(args));
+            }
+
+            return true;
+        }
+
+        var activeAttempt = activeModuleAttempt;
+        if (activeAttempt is not null)
+        {
+            if (args.Status is CaptureMediaCompletionStatus.Discarded or CaptureMediaCompletionStatus.Interrupted)
+            {
+                await assessmentModuleLifecycle.CancelAsync(activeAttempt.AttemptId, args.Message ?? "采集过程被用户中断。").ConfigureAwait(false);
+            }
+            else
+            {
+                await assessmentModuleLifecycle.FailAsync(
+                    activeAttempt.AttemptId,
+                    args.ErrorCode ?? "MEDIA_CAPTURE_FAILED",
+                    args.Message ?? "音视频保存失败。").ConfigureAwait(false);
+            }
+
+            await RunOnUiThreadAsync(() => ApplyRecordingCompletion(activeAttempt, args));
+        }
+        else
+        {
+            await RunOnUiThreadAsync(() => ApplyDevelopmentRecordingCompletion(args));
+        }
+
+        return true;
+    }
+
     private async Task HandleRecordingCompletedAsync(Task previous, CaptureMediaCompleted args)
     {
         try
         {
             await previous.ConfigureAwait(false);
+            if (await HandleShortTextReadingRecordingCompletedAsync(args).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            if (await HandleVoiceBaselineRecordingCompletedAsync(args).ConfigureAwait(false))
+            {
+                return;
+            }
+
             if (IsDevelopmentModuleOverride
                 && args.Session.AssessmentAttemptId is null
                 && activeDevelopmentMediaSessionId == args.Session.SessionId
@@ -1900,15 +2096,14 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
             isModuleSaveFailed = false;
             currentStep = CaptureWorkbenchStep.Completed;
-            StageNoticeText = "开发调试采集已保存。";
+            StageNoticeText = "采集已保存。";
         }
         else if (args.Status is CaptureMediaCompletionStatus.Discarded
             or CaptureMediaCompletionStatus.Interrupted)
         {
             isModuleSaveFailed = false;
             DiscardFrameSavingStatus();
-            currentStep = IsSyncTestModule ? CaptureWorkbenchStep.ModuleExecution : CaptureWorkbenchStep.Demo;
-            isDemoCompleted = IsSyncTestModule;
+            ReturnAfterRecordingInterrupted();
             isDemoPlaying = false;
             StageNoticeText = "开发调试采集已取消。";
         }
@@ -1917,7 +2112,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
             isModuleSaveFailed = true;
             currentStep = CaptureWorkbenchStep.Saving;
             FailMergedVideo(args.Message ?? "请检查音视频采集环境");
-            StageNoticeText = "开发调试音视频保存失败，请重试当前模块。";
+            StageNoticeText = "音视频保存失败，请重试当前模块。";
         }
 
         UpdateModuleProgressItems();
@@ -1958,8 +2153,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         {
             isModuleSaveFailed = false;
             DiscardFrameSavingStatus();
-            currentStep = IsSyncTestModule ? CaptureWorkbenchStep.ModuleExecution : CaptureWorkbenchStep.Demo;
-            isDemoCompleted = IsSyncTestModule;
+            ReturnAfterRecordingInterrupted();
             isDemoPlaying = false;
             StageNoticeText = "本次尝试已取消，产生的数据不会参与正式结果统计。";
         }
@@ -1973,6 +2167,23 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
 
         UpdateModuleProgressItems();
         NotifyStageChanged();
+    }
+
+    private void ReturnAfterRecordingInterrupted()
+    {
+        currentStep = IsSyncTestModule ? CaptureWorkbenchStep.ModuleExecution
+            : IsEmotionQuestionModule || IsShortTextReadingModule ? CaptureWorkbenchStep.FaceCheck : CaptureWorkbenchStep.Demo;
+        isDemoCompleted = IsSyncTestModule || IsEmotionQuestionModule || IsShortTextReadingModule;
+        if (IsEmotionQuestionModule)
+        {
+            ResetEmotionQuestionState();
+            ResetFaceReadiness();
+        }
+        else if (IsShortTextReadingModule)
+        {
+            ResetShortTextReadingState();
+            ResetFaceReadiness();
+        }
     }
 
     private static async Task RunOnUiThreadAsync(Action action)
@@ -2368,8 +2579,15 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         voiceBaselineTimer.Stop();
         voiceBaselinePhase = VoiceBaselinePhase.Idle;
         voiceBaselineIndex = 0;
-        voiceBaselineRemainingSeconds = VoiceBaselineSegmentSeconds;
+        voiceBaselineRemainingSeconds = VoiceBaselineMaximumSegmentSeconds;
         currentVoiceBaselineStartedAt = null;
+        voiceBaselineDetectionWindowStartedAt = null;
+        voiceBaselineDetectionWindowEndedAt = null;
+        voiceBaselineVoiceDetectedAt = null;
+        voiceBaselineHasVoice = false;
+        voiceBaselineVoiceDetectionFinalized = false;
+        voiceBaselineMediaFinalizing = false;
+        voiceBaselineActiveMediaSessionId = null;
         VoiceBaselineStatusText = T("CaptureWorkspaceRecordingPending");
         VoiceBaselineRestText = string.Empty;
     }
@@ -2413,8 +2631,15 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
     {
         pictureBrowseTimer.Stop();
         pictureBrowsePhase = PictureBrowsePhase.Idle;
+        pictureBrowseItems = [];
+        pictureBrowseVersion = string.Empty;
         pictureBrowseIndex = 0;
         pictureBrowseRestRemainingSeconds = 0;
+        pictureBrowseRestPaused = false;
+        pictureBrowseFixationStartedAt = null;
+        pictureBrowseImageStartedAt = null;
+        pictureBrowseRestStartedAt = null;
+        pictureBrowseFinalBlankStartedAt = null;
         PictureBrowseImagePath = string.Empty;
         CurrentPictureBrowseImageType = null;
         PictureBrowseStatusText = "待开始";
@@ -2509,6 +2734,9 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(PrimaryActionText));
         OnPropertyChanged(nameof(SkipDemoButtonText));
         OnPropertyChanged(nameof(IsDemoStage));
+        OnPropertyChanged(nameof(IsInstructionStage));
+        OnPropertyChanged(nameof(IsDemoMediaStage));
+        OnPropertyChanged(nameof(InstructionText));
         OnPropertyChanged(nameof(IsDemoPlaying));
         OnPropertyChanged(nameof(IsDemoCompleted));
         OnPropertyChanged(nameof(IsCalibrationStage));
@@ -2548,6 +2776,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(IsQuestionnaireStage));
         OnPropertyChanged(nameof(IsSyncTestStage));
         OnPropertyChanged(nameof(IsPictureShowing));
+        OnPropertyChanged(nameof(IsPictureFixation));
         OnPropertyChanged(nameof(IsPictureBlank));
         OnPropertyChanged(nameof(IsPictureResting));
         OnPropertyChanged(nameof(ShowPictureStatusBadge));
@@ -2556,10 +2785,13 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(IsVideoBrowseResting));
         OnPropertyChanged(nameof(ShowVideoStatusBadge));
         OnPropertyChanged(nameof(IsVoiceBaselineWaiting));
+        OnPropertyChanged(nameof(IsVoiceBaselinePreparing));
         OnPropertyChanged(nameof(IsVoiceBaselineRecording));
         OnPropertyChanged(nameof(IsVoiceBaselineResting));
         OnPropertyChanged(nameof(IsVoiceBaselinePromptVisible));
         OnPropertyChanged(nameof(ShowVoiceBaselineStartAction));
+        OnPropertyChanged(nameof(CanFinishVoiceBaselineSegment));
+        OnPropertyChanged(nameof(VoiceBaselineFinishButtonText));
         OnPropertyChanged(nameof(IsWordReadingWaiting));
         OnPropertyChanged(nameof(IsWordReadingActive));
         OnPropertyChanged(nameof(IsWordReadingResting));
@@ -2568,11 +2800,24 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(IsShortTextReadingWaiting));
         OnPropertyChanged(nameof(IsShortTextReadingActive));
         OnPropertyChanged(nameof(IsShortTextReadingResting));
+        OnPropertyChanged(nameof(IsShortTextReadingPostBlank));
         OnPropertyChanged(nameof(IsShortTextReadingPromptVisible));
+        OnPropertyChanged(nameof(IsShortTextReadingCountdown));
+        OnPropertyChanged(nameof(IsShortTextReadingContentVisible));
+        OnPropertyChanged(nameof(ShortTextReadingTitleText));
+        OnPropertyChanged(nameof(ShortTextReadingPassageFontSize));
+        OnPropertyChanged(nameof(ShortTextReadingPassageTextAlignment));
         OnPropertyChanged(nameof(ShowShortTextReadingStartAction));
+        OnPropertyChanged(nameof(CanExecuteShortTextReadingAction));
+        OnPropertyChanged(nameof(ShortTextReadingCountdownDisplayText));
+        OnPropertyChanged(nameof(ShortTextReadingStartButtonText));
+        OnPropertyChanged(nameof(ShortTextReadingPassageTitleText));
+        if (StartShortTextReadingCommand is AsyncRelayCommand shortTextCommand)
+        {
+            shortTextCommand.RaiseCanExecuteChanged();
+        }
         OnPropertyChanged(nameof(IsEmotionQuestionWaiting));
         OnPropertyChanged(nameof(IsEmotionQuestionAnswering));
-        OnPropertyChanged(nameof(IsEmotionQuestionResting));
         OnPropertyChanged(nameof(IsEmotionQuestionPromptVisible));
         OnPropertyChanged(nameof(IsDotProbePreBlank));
         OnPropertyChanged(nameof(IsDotProbeFixation));
@@ -2646,6 +2891,7 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(VideoBrowseStatusText));
         OnPropertyChanged(nameof(VideoBrowseRestText));
         OnPropertyChanged(nameof(VoiceBaselinePromptText));
+        OnPropertyChanged(nameof(VoiceBaselineSyllableText));
         OnPropertyChanged(nameof(VoiceBaselineTitleText));
         OnPropertyChanged(nameof(VoiceBaselineStartButtonText));
         OnPropertyChanged(nameof(WordReadingTitleText));
@@ -2671,7 +2917,6 @@ public sealed partial class AssessmentCaptureViewModel : ObservableObject, IAsse
         OnPropertyChanged(nameof(ShortTextReadingStatusText));
         OnPropertyChanged(nameof(ShortTextReadingRestText));
         OnPropertyChanged(nameof(EmotionQuestionStatusText));
-        OnPropertyChanged(nameof(EmotionQuestionRestText));
         OnPropertyChanged(nameof(DotProbeTopImagePath));
         OnPropertyChanged(nameof(DotProbeBottomImagePath));
         OnPropertyChanged(nameof(DotProbeRestTitleText));

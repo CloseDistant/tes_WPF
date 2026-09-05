@@ -12,7 +12,7 @@
         <SolidColorBrush x:Key="RunningBlue" Color="#5A9FF2" />
         <SolidColorBrush x:Key="Yellow" Color="#FFD84D" />
         <SolidColorBrush x:Key="Danger" Color="#E84E4F" />
-        <FontFamily x:Key="UiFontFamily">Microsoft YaHei UI</FontFamily>
+        <FontFamily x:Key="UiFontFamily">pack://application:,,,/Assets/Fonts/#Source Han Sans SC</FontFamily>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
 
         <Style x:Key="StimulationChannelStatusIndicator" TargetType="Ellipse">
@@ -22,7 +22,7 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
-        <!-- 普通界面统一使用微软雅黑 UI；局部显式字体（如 EEG 的 Consolas）继续优先。 -->
+        <!-- 普通界面统一使用内置思源黑体；局部显式字体（如 EEG 的 Consolas）继续优先。 -->
         <Style TargetType="Window">
             <Setter Property="FontFamily" Value="{StaticResource UiFontFamily}" />
         </Style>
@@ -151,6 +151,19 @@
             <Setter Property="BorderBrush" Value="{StaticResource Line}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="6" />
+        </Style>
+
+        <!-- 采集相关页面共用的标题栏规范：标题、颜色、分隔线和底部留白保持一致。 -->
+        <Style x:Key="AssessmentPageHeader" TargetType="Border">
+            <Setter Property="BorderBrush" Value="#303643" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Padding" Value="0,0,0,18" />
+        </Style>
+
+        <Style x:Key="AssessmentPageTitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#F1F3F6" />
+            <Setter Property="FontSize" Value="24" />
+            <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
 
         <Style x:Key="SelectedCard" TargetType="Border" BasedOn="{StaticResource Card}">

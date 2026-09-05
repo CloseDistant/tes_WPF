@@ -51,8 +51,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Assets\**\*.*" Exclude="Assets\asset-manifest.sha256">
+    <Content Include="Assets\**\*.*" Exclude="Assets\asset-manifest.sha256;Assets\Fonts\*.otf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
     <Content Include="Tools\ffmpeg\ffmpeg.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -75,6 +76,12 @@
       <Link>Tools\OpenVINO\LICENSE.txt</Link>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\Fonts\SourceHanSansSC-Regular.otf" />
+    <Resource Include="Assets\Fonts\SourceHanSansSC-Medium.otf" />
+    <Resource Include="Assets\Fonts\SourceHanSansSC-Bold.otf" />
   </ItemGroup>
 
   <Target Name="ValidateAssetManifest"

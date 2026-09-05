@@ -237,6 +237,15 @@ public sealed class AssessmentEntryViewModel : ObservableObject
         try
         {
             AssessmentRunContext run;
+            // 入口页面可能在患者匹配返回的瞬间仍持有旧的空状态。
+            // 创建前再次读取当前患者的进行中 Run，避免把同一患者的未完成评估误建成新评估。
+            if (activeRun is null)
+            {
+                activeRun = await runCoordinator.GetActiveRunAsync(
+                    AssessmentCaptureViewModel.FormalModuleFlow,
+                    cancellationToken);
+            }
+
             if (activeRun is null)
             {
                 State = AssessmentEntryState.Starting;

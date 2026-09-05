@@ -18,7 +18,9 @@ public sealed partial class MainViewModel
         AssessmentPatientMatchingRequestedEventArgs eventArgs)
     {
         eventArgs.IsHandled = true;
-        eventArgs.Completion = AssessmentFeature.ShowMatchingAsync(eventArgs.CancellationToken);
+        eventArgs.Completion = userViewModeService.CurrentMode == UserViewMode.Patient
+            ? AssessmentFeature.ShowPatientPortalFromEntryAsync(eventArgs.CancellationToken)
+            : AssessmentFeature.ShowMatchingAsync(eventArgs.CancellationToken);
     }
 
     private async Task SelectOrCreatePatientForAssessmentAsync(CancellationToken cancellationToken)

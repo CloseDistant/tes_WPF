@@ -43,6 +43,14 @@
             <views:AssessmentPatientMatchingView />
         </DataTemplate>
 
+        <DataTemplate DataType="{x:Type local:AssessmentPatientWelcomeViewModel}">
+            <views:AssessmentPatientWelcomeView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:AssessmentPatientPortalViewModel}">
+            <views:AssessmentPatientPortalView />
+        </DataTemplate>
+
         <DataTemplate DataType="{x:Type local:AssessmentFeatureHostViewModel}">
             <ContentControl Content="{Binding CurrentContent}" />
         </DataTemplate>
@@ -515,6 +523,8 @@
                     BorderThickness="1"
                     Content="{Binding SidebarToggleGlyph}"
                     Command="{Binding ToggleSidebarCommand}"
+                    Focusable="False"
+                    IsTabStop="False"
                     Cursor="Hand"
                     Foreground="#D7DEE9"
                     FontSize="14"

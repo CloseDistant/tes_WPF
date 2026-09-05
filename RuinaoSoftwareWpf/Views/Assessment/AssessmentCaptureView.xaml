@@ -6,6 +6,7 @@
              xmlns:controls="clr-namespace:RuinaoSoftwareWpf.Views.Controls"
              mc:Ignorable="d"
              Background="{StaticResource Bg}"
+             Focusable="True"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True"
              d:DesignHeight="760"
@@ -70,7 +71,8 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="4"
@@ -86,11 +88,68 @@
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter Property="Background" Value="{StaticResource CaptureActionPressed}" />
                             </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#282E39" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#414858" />
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Stroop 练习和正式测试共用同一禁用态，避免一次响应后两枚按钮仍像可点击。 -->
+        <Style x:Key="EmotionStroopTaskButton" TargetType="Button">
+            <Setter Property="Background" Value="#A96517" />
+            <Setter Property="Foreground" Value="#FDF7EE" />
+            <Setter Property="BorderBrush" Value="#D28A27" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="22,8" />
+            <Setter Property="MinWidth" Value="104" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="StroopButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="StroopButtonBorder" Property="Background" Value="#BE7820" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="StroopButtonBorder" Property="Background" Value="#8E5313" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="StroopButtonBorder" Property="Background" Value="#282E39" />
+                                <Setter TargetName="StroopButtonBorder" Property="BorderBrush" Value="#414858" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#282E39" />
+                    <Setter Property="BorderBrush" Value="#414858" />
+                    <Setter Property="Foreground" Value="#7F8795" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="EmotionStroopResponseButton"
+               TargetType="Button"
+               BasedOn="{StaticResource EmotionStroopTaskButton}" />
 
         <Style x:Key="EmotionQuestionSubmitButton"
                TargetType="Button"
@@ -98,6 +157,7 @@
             <Setter Property="Width" Value="250" />
             <Setter Property="Height" Value="48" />
             <Setter Property="Padding" Value="30,0" />
+            <Setter Property="FontSize" Value="16" />
             <Style.Triggers>
                 <Trigger Property="IsEnabled" Value="False">
                     <Setter Property="Background" Value="#282E39" />
@@ -746,7 +806,18 @@
                                                           UnloadedBehavior="Stop"
                                                           Stretch="Uniform"
                                                           MediaEnded="DemoMedia_MediaEnded"
-                                                          Visibility="{Binding IsDemoStage, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                          Visibility="{Binding IsDemoMediaStage, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                                            <StackPanel HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Visibility="{Binding IsInstructionStage, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock Text="{Binding InstructionText}"
+                                                           Foreground="{StaticResource Text}"
+                                                           FontSize="28"
+                                                           FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center"
+                                                           TextAlignment="Center" />
+                                            </StackPanel>
 
                                             <Grid Visibility="{Binding IsEyeCalibrationStage, Converter={StaticResource BoolToVisibilityConverter}}"
                                                   Background="#F5F7FA">
@@ -790,13 +861,21 @@
                                             </Grid>
 
                                             <Grid Visibility="{Binding IsPictureBrowseStage, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                Background="#11141D">
+                                                Background="#C7CBD3">
+                                                <Grid Visibility="{Binding IsPictureFixation, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="＋"
+                                                               Foreground="#11141D"
+                                                               FontSize="48"
+                                                               FontWeight="SemiBold"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center" />
+                                                </Grid>
+
                                                 <Grid Visibility="{Binding IsPictureShowing, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <Image Source="{Binding PictureBrowseImagePath}"
+                                                    <Image x:Name="PictureBrowseImage"
+                                                           Source="{Binding PictureBrowseImagePath}"
                                                            Stretch="Uniform"
-                                                           MaxWidth="780"
-                                                           MaxHeight="500"
-                                                           Margin="36,-18,36,18"
+                                                           Margin="24"
                                                            HorizontalAlignment="Center"
                                                            VerticalAlignment="Center"
                                                            RenderOptions.BitmapScalingMode="HighQuality" />
@@ -808,13 +887,13 @@
                                                             VerticalAlignment="Center"
                                                             Visibility="{Binding IsPictureResting, Converter={StaticResource BoolToVisibilityConverter}}">
                                                     <TextBlock Text="{Binding RestTitleText}"
-                                                               Foreground="{StaticResource Text}"
+                                                               Foreground="#1B2028"
                                                                FontSize="26"
                                                                FontWeight="SemiBold"
                                                                TextAlignment="Center"
                                                                Margin="0,0,0,14" />
                                                     <TextBlock Text="{Binding PictureBrowseRestText}"
-                                                               Foreground="{StaticResource SubText}"
+                                                               Foreground="#3F4652"
                                                                FontSize="15"
                                                                TextAlignment="Center"
                                                                TextWrapping="Wrap"
@@ -882,71 +961,58 @@
                                             </Grid>
 
                                             <Grid Visibility="{Binding IsVoiceBaselineStage, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                  Background="#11141D">
-                                                <StackPanel HorizontalAlignment="Center"
-                                                            VerticalAlignment="Center"
-                                                            Width="620"
-                                                            Visibility="{Binding IsVoiceBaselinePromptVisible, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <TextBlock Text="{Binding VoiceBaselineTitleText}"
-                                                               Foreground="{StaticResource Text}"
-                                                               FontSize="26"
-                                                               FontWeight="SemiBold"
-                                                               TextAlignment="Center"
-                                                               Margin="0,0,0,18" />
-                                                    <TextBlock Text="{Binding VoiceBaselinePromptText}"
-                                                               Foreground="{StaticResource Text}"
-                                                               FontSize="24"
-                                                               FontWeight="SemiBold"
-                                                               TextAlignment="Center"
-                                                               TextWrapping="Wrap"
-                                                               Margin="0,0,0,18" />
-                                                    <TextBlock Text="{Binding VoiceBaselineStatusText}"
-                                                               Foreground="{StaticResource SubText}"
-                                                               FontSize="15"
-                                                               TextAlignment="Center"
-                                                               TextWrapping="Wrap"
-                                                               Margin="0,0,0,16" />
-                                                    <Button Content="{Binding VoiceBaselineStartButtonText}"
-                                                            Style="{StaticResource PrimaryCaptureButton}"
-                                                            MinWidth="220"
-                                                            Padding="32,10"
-                                                            Click="StartVoiceBaselineButton_Click"
-                                                            Visibility="{Binding ShowVoiceBaselineStartAction, Converter={StaticResource BoolToVisibilityConverter}}" />
-                                                </StackPanel>
+                                                  Background="White">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="20*" />
+                                                    <RowDefinition Height="60*" />
+                                                    <RowDefinition Height="20*" />
+                                                </Grid.RowDefinitions>
+                                                <TextBlock Grid.Row="0"
+                                                           Text="{Binding VoiceBaselineTitleText}"
+                                                           Foreground="Black"
+                                                           FontSize="24"
+                                                           FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           TextAlignment="Center" />
 
-                                                <StackPanel HorizontalAlignment="Center"
+                                                <StackPanel Grid.Row="1"
+                                                            Width="900"
+                                                            HorizontalAlignment="Center"
                                                             VerticalAlignment="Center"
-                                                            Width="520"
-                                                            Visibility="{Binding IsVoiceBaselineResting, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <TextBlock Text="{Binding RestTitleText}"
-                                                               Foreground="{StaticResource Text}"
-                                                               FontSize="26"
+                                                            Visibility="{Binding IsVoiceBaselinePromptVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding VoiceBaselineSyllableText}"
+                                                               Foreground="Black"
+                                                               FontSize="36"
                                                                FontWeight="SemiBold"
-                                                               TextAlignment="Center"
-                                                               Margin="0,0,0,14" />
-                                                    <TextBlock Text="{Binding VoiceBaselineRestText}"
-                                                               Foreground="{StaticResource SubText}"
-                                                               FontSize="15"
+                                                               LineHeight="58"
+                                                               HorizontalAlignment="Center"
                                                                TextAlignment="Center"
                                                                TextWrapping="Wrap" />
                                                 </StackPanel>
 
+                                                <Grid Grid.Row="2" VerticalAlignment="Center" Margin="0" Height="48">
+                                                    <Button Content="{Binding VoiceBaselineStartButtonText}" Style="{StaticResource EmotionQuestionSubmitButton}" Width="250" Height="48" Click="StartVoiceBaselineButton_Click" Visibility="{Binding ShowVoiceBaselineStartAction, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                    <Button Content="{Binding VoiceBaselineFinishButtonText}" Style="{StaticResource EmotionQuestionSubmitButton}" Width="250" Height="48" Click="FinishVoiceBaselineButton_Click" IsEnabled="{Binding CanFinishVoiceBaselineSegment}" Visibility="{Binding IsVoiceBaselineRecording, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                </Grid>
+
                                             </Grid>
 
                                             <Grid Visibility="{Binding IsWordReadingStage, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                  Background="#11141D">
+                                                  Background="White">
                                                 <StackPanel HorizontalAlignment="Center"
                                                             VerticalAlignment="Center"
-                                                            Width="720"
+                                                            Width="900"
+                                                            Margin="32,120,32,72"
                                                             Visibility="{Binding IsWordReadingPromptVisible, Converter={StaticResource BoolToVisibilityConverter}}">
                                                     <TextBlock Text="{Binding WordReadingTitleText}"
-                                                               Foreground="{StaticResource Text}"
-                                                               FontSize="26"
+                                                               Foreground="Black"
+                                                               FontSize="36"
                                                                FontWeight="SemiBold"
                                                                TextAlignment="Center"
                                                                Margin="0,0,0,14" />
                                                     <TextBlock Text="{Binding WordReadingGroupTitleText}"
-                                                               Foreground="{StaticResource SubText}"
+                                                               Foreground="Black"
                                                                FontSize="15"
                                                                TextAlignment="Center"
                                                                Margin="0,0,0,22" />
@@ -966,8 +1032,8 @@
                                                                         Padding="18,16"
                                                                         Margin="8">
                                                                     <TextBlock Text="{Binding}"
-                                                                               Foreground="{StaticResource Text}"
-                                                                               FontSize="26"
+                                                                               Foreground="Black"
+                                                                               FontSize="72"
                                                                                FontWeight="SemiBold"
                                                                                HorizontalAlignment="Center"
                                                                                TextAlignment="Center"
@@ -977,18 +1043,20 @@
                                                         </ItemsControl.ItemTemplate>
                                                     </ItemsControl>
                                                     <TextBlock Text="{Binding WordReadingStatusText}"
-                                                               Foreground="{StaticResource SubText}"
+                                                               Foreground="Black"
                                                                FontSize="15"
                                                                TextAlignment="Center"
                                                                TextWrapping="Wrap"
                                                                Margin="0,0,0,16" />
                                                     <Button Content="{Binding WordReadingStartButtonText}"
-                                                            Style="{StaticResource PrimaryCaptureButton}"
-                                                            MinWidth="220"
-                                                            Padding="32,10"
+                                                            Style="{StaticResource EmotionQuestionSubmitButton}"
+                                                            Width="250"
+                                                            Height="48"
                                                             Click="StartWordReadingButton_Click"
-                                                            Visibility="{Binding ShowWordReadingStartAction, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                            Visibility="Collapsed" />
                                                 </StackPanel>
+
+                                                <Button Content="{Binding WordReadingStartButtonText}" Style="{StaticResource EmotionQuestionSubmitButton}" Width="250" Height="48" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,72" Click="StartWordReadingButton_Click" Visibility="{Binding ShowWordReadingStartAction, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                                                 <StackPanel HorizontalAlignment="Center"
                                                             VerticalAlignment="Center"
@@ -1009,147 +1077,97 @@
                                             </Grid>
 
                                             <Grid Visibility="{Binding IsShortTextReadingStage, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                  Background="#11141D">
-                                                <StackPanel HorizontalAlignment="Center"
-                                                            VerticalAlignment="Center"
-                                                            MaxWidth="900"
-                                                            Margin="56,28"
-                                                            Visibility="{Binding IsShortTextReadingPromptVisible, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <TextBlock Text="{Binding ShortTextReadingTitleText}"
-                                                               Foreground="{StaticResource Text}"
-                                                               FontSize="26"
+                                                  Background="White">
+                                                <Grid Visibility="{Binding IsShortTextReadingPromptVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="20*" />
+                                                        <RowDefinition Height="60*" />
+                                                        <RowDefinition Height="20*" />
+                                                    </Grid.RowDefinitions>
+                                                    <TextBlock Grid.Row="0"
+                                                               Text="{Binding ShortTextReadingTitleText}"
+                                                               Foreground="Black"
+                                                               FontSize="24"
                                                                FontWeight="SemiBold"
-                                                               TextAlignment="Center"
-                                                               Margin="0,0,0,12" />
-                                                    <TextBlock Text="{Binding ShortTextReadingPassageTitleText}"
-                                                               Foreground="{StaticResource Gold}"
-                                                               FontSize="16"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               TextAlignment="Center" />
+                                                    <TextBlock Grid.Row="1"
+                                                               Text="{Binding ShortTextReadingPassageText}"
+                                                               Foreground="Black"
+                                                               FontSize="{Binding ShortTextReadingPassageFontSize}"
                                                                FontWeight="SemiBold"
-                                                               TextAlignment="Center"
-                                                               Margin="0,0,0,24" />
-                                                    <TextBlock Text="{Binding ShortTextReadingPassageText}"
-                                                               Foreground="{StaticResource Text}"
-                                                               FontSize="22"
-                                                               FontWeight="SemiBold"
-                                                               LineHeight="38"
-                                                               TextAlignment="Left"
+                                                               LineHeight="58"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               Width="900"
+                                                               TextAlignment="{Binding ShortTextReadingPassageTextAlignment}"
                                                                TextWrapping="Wrap"
-                                                               Margin="0,0,0,22" />
-                                                    <TextBlock Text="{Binding ShortTextReadingStatusText}"
-                                                               Foreground="{StaticResource SubText}"
-                                                               FontSize="15"
-                                                               TextAlignment="Center"
-                                                               TextWrapping="Wrap"
-                                                               Margin="0,0,0,18" />
-                                                    <Button Content="{Binding ShortTextReadingStartButtonText}"
-                                                            Command="{Binding StartShortTextReadingCommand}"
-                                                            Style="{StaticResource PrimaryCaptureButton}"
-                                                            MinWidth="220"
-                                                            Padding="32,10"
-                                                            Visibility="{Binding ShowShortTextReadingStartAction, Converter={StaticResource BoolToVisibilityConverter}}" />
-                                                </StackPanel>
+                                                               Visibility="{Binding IsShortTextReadingContentVisible, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                </Grid>
+
+                                                <Button Content="{Binding ShortTextReadingStartButtonText}" Command="{Binding StartShortTextReadingCommand}" Style="{StaticResource EmotionQuestionSubmitButton}" Width="250" Height="48" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,72" IsEnabled="{Binding CanExecuteShortTextReadingAction}" Visibility="{Binding ShowShortTextReadingStartAction, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                                                <TextBlock Text="{Binding ShortTextReadingCountdownDisplayText}"
+                                                           Foreground="Black"
+                                                           FontSize="72"
+                                                           FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Visibility="{Binding IsShortTextReadingCountdown, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                                                 <StackPanel HorizontalAlignment="Center"
-                                                            VerticalAlignment="Center"
-                                                            Width="520"
-                                                            Visibility="{Binding IsShortTextReadingResting, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <TextBlock Text="{Binding RestTitleText}"
-                                                               Foreground="{StaticResource Text}"
-                                                               FontSize="26"
+                                                            VerticalAlignment="Top"
+                                                            Width="900"
+                                                            Margin="32,120,32,72"
+                                                            Visibility="{Binding IsShortTextReadingPostBlank, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text=""
+                                                               Foreground="Black"
+                                                               FontSize="36"
                                                                FontWeight="SemiBold"
                                                                TextAlignment="Center"
                                                                Margin="0,0,0,14" />
-                                                    <TextBlock Text="{Binding ShortTextReadingRestText}"
-                                                               Foreground="{StaticResource SubText}"
-                                                               FontSize="15"
-                                                               TextAlignment="Center"
-                                                               TextWrapping="Wrap" />
                                                 </StackPanel>
                                             </Grid>
 
                                             <Grid Visibility="{Binding IsEmotionQuestionStage, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                  Background="#11141D">
-                                                <StackPanel HorizontalAlignment="Center"
-                                                            VerticalAlignment="Center"
-                                                            Width="620"
-                                                            Margin="0,0,0,56"
-                                                            Visibility="{Binding IsEmotionQuestionWaiting, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                  Background="White">
+                                                <!-- 标题位于上部；正文独立居中，不随底部操作区高度移动。 -->
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="20*" />
+                                                    <RowDefinition Height="60*" />
+                                                    <RowDefinition Height="20*" />
+                                                </Grid.RowDefinitions>
+                                                <StackPanel Grid.Row="0" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding EmotionQuestionTitleText}"
-                                                               Foreground="{StaticResource Text}"
-                                                               FontSize="28"
-                                                               FontWeight="SemiBold"
-                                                               TextAlignment="Center"
-                                                               Margin="0,0,0,18" />
-                                                    <TextBlock Text="{Binding EmotionQuestionStatusText}"
-                                                               Foreground="{StaticResource SubText}"
-                                                               FontSize="16"
-                                                               TextAlignment="Center"
-                                                               TextWrapping="Wrap"
-                                                               Margin="0,0,0,24" />
-                                                    <Button Content="{Binding EmotionQuestionStartButtonText}"
-                                                            Command="{Binding StartEmotionQuestionCommand}"
-                                                            Style="{StaticResource PrimaryCaptureButton}"
-                                                            Width="280"
-                                                            Padding="32,10" />
-                                                </StackPanel>
-
-                                                <StackPanel HorizontalAlignment="Center"
-                                                            VerticalAlignment="Center"
-                                                            MaxWidth="960"
-                                                            Margin="56,28"
-                                                            Visibility="{Binding IsEmotionQuestionPromptVisible, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <TextBlock Text="{Binding EmotionQuestionTitleText}"
-                                                               Foreground="{StaticResource Text}"
-                                                               FontSize="26"
-                                                               FontWeight="SemiBold"
-                                                               TextAlignment="Center"
-                                                               Margin="0,0,0,12" />
+                                                               Foreground="Black" FontSize="24" FontWeight="SemiBold"
+                                                               TextAlignment="Center" Margin="0,0,0,12" />
                                                     <TextBlock Text="{Binding EmotionQuestionProgressText}"
-                                                               Foreground="{StaticResource Gold}"
-                                                               FontSize="16"
-                                                               FontWeight="SemiBold"
-                                                               TextAlignment="Center"
-                                                               Margin="0,0,0,24" />
-                                                    <TextBlock Text="{Binding EmotionQuestionText}"
-                                                               Foreground="{StaticResource Text}"
-                                                               FontSize="24"
-                                                               FontWeight="SemiBold"
-                                                               LineHeight="40"
-                                                               TextAlignment="Center"
-                                                               TextWrapping="Wrap"
-                                                               Margin="0,0,0,24" />
-                                                    <TextBlock Text="{Binding EmotionQuestionStatusText}"
-                                                               Foreground="{StaticResource SubText}"
-                                                               FontSize="15"
-                                                               TextAlignment="Center"
-                                                               TextWrapping="Wrap"
-                                                               Margin="0,0,0,22" />
-                                                    <Button Content="{Binding EmotionQuestionSubmitButtonText}"
-                                                            Command="{Binding CompleteEmotionQuestionAnswerCommand}"
-                                                            Style="{StaticResource EmotionQuestionSubmitButton}" />
-                                                    <TextBlock Text="{Binding EmotionQuestionSubmitHintText}"
-                                                               Foreground="#7F8897"
-                                                               FontSize="13"
-                                                               TextAlignment="Center"
-                                                               TextWrapping="Wrap"
-                                                               Margin="0,10,0,0" />
+                                                               Foreground="Black" FontSize="16"
+                                                               TextAlignment="Center" />
                                                 </StackPanel>
-
-                                                <StackPanel HorizontalAlignment="Center"
-                                                            VerticalAlignment="Center"
-                                                            Width="520"
-                                                            Visibility="{Binding IsEmotionQuestionResting, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <TextBlock Text="{Binding RestTitleText}"
-                                                               Foreground="{StaticResource Text}"
-                                                               FontSize="26"
-                                                               FontWeight="SemiBold"
-                                                               TextAlignment="Center"
-                                                               Margin="0,0,0,14" />
-                                                    <TextBlock Text="{Binding EmotionQuestionRestText}"
-                                                               Foreground="{StaticResource SubText}"
-                                                               FontSize="15"
-                                                               TextAlignment="Center"
-                                                               TextWrapping="Wrap" />
+                                                <TextBlock Grid.Row="1" Text="{Binding EmotionQuestionText}"
+                                                           Visibility="{Binding IsEmotionQuestionPromptVisible, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           MaxWidth="613" Margin="32,0"
+                                                           Foreground="Black" FontSize="24" FontWeight="SemiBold"
+                                                           LineHeight="38.4" LineStackingStrategy="BlockLineHeight"
+                                                           TextAlignment="Center" TextWrapping="Wrap" />
+                                                <StackPanel Grid.Row="2" VerticalAlignment="Center" Margin="32,0">
+                                                    <TextBlock Text="{Binding EmotionQuestionStatusText}"
+                                                               Visibility="Collapsed" />
+                                                    <Grid Height="48">
+                                                        <Button Content="{Binding EmotionQuestionStartButtonText}"
+                                                                Command="{Binding StartEmotionQuestionCommand}"
+                                                                Visibility="{Binding IsEmotionQuestionWaiting, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                Style="{StaticResource EmotionQuestionSubmitButton}" />
+                                                        <Button Content="{Binding EmotionQuestionSubmitButtonText}"
+                                                                Command="{Binding CompleteEmotionQuestionAnswerCommand}"
+                                                                Visibility="{Binding IsEmotionQuestionAnswering, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                Style="{StaticResource EmotionQuestionSubmitButton}" />
+                                                    </Grid>
+                                                    <TextBlock Text="{Binding EmotionQuestionSubmitHintText}"
+                                                               Visibility="Collapsed" />
                                                 </StackPanel>
                                             </Grid>
 
@@ -1159,7 +1177,7 @@
                                                 <!-- 前空屏和后空屏不渲染额外内容，保持中央区域纯色。 -->
                                                 <TextBlock Text="+"
                                                            Foreground="{StaticResource Text}"
-                                                           FontSize="64"
+                                                           FontSize="48"
                                                            FontWeight="SemiBold"
                                                            HorizontalAlignment="Center"
                                                            VerticalAlignment="Center"
@@ -1253,7 +1271,7 @@
                                                   ClipToBounds="True">
                                                 <TextBlock Text="+"
                                                            Foreground="{StaticResource Text}"
-                                                           FontSize="64"
+                                                           FontSize="48"
                                                            FontWeight="SemiBold"
                                                            HorizontalAlignment="Center"
                                                            VerticalAlignment="Center"
@@ -1338,7 +1356,7 @@
                                                   ClipToBounds="True">
                                                 <TextBlock Text="+"
                                                            Foreground="{StaticResource Text}"
-                                                           FontSize="64"
+                                                           FontSize="48"
                                                            FontWeight="SemiBold"
                                                            HorizontalAlignment="Center"
                                                            VerticalAlignment="Center"
@@ -1426,15 +1444,43 @@
                                             </Grid>
 
                                             <Grid Visibility="{Binding IsEmotionStroopStage, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                  Background="#11141D"
+                                                  Background="White"
                                                   ClipToBounds="True">
                                                 <TextBlock Text="+"
-                                                           Foreground="{StaticResource Text}"
-                                                           FontSize="64"
+                                                           Foreground="Black"
+                                                           FontSize="48"
                                                            FontWeight="SemiBold"
                                                            HorizontalAlignment="Center"
                                                            VerticalAlignment="Center"
                                                            Visibility="{Binding IsEmotionStroopFixation, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            Width="520"
+                                                            Visibility="{Binding ShowEmotionStroopReadyPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="情绪 Stroop"
+                                                               Foreground="Black"
+                                                               FontSize="30"
+                                                               FontWeight="SemiBold"
+                                                               TextAlignment="Center" />
+                                                    <TextBlock Text="{Binding EmotionStroopPhaseText}"
+                                                               Foreground="Black"
+                                                               FontSize="17"
+                                                               TextAlignment="Center"
+                                                               Margin="0,10,0,18" />
+                                                    <Button Content="开始练习"
+                                                            Command="{Binding StartEmotionStroopPracticeCommand}"
+                                                            Style="{StaticResource EmotionStroopTaskButton}"
+                                                            Height="56"
+                                                            FontSize="18"
+                                                            Visibility="{Binding ShowEmotionStroopPracticeStartAction, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                    <Button Content="开始正式测试"
+                                                            Click="StartEmotionStroopFormalButton_Click"
+                                                            Style="{StaticResource EmotionStroopTaskButton}"
+                                                            Height="56"
+                                                            FontSize="18"
+                                                            Visibility="{Binding ShowEmotionStroopFormalStartAction, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                </StackPanel>
 
                                                 <Grid Margin="24,10,24,18"
                                                       Visibility="{Binding IsEmotionStroopStimulusVisible, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -1451,7 +1497,7 @@
                                                              MaxWidth="1000"
                                                              MaxHeight="650">
                                                         <Grid Width="640" Height="720"
-                                                              Background="Black">
+                                                              Background="White">
                                                             <Image Source="{Binding EmotionStroopImagePath}"
                                                                    Width="640"
                                                                    Height="720"
@@ -1468,7 +1514,7 @@
                                                                                       BlurRadius="5"
                                                                                       ShadowDepth="2"
                                                                                       Opacity="1" />
-                                                                </TextBlock.Effect>
+                                                                    </TextBlock.Effect>
                                                             </TextBlock>
                                                         </Grid>
                                                     </Viewbox>
@@ -1486,30 +1532,44 @@
                                                         <Button Grid.Column="0"
                                                                 Content="{Binding EmotionStroopPositiveText}"
                                                                 Command="{Binding EmotionStroopRespondPositiveCommand}"
-                                                                Style="{StaticResource PrimaryCaptureButton}"
+                                                                Style="{StaticResource EmotionStroopResponseButton}"
                                                                 Height="56"
-                                                                FontSize="18" />
+                                                                FontSize="18"
+                                                                IsEnabled="{Binding CanSubmitEmotionStroopResponse}" />
                                                         <Button Grid.Column="2"
                                                                 Content="{Binding EmotionStroopNegativeText}"
                                                                 Command="{Binding EmotionStroopRespondNegativeCommand}"
-                                                                Style="{StaticResource PrimaryCaptureButton}"
+                                                                Style="{StaticResource EmotionStroopResponseButton}"
                                                                 Height="56"
-                                                                FontSize="18" />
-                                                    </Grid>
+                                                                FontSize="18"
+                                                                IsEnabled="{Binding CanSubmitEmotionStroopResponse}" />
+                                                        </Grid>
                                                 </Grid>
+
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            Visibility="{Binding IsEmotionStroopPostBlank, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding EmotionStroopFeedbackText}"
+                                                               Foreground="Black"
+                                                               FontSize="30"
+                                                               FontWeight="SemiBold"
+                                                               HorizontalAlignment="Center"
+                                                               TextAlignment="Center"
+                                                               Visibility="{Binding IsEmotionStroopFeedbackVisible, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                </StackPanel>
 
                                                 <StackPanel HorizontalAlignment="Center"
                                                             VerticalAlignment="Center"
                                                             Width="520"
                                                             Visibility="{Binding IsEmotionStroopResting, Converter={StaticResource BoolToVisibilityConverter}}">
                                                     <TextBlock Text="{Binding EmotionStroopRestTitleText}"
-                                                               Foreground="{StaticResource Text}"
+                                                               Foreground="Black"
                                                                FontSize="28"
                                                                FontWeight="SemiBold"
                                                                TextAlignment="Center"
                                                                Margin="0,0,0,14" />
                                                     <TextBlock Text="{Binding EmotionStroopRestText}"
-                                                               Foreground="{StaticResource SubText}"
+                                                               Foreground="Black"
                                                                FontSize="16"
                                                                TextAlignment="Center"
                                                                TextWrapping="Wrap" />
@@ -1524,8 +1584,8 @@
                                                                 HorizontalAlignment="Center"
                                                                 Margin="0,22,0,22">
                                                         <TextBlock Text="{Binding BasicInfoFormTitleText}"
-                                                                   Foreground="{StaticResource Text}"
-                                                                   FontSize="24"
+                                                               Foreground="Black"
+                                                               FontSize="44"
                                                                    FontWeight="SemiBold"
                                                                    TextAlignment="Center"
                                                                    Margin="0,0,0,8" />
@@ -1716,14 +1776,14 @@
                                                                TextAlignment="Center"
                                                                Margin="0,0,0,14" />
                                                     <TextBlock Text="{Binding SyncTestStatusText}"
-                                                               Foreground="{StaticResource SubText}"
+                                                               Foreground="Black"
                                                                FontSize="15"
                                                                TextAlignment="Center"
                                                                TextWrapping="Wrap"
                                                                Margin="0,0,0,22" />
                                                     <Button Content="{Binding SyncTestStartButtonText}"
                                                             Style="{StaticResource PrimaryCaptureButton}"
-                                                            MinWidth="220"
+                                                            Width="250"
                                                             Padding="32,10"
                                                             Click="StartSyncTestButton_Click"
                                                             Visibility="{Binding ShowSyncTestStartAction, Converter={StaticResource BoolToVisibilityConverter}}" />
@@ -2049,9 +2109,11 @@
                                 <TextBlock Text="{Binding CameraPreviewPlaceholderText}"
                                            x:Name="CameraPreviewStatusText"
                                            Foreground="{StaticResource SubText}"
-                                           HorizontalAlignment="Center"
+                                           HorizontalAlignment="Stretch"
                                            VerticalAlignment="Bottom"
-                                           Margin="0,0,0,12" />
+                                           Margin="12,0,12,12"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap" />
                             </Grid>
                         </Border>
                         <StackPanel Grid.Row="2">

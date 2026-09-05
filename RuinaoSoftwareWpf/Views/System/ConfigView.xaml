@@ -369,17 +369,12 @@
                 <Grid Height="36">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <TextBlock Text="硬件版本" Style="{StaticResource SettingLabel}" />
-                    <TextBlock Grid.Column="1" Text="V1.0.1" Style="{StaticResource SettingValue}" />
+                    <TextBlock Grid.Column="1" Text="V1.0.0.0" Style="{StaticResource SettingValue}" />
                 </Grid>
                 <Grid Height="36">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <TextBlock Text="发布日期" Style="{StaticResource SettingLabel}" />
-                    <TextBlock Grid.Column="1" Text="2026-06-10" Style="{StaticResource SettingValue}" />
-                </Grid>
-                <Grid Height="36">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <TextBlock Text="SN" Style="{StaticResource SettingLabel}" />
-                    <TextBlock Grid.Column="1" Text="12345678" Style="{StaticResource SettingValue}" />
+                    <TextBlock Grid.Column="1" Text="2026-07-30" Style="{StaticResource SettingValue}" />
                 </Grid>
             </StackPanel>
         </ScrollViewer>

@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
+using RuinaoSoftwareWpf.ApplicationContracts;
 
 /// <summary>
 /// 默认音视频录制实现。
@@ -55,9 +56,12 @@ internal sealed class CaptureMediaRecorder :
         this.audioRecorder = audioRecorder;
         this.mediaEncoder = mediaEncoder;
         this.mediaSyncProbe = mediaSyncProbe;
+        audioRecorder.LevelAvailable += OnAudioLevelAvailable;
     }
 
     public event EventHandler<CaptureRecordingCompletedEventArgs>? RecordingCompleted;
+
+    public event EventHandler<CaptureAudioLevel>? AudioLevelAvailable;
 
     public bool IsRecording => Volatile.Read(ref isRecordingFlag) == 1;
 
@@ -99,17 +103,23 @@ internal sealed class CaptureMediaRecorder :
         }
 
         var outputRoot = CaptureOutputPathProvider.GetOutputRoot();
-        var sessionDirectory = Path.Combine(
+        var moduleDirectory = Path.Combine(
             outputRoot,
             request.SessionKey,
             request.ModuleCode,
             request.AssessmentAttemptId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "development");
+        var sessionDirectory = request.SegmentIndex is int segmentIndex
+            ? Path.Combine(moduleDirectory, $"segment-{segmentIndex}")
+            : moduleDirectory;
         Directory.CreateDirectory(sessionDirectory);
 
-        var rawVideoPath = Path.Combine(sessionDirectory, $"{request.ModuleCode}_raw.avi");
-        var normalizedVideoPath = Path.Combine(sessionDirectory, $"{request.ModuleCode}_normalized.avi");
-        var audioPath = Path.Combine(sessionDirectory, $"{request.ModuleCode}.wav");
-        var mergedVideoPath = Path.Combine(sessionDirectory, $"{request.ModuleCode}.mp4");
+        var filePrefix = request.SegmentIndex is int indexedSegment
+            ? $"{request.ModuleCode}_segment_{indexedSegment}"
+            : request.ModuleCode;
+        var rawVideoPath = Path.Combine(sessionDirectory, $"{filePrefix}_raw.avi");
+        var normalizedVideoPath = Path.Combine(sessionDirectory, $"{filePrefix}_normalized.avi");
+        var audioPath = Path.Combine(sessionDirectory, $"{filePrefix}.wav");
+        var mergedVideoPath = Path.Combine(sessionDirectory, $"{filePrefix}.mp4");
         var recordStartedAt = DateTimeOffset.Now;
 
         var frameQueueCapacity = CalculateFrameQueueCapacity(configuredCaptureProfile);
@@ -410,6 +420,11 @@ internal sealed class CaptureMediaRecorder :
         pendingAudioPath = null;
         timing.RecordAudioStarted(DateTimeOffset.Now, firstFrameAt, "after_first_video_frame_queued");
         logger.Info($"音频录制已启动：audioPath={audioPath}");
+    }
+
+    private void OnAudioLevelAvailable(object? sender, CaptureAudioLevel level)
+    {
+        AudioLevelAvailable?.Invoke(this, level);
     }
 
     private async Task CompleteRecordingAsync(

@@ -5,45 +5,39 @@ using Xunit;
 public sealed class EmotionStroopTrialCatalogTests
 {
     [Fact]
-    public void Trials_ShouldContainContinuousSixtyTrialSequence()
+    public void ExcelCatalog_ShouldContainTwoEightyTrialVersionsAndSixteenPracticeTrials()
     {
-        var trials = EmotionStroopTrialCatalog.Trials;
-
-        Assert.Equal(60, trials.Count);
-        Assert.Equal(Enumerable.Range(1, 60), trials.Select(trial => trial.TrialIndex));
-        Assert.Equal(60, trials.Select(trial => trial.ImageFileName).Distinct().Count());
+        Assert.Equal(80, EmotionStroopTrialCatalog.VersionATrials.Count);
+        Assert.Equal(80, EmotionStroopTrialCatalog.VersionBTrials.Count);
+        Assert.Equal(16, EmotionStroopTrialCatalog.PracticeTrials.Count);
+        Assert.Equal(Enumerable.Range(1, 80), EmotionStroopTrialCatalog.VersionATrials.Select(t => t.TrialIndex));
+        Assert.Equal(Enumerable.Range(1, 80), EmotionStroopTrialCatalog.VersionBTrials.Select(t => t.TrialIndex));
     }
 
     [Fact]
-    public void Trials_ShouldRespectImageAndResponseRules()
+    public void FormalVersions_ShouldRemainBalanced()
     {
-        foreach (var trial in EmotionStroopTrialCatalog.Trials)
+        foreach (var trials in new[] { EmotionStroopTrialCatalog.VersionATrials, EmotionStroopTrialCatalog.VersionBTrials })
         {
-            Assert.EndsWith(".png", trial.ImageFileName, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(trial.ImageType, new[] { 1, 2 });
-            Assert.Contains(trial.WordType, new[] { 11, 20 });
-            Assert.False(string.IsNullOrWhiteSpace(trial.WordText));
-            Assert.Equal(
-                trial.ImageType == 1 ? EmotionStroopResponse.Positive : EmotionStroopResponse.Negative,
-                trial.CorrectResponse);
+            Assert.Equal(40, trials.Select(t => t.FaceId).Distinct().Count());
+            Assert.Equal(40, trials.Count(t => t.FaceValence == 1));
+            Assert.Equal(40, trials.Count(t => t.FaceValence == 2));
+            Assert.Equal(20, trials.Count(t => t.Condition == "PP"));
+            Assert.Equal(20, trials.Count(t => t.Condition == "PN"));
+            Assert.Equal(20, trials.Count(t => t.Condition == "NP"));
+            Assert.Equal(20, trials.Count(t => t.Condition == "NN"));
+            Assert.Equal(2, trials.GroupBy(t => t.FaceId).Min(g => g.Count()));
+            Assert.Equal(2, trials.GroupBy(t => t.WordId).Min(g => g.Count()));
         }
-
-        Assert.Equal(30, EmotionStroopTrialCatalog.Trials.Count(trial => trial.ImageType == 1));
-        Assert.Equal(30, EmotionStroopTrialCatalog.Trials.Count(trial => trial.ImageType == 2));
     }
 
     [Fact]
-    public void Trials_ShouldReferenceExistingBundledImages()
+    public void Assets_ShouldExistInFormalAndPracticeFolders()
     {
-        var projectDirectory = Path.GetFullPath(
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "RuinaoSoftwareWpf"));
-        var assetDirectory = Path.Combine(projectDirectory, "Assets", "CaptureWorkbench", "EmotionStroop");
-
-        foreach (var trial in EmotionStroopTrialCatalog.Trials)
-        {
-            Assert.True(
-                File.Exists(Path.Combine(assetDirectory, trial.ImageFileName)),
-                $"Missing emotion Stroop image: {trial.ImageFileName}");
-        }
+        var projectDirectory = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "RuinaoSoftwareWpf"));
+        foreach (var trial in EmotionStroopTrialCatalog.VersionATrials)
+            Assert.True(File.Exists(Path.Combine(projectDirectory, "Assets", "CaptureWorkbench", "EmotionStroop", "Formal", trial.ImageFileName)), trial.ImageFileName);
+        foreach (var trial in EmotionStroopTrialCatalog.PracticeTrials)
+            Assert.True(File.Exists(Path.Combine(projectDirectory, "Assets", "CaptureWorkbench", "EmotionStroop", "Practice", trial.ImageFileName)), trial.ImageFileName);
     }
 }

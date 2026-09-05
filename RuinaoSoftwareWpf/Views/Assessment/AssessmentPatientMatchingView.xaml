@@ -345,9 +345,7 @@
                     Margin="0,0,16,0" />
             <TextBlock Grid.Column="1"
                        Text="{Binding PageTitleText}"
-                       Foreground="#F1F3F6"
-                       FontSize="24"
-                       FontWeight="SemiBold"
+                       Style="{StaticResource AssessmentPageTitle}"
                        VerticalAlignment="Center" />
         </Grid>
 
@@ -372,6 +370,7 @@
                            Margin="0,0,12,0" />
                 <TextBox Grid.Column="1"
                          Text="{Binding PhoneQuery, UpdateSourceTrigger=PropertyChanged}"
+                         MaxLength="11"
                          Height="36"
                          Padding="10,6"
                          Background="#11141D"

@@ -147,6 +147,7 @@ public static class AppComposition
         services.AddSingleton<IAuditTrailAdministrationService, AuditTrailAdministrationService>();
         services.AddSingleton<IFeatureVisibilityService, LocalFeatureVisibilityService>(); // Admin 功能显示配置
         services.AddSingleton<IStartupSettingsService, LocalStartupSettingsService>(); // 工作站级启动设置
+        services.AddSingleton<IUserViewModeService, LocalUserViewModeService>(); // 患者/管理视角持久化
         services.AddSingleton<IPatientService, LocalPatientService>(); // 本地患者服务
         services.AddSingleton<IExternalFollowUpService, ExternalFollowUpService>(); // 网新测试环境患者查询接口
         services.AddSingleton<IStimulationRecordService, LocalStimulationRecordService>(); // 刺激记录服务
@@ -189,6 +190,8 @@ public static class AppComposition
         services.AddSingleton<AssessmentCaptureViewModel>(); // 采集工作台：导航切换时保留模块进度
         services.AddSingleton<AssessmentEntryViewModel>(); // 数字表型采集的患者级 Run 入口
         services.AddSingleton<AssessmentPatientMatchingViewModel>(); // 外部患者匹配页面
+        services.AddSingleton<AssessmentPatientWelcomeViewModel>(); // 患者端采集欢迎页
+        services.AddSingleton<AssessmentPatientPortalViewModel>(); // 患者端手机号精确搜索页
         services.AddSingleton<AssessmentFeatureHostViewModel>(); // 入口与采集工作台的单一页面宿主
         services.AddSingleton<AssessmentWorkbenchCoordinator>(); // 数字表型工作台流程协调器和模块 VM 容器
         services.AddSingleton<FemSimulationViewModel>();   // FEM 仿真面板

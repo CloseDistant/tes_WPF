@@ -50,14 +50,14 @@ public sealed class FaceQualityEvaluatorTests
     }
 
     [Fact]
-    public void Evaluate_ReturnsEyesNotVisibleWhenOneEyeIsUnavailable()
+    public void Evaluate_DoesNotRejectWhenOneEyeIsUnavailable()
     {
         var landmarks = CreateLandmarks();
         SetConfidence(landmarks, 60, 67, 0);
 
         var result = evaluator.Evaluate(CreateObservation(landmarks));
 
-        Assert.Equal(CameraFaceState.EyesNotVisible, result.State);
+        Assert.Equal(CameraFaceState.Normal, result.State);
     }
 
     [Fact]
@@ -72,19 +72,19 @@ public sealed class FaceQualityEvaluatorTests
     }
 
     [Fact]
-    public void Evaluate_ReturnsEyesClosedWhenBothEyeAspectRatiosAreSmall()
+    public void Evaluate_DoesNotRejectWhenEyesAppearClosed()
     {
         var landmarks = CreateLandmarks(eyeHalfHeight: 0.10);
 
         var result = evaluator.Evaluate(CreateObservation(landmarks));
 
-        Assert.Equal(CameraFaceState.EyesClosed, result.State);
+        Assert.Equal(CameraFaceState.Normal, result.State);
     }
 
     [Theory]
-    [InlineData(20.1, 0, 0)]
-    [InlineData(0, -15.1, 0)]
-    [InlineData(0, 0, 20.1)]
+    [InlineData(25.1, 0, 0)]
+    [InlineData(0, -20.1, 0)]
+    [InlineData(0, 0, 25.1)]
     public void Evaluate_ReturnsHeadPoseInvalidWhenAnyPoseLimitIsExceeded(
         double yaw,
         double pitch,

@@ -1,5 +1,7 @@
 namespace RuinaoSoftwareWpf;
 
+using RuinaoSoftwareWpf.ApplicationContracts;
+
 /// <summary>
 /// 媒体应用服务与底层录制器之间的内部实现边界。
 /// 该接口不向 ViewModel 或应用层契约暴露。
@@ -7,6 +9,8 @@ namespace RuinaoSoftwareWpf;
 internal interface ICaptureMediaBackend
 {
     event EventHandler<CaptureRecordingCompletedEventArgs>? RecordingCompleted;
+
+    event EventHandler<CaptureAudioLevel>? AudioLevelAvailable;
 
     bool IsRecording { get; }
 

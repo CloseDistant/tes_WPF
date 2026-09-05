@@ -78,13 +78,13 @@ public sealed record FaceQualityThresholds(
     double MaximumRollDegrees)
 {
     public static FaceQualityThresholds Default { get; } = new(
-        LandmarkConfidence: 0.08,
-        FeatureVisibleRatio: 0.70,
-        OverallVisibleRatio: 0.72,
-        ClosedEyeAspectRatio: 0.16,
-        MaximumYawDegrees: 20,
-        MaximumPitchDegrees: 15,
-        MaximumRollDegrees: 20);
+        LandmarkConfidence: 0.05,
+        FeatureVisibleRatio: 0.68,
+        OverallVisibleRatio: 0.65,
+        ClosedEyeAspectRatio: 0.14,
+        MaximumYawDegrees: 25,
+        MaximumPitchDegrees: 20,
+        MaximumRollDegrees: 25);
 }
 
 public readonly record struct FaceQualityEvaluation(
@@ -132,6 +132,7 @@ public sealed class FaceQualityEvaluator
                 effectiveClosedEyeThreshold);
         }
 
+        // 保留 EAR 输出用于诊断和数据记录，但眼睛可见度及睁闭状态不再作为通过条件。
         var leftEyeAspectRatio = CalculateEyeAspectRatio(observation.Landmarks, LeftEyeIndices);
         var rightEyeAspectRatio = CalculateEyeAspectRatio(observation.Landmarks, RightEyeIndices);
 
@@ -163,30 +164,10 @@ public sealed class FaceQualityEvaluator
                 effectiveClosedEyeThreshold);
         }
 
-        if (VisibleRatio(observation.Landmarks, LeftEyeIndices) < thresholds.FeatureVisibleRatio
-            || VisibleRatio(observation.Landmarks, RightEyeIndices) < thresholds.FeatureVisibleRatio)
-        {
-            return new FaceQualityEvaluation(
-                CameraFaceState.EyesNotVisible,
-                leftEyeAspectRatio,
-                rightEyeAspectRatio,
-                effectiveClosedEyeThreshold);
-        }
-
         if (VisibleRatio(observation.Landmarks, MouthIndices) < thresholds.FeatureVisibleRatio)
         {
             return new FaceQualityEvaluation(
                 CameraFaceState.MouthNotVisible,
-                leftEyeAspectRatio,
-                rightEyeAspectRatio,
-                effectiveClosedEyeThreshold);
-        }
-
-        if (leftEyeAspectRatio < effectiveClosedEyeThreshold
-            && rightEyeAspectRatio < effectiveClosedEyeThreshold)
-        {
-            return new FaceQualityEvaluation(
-                CameraFaceState.EyesClosed,
                 leftEyeAspectRatio,
                 rightEyeAspectRatio,
                 effectiveClosedEyeThreshold);

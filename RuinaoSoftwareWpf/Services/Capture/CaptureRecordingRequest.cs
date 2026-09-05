@@ -5,4 +5,5 @@ internal sealed record CaptureRecordingRequest(
     string SessionKey,
     string ModuleCode,
     string ModuleName,
-    string CameraName);
+    string CameraName,
+    int? SegmentIndex = null);

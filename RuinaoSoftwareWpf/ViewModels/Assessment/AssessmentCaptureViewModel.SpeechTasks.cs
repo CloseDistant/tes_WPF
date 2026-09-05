@@ -1,5 +1,7 @@
 namespace RuinaoSoftwareWpf;
 
+using RuinaoSoftwareWpf.ApplicationContracts;
+
 public sealed partial class AssessmentCaptureViewModel
 {
     private void BeginVoiceBaselineSequence()
@@ -9,27 +11,81 @@ public sealed partial class AssessmentCaptureViewModel
         videoBrowseTimer.Stop();
         voiceBaselineTimer.Stop();
         voiceBaselineIndex = 0;
-        voiceBaselineRemainingSeconds = VoiceBaselineSegmentSeconds;
+        voiceBaselineRemainingSeconds = VoiceBaselineMaximumSegmentSeconds;
         currentVoiceBaselineStartedAt = null;
+        voiceBaselineDetectionWindowStartedAt = null;
+        voiceBaselineDetectionWindowEndedAt = null;
+        voiceBaselineVoiceDetectedAt = null;
+        voiceBaselineHasVoice = false;
+        voiceBaselineVoiceDetectionFinalized = false;
+        voiceBaselineMediaFinalizing = false;
+        voiceBaselineActiveMediaSessionId = null;
         voiceBaselinePhase = VoiceBaselinePhase.WaitingToStart;
         VoiceBaselineStatusText = T("CaptureWorkspaceVoiceBaselineReady", 1, VoiceBaselineItems.Length);
         VoiceBaselineRestText = string.Empty;
-        StageNoticeText = T("CaptureWorkspaceVoiceBaselineStageNotice");
+        StageNoticeText = string.Empty;
     }
 
-    private void StartVoiceBaselineSegment()
+    private async Task StartVoiceBaselineSegmentAsync()
     {
-        if (!IsVoiceBaselineModule || currentStep != CaptureWorkbenchStep.ModuleExecution || voiceBaselineIndex >= VoiceBaselineItems.Length)
+        if (!IsVoiceBaselineModule
+            || currentStep != CaptureWorkbenchStep.ModuleExecution
+            || voiceBaselineIndex >= VoiceBaselineItems.Length
+            || voiceBaselinePhase != VoiceBaselinePhase.WaitingToStart
+            || voiceBaselineMediaFinalizing)
         {
             return;
         }
 
+        if (!HasSelectedCamera)
+        {
+            StageNoticeText = T("CaptureWorkspaceNoCameraStageNotice");
+            NotifyStageChanged();
+            return;
+        }
+
         var item = VoiceBaselineItems[voiceBaselineIndex];
-        currentVoiceBaselineStartedAt = DateTimeOffset.Now;
-        voiceBaselineRemainingSeconds = VoiceBaselineSegmentSeconds;
-        voiceBaselinePhase = VoiceBaselinePhase.Recording;
+        var startedAt = DateTimeOffset.Now;
+        var sessionKey = await GetOrStartUnifiedSessionKeyAsync();
+        var mediaSession = await StartMediaRecordingAsync(
+            new CaptureMediaStartRequest(
+                activeModuleAttempt?.AttemptId,
+                sessionKey,
+                CurrentModuleCode,
+                CurrentModule,
+                SelectedCameraDevice,
+                voiceBaselineIndex + 1));
+
+        voiceBaselineActiveMediaSessionId = mediaSession.SessionId;
+        BeginFrameSaving(mediaSession.OutputDirectory);
+        currentVoiceBaselineStartedAt = startedAt;
+        voiceBaselineRemainingSeconds = VoiceBaselineMaximumSegmentSeconds;
+        voiceBaselineDetectionWindowStartedAt = null;
+        voiceBaselineDetectionWindowEndedAt = null;
+        voiceBaselineVoiceDetectedAt = null;
+        voiceBaselineHasVoice = false;
+        voiceBaselineVoiceDetectionFinalized = false;
+        voiceBaselineMediaFinalizing = false;
+        voiceBaselinePhase = VoiceBaselinePhase.Preparing;
         VoiceBaselineRestText = string.Empty;
-        UpdateVoiceBaselineStatusText();
+        VoiceBaselineStatusText = T("CaptureWorkspaceVoiceBaselinePreparing");
+        RecordModuleEventSafely(
+            "voice_baseline_segment_recording_started",
+            $"语音基线第 {voiceBaselineIndex + 1} 段录制开始",
+            new
+            {
+                segmentIndex = voiceBaselineIndex + 1,
+                segmentTotal = VoiceBaselineItems.Length,
+                promptText = item.PromptText,
+                syllableName = item.SyllableName,
+                syllableType = item.SyllableType,
+                minDurationSeconds = VoiceBaselineMinimumSegmentSeconds,
+                maxDurationSeconds = VoiceBaselineMaximumSegmentSeconds,
+                preparationSeconds = VoiceBaselinePreparationSeconds,
+                segmentRecordingStartedAtUnixMs = startedAt.ToUnixTimeMilliseconds()
+            },
+            startedAt,
+            null);
         RecordModuleEventSafely(
             "voice_baseline_segment_started",
             $"语音基线第 {voiceBaselineIndex + 1} 段开始",
@@ -40,13 +96,27 @@ public sealed partial class AssessmentCaptureViewModel
                 promptText = item.PromptText,
                 syllableName = item.SyllableName,
                 syllableType = item.SyllableType,
-                minDurationSeconds = VoiceBaselineSegmentSeconds,
-                startedAtUnixMs = currentVoiceBaselineStartedAt.Value.ToUnixTimeMilliseconds()
+                startedAtUnixMs = startedAt.ToUnixTimeMilliseconds()
             },
-            currentVoiceBaselineStartedAt,
+            startedAt,
             null);
+        // Reset the shared timer so every segment gets a complete one-second
+        // preparation interval, including segment 2 after the rest period.
+        voiceBaselineTimer.Stop();
         voiceBaselineTimer.Start();
         NotifyStageChanged();
+    }
+
+    public async Task StartVoiceBaselineFirstSegmentAsync() => await StartVoiceBaselineSegmentAsync();
+
+    public void StartVoiceBaselineFirstSegment() => _ = StartVoiceBaselineFirstSegmentAsync();
+
+    public void FinishVoiceBaselineSegment()
+    {
+        if (CanFinishVoiceBaselineSegment)
+        {
+            FinishCurrentVoiceBaselineSegment(manual: true);
+        }
     }
 
     private void AdvanceVoiceBaseline()
@@ -58,17 +128,53 @@ public sealed partial class AssessmentCaptureViewModel
             return;
         }
 
+        if (voiceBaselinePhase == VoiceBaselinePhase.Preparing)
+        {
+            voiceBaselinePhase = VoiceBaselinePhase.Recording;
+            voiceBaselineDetectionWindowStartedAt = DateTimeOffset.Now;
+            voiceBaselineDetectionWindowEndedAt = voiceBaselineDetectionWindowStartedAt.Value.AddSeconds(VoiceBaselineVoiceDetectionWindowSeconds);
+            UpdateVoiceBaselineStatusText();
+            NotifyStageChanged();
+            return;
+        }
+
         if (voiceBaselinePhase == VoiceBaselinePhase.Recording)
         {
-            if (voiceBaselineRemainingSeconds > 1)
+            if (voiceBaselineRemainingSeconds > 0)
             {
                 voiceBaselineRemainingSeconds--;
+                if (voiceBaselineRemainingSeconds == 0)
+                {
+                    FinishCurrentVoiceBaselineSegment(manual: false);
+                    return;
+                }
+
+                if (!voiceBaselineHasVoice
+                    && voiceBaselineDetectionWindowStartedAt is { } detectionStart
+                    && voiceBaselineDetectionWindowEndedAt is { } detectionEnd
+                    && DateTimeOffset.Now >= detectionEnd)
+                {
+                    voiceBaselineVoiceDetectionFinalized = true;
+                    RecordModuleEventSafely(
+                        "voice_baseline_voice_not_detected",
+                        $"语音基线第 {voiceBaselineIndex + 1} 段检测窗口内未检测到声音",
+                        new
+                        {
+                            segmentIndex = voiceBaselineIndex + 1,
+                            voiceDetectionWindowStartedAtUnixMs = detectionStart.ToUnixTimeMilliseconds(),
+                            voiceDetectionWindowEndedAtUnixMs = detectionEnd.ToUnixTimeMilliseconds(),
+                            voiceDetectionThreshold = VoiceBaselineVoicePresenceRmsThreshold
+                        },
+                        detectionStart,
+                        detectionEnd);
+                }
+
                 UpdateVoiceBaselineStatusText();
                 NotifyStageChanged();
                 return;
             }
 
-            CompleteCurrentVoiceBaselineSegment();
+            FinishCurrentVoiceBaselineSegment(manual: false);
             return;
         }
 
@@ -82,12 +188,28 @@ public sealed partial class AssessmentCaptureViewModel
                 return;
             }
 
-            StartVoiceBaselineSegment();
+            voiceBaselinePhase = VoiceBaselinePhase.WaitingToStart;
+            voiceBaselineRemainingSeconds = VoiceBaselineMaximumSegmentSeconds;
+            VoiceBaselineStatusText = T("CaptureWorkspaceVoiceBaselineReady", voiceBaselineIndex + 1, VoiceBaselineItems.Length);
+            VoiceBaselineRestText = string.Empty;
+            var restCompletedAt = DateTimeOffset.Now;
+            RecordModuleEventSafely(
+                "voice_baseline_rest_completed",
+                "语音基线两段之间休息结束",
+                new
+                {
+                    nextSegmentIndex = voiceBaselineIndex + 1,
+                    completedAtUnixMs = restCompletedAt.ToUnixTimeMilliseconds()
+                },
+                restCompletedAt,
+                restCompletedAt);
+            NotifyStageChanged();
         }
     }
 
-    private void CompleteCurrentVoiceBaselineSegment()
+    private void FinishCurrentVoiceBaselineSegment(bool manual)
     {
+        voiceBaselineTimer.Stop();
         var completedAt = DateTimeOffset.Now;
         var item = voiceBaselineIndex >= 0 && voiceBaselineIndex < VoiceBaselineItems.Length
             ? VoiceBaselineItems[voiceBaselineIndex]
@@ -95,7 +217,21 @@ public sealed partial class AssessmentCaptureViewModel
         var durationMs = currentVoiceBaselineStartedAt.HasValue
             ? (long)(completedAt - currentVoiceBaselineStartedAt.Value).TotalMilliseconds
             : 0L;
-
+        voiceBaselineDetectionWindowEndedAt ??= completedAt;
+        StopFrameSaving();
+        voiceBaselineMediaFinalizing = true;
+        RecordModuleEventSafely(
+            "voice_baseline_segment_recording_ended",
+            $"语音基线第 {voiceBaselineIndex + 1} 段录制结束",
+            new
+            {
+                segmentIndex = voiceBaselineIndex + 1,
+                segmentTotal = VoiceBaselineItems.Length,
+                segmentRecordingEndedAtUnixMs = completedAt.ToUnixTimeMilliseconds(),
+                completionReason = manual ? "manual_after_minimum" : "auto_timeout"
+            },
+            completedAt,
+            completedAt);
         if (item is not null)
         {
             RecordModuleEventSafely(
@@ -110,38 +246,20 @@ public sealed partial class AssessmentCaptureViewModel
                     syllableType = item.SyllableType,
                     startedAtUnixMs = currentVoiceBaselineStartedAt?.ToUnixTimeMilliseconds(),
                     endedAtUnixMs = completedAt.ToUnixTimeMilliseconds(),
-                    durationMs
+                    durationMs,
+                    completionReason = manual ? "manual_after_minimum" : "auto_timeout",
+                    hasVoice = voiceBaselineHasVoice,
+                    voiceDetectedAtUnixMs = voiceBaselineVoiceDetectedAt?.ToUnixTimeMilliseconds(),
+                    voiceDetectionWindowStartedAtUnixMs = voiceBaselineDetectionWindowStartedAt?.ToUnixTimeMilliseconds(),
+                    voiceDetectionWindowEndedAtUnixMs = voiceBaselineDetectionWindowEndedAt?.ToUnixTimeMilliseconds(),
+                    voiceDetectionThreshold = VoiceBaselineVoicePresenceRmsThreshold
                 },
                 currentVoiceBaselineStartedAt,
                 completedAt);
         }
 
-        voiceBaselineIndex++;
-        currentVoiceBaselineStartedAt = null;
-
-        if (voiceBaselineIndex >= VoiceBaselineItems.Length)
-        {
-            CompleteVoiceBaseline();
-            return;
-        }
-
-        voiceBaselinePhase = VoiceBaselinePhase.Resting;
-        voiceBaselineRemainingSeconds = CaptureWorkbenchForcedRestSeconds;
-        VoiceBaselineStatusText = $"已完成 {voiceBaselineIndex} / {VoiceBaselineItems.Length} 段";
-        UpdateVoiceBaselineRestText();
-        NotifyStageChanged();
-    }
-
-    private void CompleteVoiceBaseline()
-    {
-        voiceBaselineTimer.Stop();
-        voiceBaselinePhase = VoiceBaselinePhase.Completed;
-        voiceBaselineRemainingSeconds = 0;
-        currentVoiceBaselineStartedAt = null;
-        VoiceBaselineStatusText = T("CaptureWorkspaceVoiceBaselineCompleted");
-        VoiceBaselineRestText = string.Empty;
-        StageNoticeText = T("CaptureWorkspaceVoiceBaselineCompletedNotice");
-        MoveToStep(CaptureWorkbenchStep.Completed);
+        RequestMediaStop(CaptureMediaStopReason.Completed, $"语音基线第 {voiceBaselineIndex + 1} 段已完成。");
+        StageNoticeText = string.Empty;
         NotifyStageChanged();
     }
 

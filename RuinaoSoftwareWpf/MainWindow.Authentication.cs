@@ -153,7 +153,7 @@ public partial class MainWindow
                 return;
             }
 
-            ShowMainContent();
+            await ShowMainContentAsync(timeout.Token);
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested)
         {
@@ -235,10 +235,11 @@ public partial class MainWindow
         LoginContent.ShowMessage(message ?? string.Empty, isError);
     }
 
-    private void ShowMainContent()
+    private async Task ShowMainContentAsync(CancellationToken cancellationToken)
     {
         LoginContent.Visibility = Visibility.Collapsed;
         MainContent.Visibility = Visibility.Visible;
+        await viewModel.RestorePreferredViewModeAsync(cancellationToken);
         sessionSecurityService.NotifyUserActivity();
         logger.Info($"进入主界面：userId={accountService.CurrentUser?.UserId}");
     }

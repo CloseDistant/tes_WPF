@@ -116,8 +116,7 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
             {
                 Volatile.Write(
                     ref lastOpenFailureMessage,
-                    $"当前摄像头不支持所选{CameraRecordingQualityCatalog.DisplayName(recordingQualitySettings.SelectedMode)}"
-                    + $"（{CameraRecordingQualityCatalog.Specification(recordingQualitySettings.SelectedMode)}），请在高级设置中选择其他档位。");
+                    "当前摄像头无法打开或未返回有效画面，请检查摄像头连接、占用情况和系统权限。");
                 logger.Warning(LastOpenFailureMessage!);
                 return false;
             }
@@ -567,7 +566,7 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
         var overlapRight = Math.Min(face.X + face.Width, GuideBounds.X + GuideBounds.Width);
         var overlapBottom = Math.Min(face.Y + face.Height, GuideBounds.Y + GuideBounds.Height);
         var overlapArea = Math.Max(0, overlapRight - overlapLeft) * Math.Max(0, overlapBottom - overlapTop);
-        return overlapArea / (face.Width * face.Height) >= 0.85;
+        return overlapArea / (face.Width * face.Height) >= 0.70;
     }
 
     private void SignalPreviewProcessor()
@@ -667,26 +666,12 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
         // 较低实测帧率不能污染均衡档位，否则切回均衡后会错误轮询其他后端。
         var cached = profileStore.Find(deviceKey, requestedProfile.RecordingQualityMode);
         var backendCandidates = new List<VideoCaptureAPIs>();
-        VideoCaptureAPIs? lowPerformanceCachedApi = null;
         if (cached is not null
             && Enum.TryParse<VideoCaptureAPIs>(cached.CaptureBackend, ignoreCase: true, out var cachedApi))
         {
-            if (cached.MeasuredSourceFramesPerSecond is >= 25)
-            {
-                backendCandidates.Add(cachedApi);
-            }
-            else if (cached.MeasuredSourceFramesPerSecond.HasValue)
-            {
-                lowPerformanceCachedApi = cachedApi;
-                logger.Warning(
-                    "跳过上次低帧率摄像头后端并尝试统一回退："
-                    + $"device={deviceKey}, backend={cachedApi}, "
-                    + $"measuredFps={cached.MeasuredSourceFramesPerSecond.Value:0.00}");
-            }
-            else
-            {
-                backendCandidates.Add(cachedApi);
-            }
+            // 低帧率是当前连接或驱动状态的性能信息，不等于后端不可用。
+            // 优先复用上次成功打开的后端，避免每次重开都先绕过已验证路径。
+            backendCandidates.Add(cachedApi);
         }
 
         foreach (var api in new[]
@@ -696,22 +681,16 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
                      VideoCaptureAPIs.ANY
                  })
         {
-            if (api != lowPerformanceCachedApi
-                && !backendCandidates.Contains(api))
+            if (!backendCandidates.Contains(api))
             {
                 backendCandidates.Add(api);
             }
         }
 
-        if (lowPerformanceCachedApi.HasValue && cached is not null)
-        {
-            backendCandidates.Add(lowPerformanceCachedApi.Value);
-        }
-
         foreach (var api in backendCandidates)
         {
-            // 正式采集只尝试所选设备，并严格请求高级设置中的统一录像档位。
-            // 允许切换系统后端，但不允许静默回退到驱动默认分辨率。
+            // 正式采集只尝试所选设备，并优先请求高级设置中的录像档位。
+            // 分辨率、编码和帧率由驱动协商；只要能读到有效帧，就继续采集并记录实际规格。
             var opened = TryOpenCandidate(
                 preferredIndex,
                 api,
@@ -758,11 +737,6 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
                 api,
                 requestedProfile,
                 Stopwatch.GetElapsedTime(firstFrameStartedAt).TotalMilliseconds);
-            if (!MatchesRequestedProfile(actualProfile, requestedProfile))
-            {
-                return null;
-            }
-
             accepted = true;
             return new OpenedCamera(candidate, actualProfile);
         }
@@ -819,20 +793,6 @@ public sealed class OpenCvCameraCaptureService : ICameraCaptureService
             UsesDriverDefault: false,
             openToFirstFrameMilliseconds,
             MeasuredSourceFramesPerSecond: null);
-    }
-
-    private static bool MatchesRequestedProfile(
-        CameraCaptureProfileSnapshot actual,
-        CameraCaptureProfile requested)
-    {
-        if (actual.ActualWidth != requested.RequestedWidth
-            || actual.ActualHeight != requested.RequestedHeight)
-        {
-            return false;
-        }
-
-        return !actual.ActualDeviceFramesPerSecond.HasValue
-            || actual.ActualDeviceFramesPerSecond.Value >= requested.DeviceFramesPerSecond * 0.90;
     }
 
     private static CameraOpeningPreference CreateOpeningPreference(

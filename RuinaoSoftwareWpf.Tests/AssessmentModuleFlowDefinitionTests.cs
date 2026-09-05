@@ -6,7 +6,7 @@ using Xunit;
 public sealed class AssessmentModuleFlowDefinitionTests
 {
     [Fact]
-    public void FormalModuleFlow_UsesStableUniqueTypeIdsWithoutReusingRemovedEyeCalibrationId()
+    public void FormalModuleFlow_ExcludesCalibrationAndUnneededEmotionModulesWithoutReusingIds()
     {
         var flow = AssessmentCaptureViewModel.FormalModuleFlow;
         var expected = new Dictionary<string, int>(StringComparer.Ordinal)
@@ -17,8 +17,6 @@ public sealed class AssessmentModuleFlowDefinitionTests
             ["word_reading"] = AssessmentModuleTypeIds.WordReading,
             ["short_text_reading"] = AssessmentModuleTypeIds.ShortTextReading,
             ["emotion_question"] = AssessmentModuleTypeIds.EmotionQuestion,
-            ["dot_probe"] = AssessmentModuleTypeIds.DotProbe,
-            ["emotion_oddball"] = AssessmentModuleTypeIds.EmotionOddball,
             ["emotion_letter_search"] = AssessmentModuleTypeIds.EmotionLetterSearch,
             ["emotion_stroop"] = AssessmentModuleTypeIds.EmotionStroop,
             ["basic_info"] = AssessmentModuleTypeIds.BasicInformation,
@@ -40,6 +38,8 @@ public sealed class AssessmentModuleFlowDefinitionTests
         Assert.Equal(AssessmentModuleTypeIds.QuestionnaireJ, flow[^1].ModuleTypeId);
         Assert.Equal("questionnaire_j", flow[^1].ModuleCode);
         Assert.DoesNotContain(flow, module => module.ModuleTypeId == AssessmentModuleTypeIds.EyeCalibration);
+        Assert.DoesNotContain(flow, module => module.ModuleTypeId == AssessmentModuleTypeIds.DotProbe);
+        Assert.DoesNotContain(flow, module => module.ModuleTypeId == AssessmentModuleTypeIds.EmotionOddball);
         Assert.Equal(24, AssessmentModuleTypeIds.NextAvailable);
         Assert.Equal(flow.Count, flow.Select(module => module.ModuleTypeId).Distinct().Count());
         Assert.Equal(flow.Count, flow.Select(module => module.ModuleCode).Distinct(StringComparer.Ordinal).Count());

@@ -7,6 +7,8 @@ namespace RuinaoSoftwareWpf;
 internal enum EmotionStroopState
 {
     Idle,
+    PracticeReady,
+    FormalReady,
     Fixation,
     Stimulus,
     PostBlank,

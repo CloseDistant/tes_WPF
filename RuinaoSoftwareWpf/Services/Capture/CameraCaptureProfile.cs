@@ -2,7 +2,7 @@ namespace RuinaoSoftwareWpf;
 
 /// <summary>
 /// 所有摄像头统一使用的能力请求，不针对具体品牌或型号散布特殊参数。
-/// 设备不支持用户所选档位时明确失败并提示切换档位，不静默降低正式录像质量。
+/// 设备优先尝试用户所选档位；驱动无法完全协商时保留实际规格并继续采集，避免因能力报告偏差阻断流程。
 /// </summary>
 public sealed record CameraCaptureProfile(
     int RequestedWidth,
@@ -125,7 +125,7 @@ public sealed record CameraCaptureProfileSnapshot(
     double? MaximumSourceFrameGapMilliseconds = null);
 
 /// <summary>
-/// 经真实设备打开验证过的摄像头启动偏好。正式页面只复用已验证偏好，
+/// 经真实设备打开验证过的摄像头启动偏好。正式页面优先复用已验证偏好，
 /// 不在患者等待期间遍历分辨率、编码格式和后端组合。
 /// </summary>
 public sealed record CameraOpeningPreference(

@@ -19,8 +19,6 @@ public sealed partial class AssessmentCaptureViewModel
         Saving = 5
     }
 
-    private sealed record PictureBrowseItem(string ImagePath, int ImageType);
-
     private sealed record VideoBrowseItem(string VideoPath, int VideoType);
 
     private sealed record VoiceBaselineItem(string PromptText, string SyllableName, int SyllableType);
@@ -35,7 +33,7 @@ public sealed partial class AssessmentCaptureViewModel
     /// <summary>
     /// 情绪问答问题配置。问题类型只用于事件记录和后续算法分析，不在界面显示。
     /// </summary>
-    private sealed record EmotionQuestionPrompt(string Text, int QuestionType);
+    private sealed record EmotionQuestionPrompt(string Id, string Version, string Text, int QuestionType);
 
     private sealed record QuestionnaireQuestion(int Number, string Text, string[]? AnswerOptions = null);
 
@@ -86,10 +84,20 @@ public sealed partial class AssessmentCaptureViewModel
     private const string SyncTestModuleCode = "sync_test";
 
     /// <summary>
-    /// 采集工作台统一强制休息时间。
-    /// 图片浏览、视频浏览以及后续新增采集模块的休息阶段均固定 12 秒，不允许用户手动跳过。
+    /// 采集工作台统一强制休息时间。视频浏览及其他既有模块沿用 12 秒规则。
     /// </summary>
     internal const int CaptureWorkbenchForcedRestSeconds = 12;
+
+    private const int PictureBrowseRestSeconds = 10;
+
+    private const int PictureBrowseFixationMilliseconds = 1000;
+
+    /// <summary>
+    /// 单张图片当前沿用旧实现的 6 秒默认值；任务材料未给出新的呈现时长时使用该值。
+    /// </summary>
+    private const int PictureBrowseImageMilliseconds = 6000;
+
+    private const int PictureBrowseFinalBlankMilliseconds = 500;
 
     /// <summary>
     /// 视频浏览真实视频之间的固定间隔。
@@ -107,11 +115,26 @@ public sealed partial class AssessmentCaptureViewModel
     /// </summary>
     private const int SyncTestDurationSeconds = 60;
 
-    private const int VoiceBaselineSegmentSeconds = 6;
+    private const int VoiceBaselineMinimumSegmentSeconds = 6;
+    private const int VoiceBaselineMaximumSegmentSeconds = 10;
+    private const int VoiceBaselinePreparationSeconds = 1;
+    private const int VoiceBaselineVoiceDetectionWindowSeconds = 3;
+    private const int VoiceBaselineRestSeconds = 5;
+    private const double VoiceBaselineVoicePresenceRmsThreshold = 0.01;
 
     private const int WordReadingGroupSeconds = 15;
 
-    private const int ShortTextReadingPassageSeconds = 30;
+    internal const int ShortTextReadingCountdownMilliseconds = 3000;
+    internal const int ShortTextReadingPracticeMinimumMilliseconds = 2000;
+    internal const int ShortTextReadingMinimumMilliseconds = 5000;
+    internal const int ShortTextReadingMaximumMilliseconds = 120000;
+    internal const int ShortTextReadingPostBlankMilliseconds = 1000;
+
+    internal const string ShortTextReadingPassageId = "short_text_neutral_001";
+    internal const string ShortTextReadingPassageVersion = "v1";
+    internal const string ShortTextReadingPracticePassageId = "short_text_practice_001";
+    internal const string ShortTextReadingPracticePassageVersion = "v1";
+    internal const string ShortTextReadingPracticeText = "门口停着一辆自行车，车篮里放着一个纸袋。";
 
     private static readonly CaptureWorkbenchModule[] CaptureWorkbenchModules =
     [
@@ -143,7 +166,9 @@ public sealed partial class AssessmentCaptureViewModel
 
     private static readonly IReadOnlyList<AssessmentFlowModuleDefinition> FormalModuleFlowDefinitions =
         Array.AsReadOnly(CaptureWorkbenchModules
-            .Where(static module => !module.IsDevelopmentOnly)
+            .Where(static module => !module.IsDevelopmentOnly
+                && !string.Equals(module.Code, DotProbeModuleCode, StringComparison.Ordinal)
+                && !string.Equals(module.Code, EmotionOddballModuleCode, StringComparison.Ordinal))
             .Select(static module => new AssessmentFlowModuleDefinition(module.ModuleTypeId, module.Code))
             .ToArray());
 
@@ -152,14 +177,16 @@ public sealed partial class AssessmentCaptureViewModel
 
     /// <summary>
     /// 图片浏览第三步内部状态。
-    /// 休息阶段不做人脸取景判定，固定休息 12 秒后自动继续。
+    /// 第 15 张后固定休息 10 秒，最后 5 秒执行快速人脸位置检查。
     /// </summary>
     private enum PictureBrowsePhase
     {
         Idle,
+        Fixation,
         ShowingImage,
         Blank,
         Resting,
+        FinalBlank,
         Completed
     }
 
@@ -178,15 +205,15 @@ public sealed partial class AssessmentCaptureViewModel
 
     /// <summary>
     /// 语音基线第三步内部状态。
-    /// 第一段需要用户点击开始，后续段落由 12 秒休息倒计时结束后自动开始。
+    /// 两段均由用户点击开始；每段开始后先准备 1 秒，再进入发声计时。
     /// </summary>
     private enum VoiceBaselinePhase
     {
         Idle,
         WaitingToStart,
+        Preparing,
         Recording,
-        Resting,
-        Completed
+        Resting
     }
 
     /// <summary>
@@ -202,20 +229,24 @@ public sealed partial class AssessmentCaptureViewModel
         Completed
     }
 
-    /// <summary>
-    /// 短文朗读第三步内部状态。第一段手动开始，后续段落由固定休息倒计时自动推进。
-    /// </summary>
+    /// <summary>短文朗读练习与正式任务状态。</summary>
     private enum ShortTextReadingPhase
     {
         Idle,
-        WaitingToStart,
-        Reading,
-        Resting,
+        PracticeWaiting,
+        PracticeCountdown,
+        PracticeReading,
+        FormalWaiting,
+        FormalCountdown,
+        ReadingLocked,
+        ReadingSubmittable,
+        Finishing,
+        PostCompletionBlank,
         Completed
     }
 
     /// <summary>
-    /// 情绪问答第三步内部状态。第一题手动开始，后续问题由固定休息倒计时自动推进。
+    /// 情绪问答第三步内部状态。两题均先思考，手动或超时开始回答，无题间休息。
     /// </summary>
     private enum EmotionQuestionPhase
     {
@@ -223,15 +254,13 @@ public sealed partial class AssessmentCaptureViewModel
         WaitingToStart,
         AnsweringMinimum,
         AnsweringSubmittable,
-        Resting,
         Completed
     }
 
     private static readonly VoiceBaselineItem[] VoiceBaselineItems =
     [
         new("请您连续发出“啊（a）”的声音", "啊", 1),
-        new("请您连续发出“衣（yi）”的声音", "衣", 3),
-        new("请您连续发出“哦（o）”的声音", "哦", 2)
+        new("请您连续发出“啊（a）”的声音", "啊", 1)
     ];
 
     private static readonly WordReadingGroup[] WordReadingGroups =
@@ -248,26 +277,21 @@ public sealed partial class AssessmentCaptureViewModel
     [
         new(
             "选取一百五十克绿豆，用清水淘洗，剔除浮沫与坏豆；在容器内铺设无菌纱布，倒入浸泡八小时的豆粒；每日早晚各进行一次淋水操作，水量需完全浸透布料又不过度积水；将容器放在避光处，环境温度维持在二十五摄氏度，五至七天后即可采收豆芽。",
-            3),
-        new(
-            "夜深十二点半，客厅再成修罗场，父亲摔杯砸碗，母亲尖声咒骂；争吵的声音击碎他仅剩的一点倦意，他蜷缩在被窝里，数着心跳对抗着噪音；他早已记不清这是他们多少次干架了，乌烟瘴气的家里总是争吵不休，弱小的他无奈又无助，只有默默地流泪。",
-            2),
-        new(
-            "阳光明媚的春日午后，她和家人朋友们围坐在户外的野餐垫上，分享着各自带来的美食，讲述着生活中的趣事。时而传出阵阵欢声笑语；轻松愉快的氛围让她倍感欢乐和温暖，看着身边这些亲密的家人和朋友，她感到自己的生活是如此的美好和幸福。",
-            1)
+            3)
     ];
 
     private static readonly EmotionQuestionPrompt[] EmotionQuestionPrompts =
     [
         new(
-            "问题1：你最近的心情怎么样？请你讲一两件最近让你感到开心或者不开心的事情，说说是什么事情？怎么发生的？你是什么样的感受？讲得越详细越好。",
+            "emotion_question_001",
+            "v1",
+            "过去两周，您的整体心情和生活状态怎么样？",
             3),
         new(
-            "问题2：请你仔细想一想，讲述一两件与你相关或你遇到过的，让你感到特别有能量、非常开心、幸福、得意或满意的事情，讲得越详细越好。",
-            1),
-        new(
-            "问题3：请你讲述一两件与你相关或你遇到过的，让你感到非常难过、伤心、烦躁、苦恼或者痛苦的事情，说说是什么事情？怎么发生的？当时你的感受如何？讲得越详细越好。",
-            2)
+            "emotion_question_002",
+            "v1",
+            "请选一件最近对您影响比较大的事情，说说发生了什么",
+            3)
     ];
 
     private static readonly string[] BasicInfoGenderOptions = ["男", "女"];
@@ -681,7 +705,7 @@ public sealed partial class AssessmentCaptureViewModel
     private readonly string[] devSteps =
     [
         "准备检查",
-        "演示视频",
+        "指导语",
         "面部取景",
         "模块执行",
         "模块完成"

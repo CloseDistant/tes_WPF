@@ -1,6 +1,7 @@
 namespace RuinaoSoftwareWpf;
 
 using NAudio.Wave;
+using RuinaoSoftwareWpf.ApplicationContracts;
 
 internal sealed class CaptureAudioRecorder : ICaptureAudioRecorder
 {
@@ -82,6 +83,8 @@ internal sealed class CaptureAudioRecorder : ICaptureAudioRecorder
         logger.Info("音频录制已停止");
     }
 
+    public event EventHandler<CaptureAudioLevel>? LevelAvailable;
+
     private static async Task<bool> WaitForRecordingStoppedAsync(Task stoppedTask)
     {
         try
@@ -97,11 +100,39 @@ internal sealed class CaptureAudioRecorder : ICaptureAudioRecorder
 
     private void OnDataAvailable(object? sender, WaveInEventArgs args)
     {
+        var (rms, peak) = CalculateLevel(args.Buffer, args.BytesRecorded);
         lock (syncRoot)
         {
             writer?.Write(args.Buffer, 0, args.BytesRecorded);
             writer?.Flush();
         }
+
+        LevelAvailable?.Invoke(
+            this,
+            new CaptureAudioLevel(DateTimeOffset.Now, rms, peak, args.BytesRecorded));
+    }
+
+    private static (double Rms, double Peak) CalculateLevel(byte[] buffer, int bytesRecorded)
+    {
+        var sampleCount = bytesRecorded / 2;
+        if (sampleCount <= 0)
+        {
+            return (0d, 0d);
+        }
+
+        double sumSquares = 0d;
+        short peak = 0;
+        for (var index = 0; index + 1 < bytesRecorded; index += 2)
+        {
+            var sample = BitConverter.ToInt16(buffer, index);
+            var absolute = Math.Abs((int)sample);
+            peak = (short)Math.Max(peak, Math.Min(short.MaxValue, absolute));
+            sumSquares += sample * (double)sample;
+        }
+
+        return (
+            Math.Sqrt(sumSquares / sampleCount) / short.MaxValue,
+            peak / (double)short.MaxValue);
     }
 
     private void OnRecordingStopped(object? sender, StoppedEventArgs args)

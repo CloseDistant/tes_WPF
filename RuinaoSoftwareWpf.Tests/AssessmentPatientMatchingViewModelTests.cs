@@ -18,11 +18,21 @@ public sealed class AssessmentPatientMatchingViewModelTests
         var request = Assert.Single(service.Requests);
         Assert.Equal(1, request.PageNumber);
         Assert.Equal(20, request.PageSize);
-        Assert.Equal("  13800000000 ", request.Phone);
+        Assert.Equal("13800000000", request.Phone);
         Assert.Equal(1, viewModel.CurrentPage);
         Assert.Equal(3, viewModel.TotalPage);
         Assert.Equal(46, viewModel.Total);
         Assert.False(viewModel.IsSearchCooldown);
+    }
+
+    [Fact]
+    public void PhoneQuery_FiltersNonDigitsAndLimitsToElevenDigits()
+    {
+        var viewModel = CreateViewModel(new RecordingExternalFollowUpService());
+
+        viewModel.PhoneQuery = "abc18958511152-xyz";
+
+        Assert.Equal("18958511152", viewModel.PhoneQuery);
     }
 
     [Fact]

@@ -19,9 +19,12 @@ internal sealed class CaptureMediaService : ICaptureMediaService
         this.recorder = recorder;
         this.timeProvider = timeProvider;
         recorder.RecordingCompleted += OnRecordingCompleted;
+        recorder.AudioLevelAvailable += OnAudioLevelAvailable;
     }
 
     public event EventHandler<CaptureMediaCompleted>? Completed;
+
+    public event EventHandler<CaptureAudioLevel>? AudioLevelAvailable;
 
     public bool IsCapturing => recorder.IsRecording;
 
@@ -38,7 +41,8 @@ internal sealed class CaptureMediaService : ICaptureMediaService
                 request.SessionKey,
                 request.ModuleCode,
                 request.ModuleName,
-                request.CameraId),
+                request.CameraId,
+                request.SegmentIndex),
             cancellationToken);
 
         currentSession = new CaptureMediaSession(
@@ -93,6 +97,11 @@ internal sealed class CaptureMediaService : ICaptureMediaService
                 ToCompletionStatus(eventArgs.Status),
                 ToErrorCode(eventArgs.Status),
                 eventArgs.Message));
+    }
+
+    private void OnAudioLevelAvailable(object? sender, CaptureAudioLevel level)
+    {
+        AudioLevelAvailable?.Invoke(this, level);
     }
 
     private static string ToLegacyStatus(CaptureMediaStopReason reason)

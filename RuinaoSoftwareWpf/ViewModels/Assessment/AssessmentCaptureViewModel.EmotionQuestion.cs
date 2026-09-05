@@ -5,8 +5,8 @@ using System.Windows.Threading;
 
 /// <summary>
 /// 情绪问答模块流程。
-/// 第一题由用户手动开始；每题回答满 30 秒后允许手动完成，最长 120 秒自动结束；
-/// 前两题结束后固定休息 12 秒。整个模块共用一段音视频，并通过毫秒级事件时间戳定位。
+/// 每题先呈现问题，最多思考 60 秒，可提前手动开始；每题回答满 20 秒后允许手动完成，最长 120 秒自动结束；
+/// 题间不设置休息。整个模块共用一段音视频，并通过毫秒级事件时间戳定位。
 /// </summary>
 public sealed partial class AssessmentCaptureViewModel
 {
@@ -17,10 +17,9 @@ public sealed partial class AssessmentCaptureViewModel
     private int emotionQuestionRemainingSeconds;
     private DateTimeOffset? currentEmotionQuestionStartedAt;
     private long? currentEmotionQuestionStartedTimestamp;
-    private DateTimeOffset? currentEmotionQuestionRestStartedAt;
-    private long? currentEmotionQuestionRestStartedTimestamp;
+    private DateTimeOffset? currentEmotionQuestionPresentedAt;
+    private long? currentEmotionQuestionPresentedTimestamp;
     private string emotionQuestionStatusText = string.Empty;
-    private string emotionQuestionRestText = string.Empty;
 
     public ICommand StartEmotionQuestionCommand { get; private set; } = null!;
 
@@ -32,10 +31,7 @@ public sealed partial class AssessmentCaptureViewModel
     public bool IsEmotionQuestionAnswering => IsEmotionQuestionStage
         && IsEmotionQuestionAnsweringPhase;
 
-    public bool IsEmotionQuestionResting => IsEmotionQuestionStage
-        && emotionQuestionPhase == EmotionQuestionPhase.Resting;
-
-    public bool IsEmotionQuestionPromptVisible => IsEmotionQuestionAnswering;
+    public bool IsEmotionQuestionPromptVisible => IsEmotionQuestionWaiting || IsEmotionQuestionAnswering;
 
     public bool CanCompleteEmotionQuestionAnswer => IsEmotionQuestionStage
         && emotionQuestionPhase == EmotionQuestionPhase.AnsweringSubmittable;
@@ -50,8 +46,7 @@ public sealed partial class AssessmentCaptureViewModel
         ? T(
             emotionQuestionIndex >= EmotionQuestionPrompts.Length - 1
                 ? "CaptureWorkspaceEmotionQuestionSubmitFinalHint"
-                : "CaptureWorkspaceEmotionQuestionSubmitHint",
-            CaptureWorkbenchForcedRestSeconds)
+                : "CaptureWorkspaceEmotionQuestionSubmitHint")
         : T(
             "CaptureWorkspaceEmotionQuestionSubmitLockedHint",
             EmotionQuestionTimingRules.MinimumAnswerSeconds);
@@ -72,38 +67,19 @@ public sealed partial class AssessmentCaptureViewModel
         private set => SetProperty(ref emotionQuestionStatusText, value);
     }
 
-    public string EmotionQuestionRestText
-    {
-        get => emotionQuestionRestText;
-        private set => SetProperty(ref emotionQuestionRestText, value);
-    }
-
     private bool IsEmotionQuestionAnsweringPhase => emotionQuestionPhase
         is EmotionQuestionPhase.AnsweringMinimum
         or EmotionQuestionPhase.AnsweringSubmittable;
 
     private void InitializeEmotionQuestionModule()
     {
-        StartEmotionQuestionCommand = new RelayCommand(_ => StartFirstEmotionQuestion());
+        StartEmotionQuestionCommand = new RelayCommand(_ => StartEmotionQuestionAnswer(), _ => IsEmotionQuestionWaiting);
         completeEmotionQuestionAnswerCommand = new RelayCommand(
             _ => CompleteEmotionQuestionAnswerManually(),
             _ => CanCompleteEmotionQuestionAnswer);
         EmotionQuestionStatusText = T("CaptureWorkspaceRecordingPending");
         emotionQuestionTimer.Interval = TimeSpan.FromMilliseconds(250);
         emotionQuestionTimer.Tick += (_, _) => AdvanceEmotionQuestion();
-    }
-
-    /// <summary>
-    /// 第一题由用户主动开始，后续题目由固定休息结束后自动推进。
-    /// </summary>
-    private void StartFirstEmotionQuestion()
-    {
-        if (!IsEmotionQuestionWaiting || emotionQuestionIndex != 0)
-        {
-            return;
-        }
-
-        StartEmotionQuestionAnswer();
     }
 
     private void BeginEmotionQuestionSequence()
@@ -117,24 +93,42 @@ public sealed partial class AssessmentCaptureViewModel
         emotionQuestionTimer.Stop();
 
         emotionQuestionIndex = 0;
-        emotionQuestionRemainingSeconds = EmotionQuestionTimingRules.MinimumAnswerSeconds;
+        PresentEmotionQuestion();
+    }
+
+    private void PresentEmotionQuestion()
+    {
+        var prompt = EmotionQuestionPrompts[emotionQuestionIndex];
+        currentEmotionQuestionPresentedAt = timeProvider.GetUtcNow();
+        currentEmotionQuestionPresentedTimestamp = timeProvider.GetTimestamp();
         currentEmotionQuestionStartedAt = null;
         currentEmotionQuestionStartedTimestamp = null;
-        currentEmotionQuestionRestStartedAt = null;
-        currentEmotionQuestionRestStartedTimestamp = null;
         emotionQuestionPhase = EmotionQuestionPhase.WaitingToStart;
-        EmotionQuestionStatusText = T(
-            "CaptureWorkspaceEmotionQuestionReady",
-            1,
-            EmotionQuestionPrompts.Length);
-        EmotionQuestionRestText = string.Empty;
         StageNoticeText = string.Empty;
+        UpdateEmotionQuestionThinkingText(TimeSpan.Zero);
+        RecordModuleEventSafely(
+            "emotion_question_presented",
+            $"情绪问答第 {emotionQuestionIndex + 1} 题呈现",
+            new
+            {
+                questionIndex = emotionQuestionIndex + 1,
+                questionTotal = EmotionQuestionPrompts.Length,
+                questionId = prompt.Id,
+                questionVersion = prompt.Version,
+                questionText = prompt.Text,
+                presentedAtUnixMs = currentEmotionQuestionPresentedAt.Value.ToUnixTimeMilliseconds(),
+                maximumThinkingSeconds = EmotionQuestionTimingRules.MaximumThinkingSeconds,
+                isTest = false
+            },
+            currentEmotionQuestionPresentedAt,
+            null);
+        emotionQuestionTimer.Start();
         NotifyEmotionQuestionStateChanged();
     }
 
     private void StartEmotionQuestionAnswer()
     {
-        if (!IsEmotionQuestionModule
+        if (!IsEmotionQuestionWaiting
             || currentStep != CaptureWorkbenchStep.ModuleExecution
             || emotionQuestionIndex >= EmotionQuestionPrompts.Length)
         {
@@ -144,12 +138,9 @@ public sealed partial class AssessmentCaptureViewModel
         var prompt = EmotionQuestionPrompts[emotionQuestionIndex];
         currentEmotionQuestionStartedAt = timeProvider.GetUtcNow();
         currentEmotionQuestionStartedTimestamp = timeProvider.GetTimestamp();
-        currentEmotionQuestionRestStartedAt = null;
-        currentEmotionQuestionRestStartedTimestamp = null;
         emotionQuestionRemainingSeconds = EmotionQuestionTimingRules.MinimumAnswerSeconds;
         emotionQuestionPhase = EmotionQuestionPhase.AnsweringMinimum;
         StageNoticeText = string.Empty;
-        EmotionQuestionRestText = string.Empty;
         UpdateEmotionQuestionStatusText(TimeSpan.Zero);
 
         RecordModuleEventSafely(
@@ -159,11 +150,15 @@ public sealed partial class AssessmentCaptureViewModel
             {
                 questionIndex = emotionQuestionIndex + 1,
                 questionTotal = EmotionQuestionPrompts.Length,
+                questionId = prompt.Id,
+                questionVersion = prompt.Version,
                 questionText = prompt.Text,
                 questionType = prompt.QuestionType,
                 minimumDurationSeconds = EmotionQuestionTimingRules.MinimumAnswerSeconds,
                 maximumDurationSeconds = EmotionQuestionTimingRules.MaximumAnswerSeconds,
-                startedAtUnixMs = currentEmotionQuestionStartedAt.Value.ToUnixTimeMilliseconds()
+                presentedAtUnixMs = currentEmotionQuestionPresentedAt?.ToUnixTimeMilliseconds(),
+                startedAtUnixMs = currentEmotionQuestionStartedAt.Value.ToUnixTimeMilliseconds(),
+                isTest = false
             },
             currentEmotionQuestionStartedAt,
             null);
@@ -188,30 +183,25 @@ public sealed partial class AssessmentCaptureViewModel
             return;
         }
 
-        if (emotionQuestionPhase != EmotionQuestionPhase.Resting
-            || !currentEmotionQuestionRestStartedTimestamp.HasValue)
+        if (IsEmotionQuestionWaiting && currentEmotionQuestionPresentedTimestamp.HasValue)
         {
-            return;
+            var elapsed = timeProvider.GetElapsedTime(currentEmotionQuestionPresentedTimestamp.Value);
+            if (EmotionQuestionTimingRules.ShouldStartAnswer(elapsed))
+            {
+                StartEmotionQuestionAnswer();
+            }
+            else
+            {
+                UpdateEmotionQuestionThinkingText(elapsed);
+            }
         }
+    }
 
-        var nowTimestamp = timeProvider.GetTimestamp();
-        var elapsed = timeProvider.GetElapsedTime(
-            currentEmotionQuestionRestStartedTimestamp.Value,
-            nowTimestamp);
-        if (elapsed >= TimeSpan.FromSeconds(CaptureWorkbenchForcedRestSeconds))
-        {
-            CompleteEmotionQuestionRest(nowTimestamp, timeProvider.GetUtcNow());
-            return;
-        }
-
-        var remainingSeconds = EmotionQuestionTimingRules.RemainingSeconds(
-            elapsed,
-            CaptureWorkbenchForcedRestSeconds);
-        if (remainingSeconds != emotionQuestionRemainingSeconds)
-        {
-            emotionQuestionRemainingSeconds = remainingSeconds;
-            UpdateEmotionQuestionRestText();
-        }
+    private void UpdateEmotionQuestionThinkingText(TimeSpan elapsed)
+    {
+        EmotionQuestionStatusText = T(
+            "CaptureWorkspaceEmotionQuestionThinking",
+            EmotionQuestionTimingRules.RemainingSeconds(elapsed, EmotionQuestionTimingRules.MaximumThinkingSeconds));
     }
 
     private void EvaluateEmotionQuestionAnswerTiming()
@@ -255,14 +245,17 @@ public sealed partial class AssessmentCaptureViewModel
         emotionQuestionPhase = EmotionQuestionPhase.AnsweringSubmittable;
         var prompt = EmotionQuestionPrompts[emotionQuestionIndex];
         RecordModuleEventSafely(
-            "emotion_question_early_submit_enabled",
+            "emotion_question_finish_enabled",
             $"情绪问答第 {emotionQuestionIndex + 1} 题允许手动完成",
             new
             {
                 questionIndex = emotionQuestionIndex + 1,
                 questionTotal = EmotionQuestionPrompts.Length,
+                questionId = prompt.Id,
+                questionVersion = prompt.Version,
                 questionText = prompt.Text,
                 questionType = prompt.QuestionType,
+                isTest = false,
                 enabledAtUnixMs = enabledAt.ToUnixTimeMilliseconds(),
                 elapsedMs = (long)elapsed.TotalMilliseconds
             },
@@ -308,7 +301,7 @@ public sealed partial class AssessmentCaptureViewModel
                 completedTimestamp).TotalMilliseconds
             : 0L;
         var completionReasonCode = completionReason == EmotionQuestionCompletionReason.ManualSubmit
-            ? "manual_submit"
+            ? "manual_completed"
             : "maximum_timeout";
 
         if (prompt is not null)
@@ -320,7 +313,11 @@ public sealed partial class AssessmentCaptureViewModel
                 {
                     questionIndex = completedQuestionIndex + 1,
                     questionTotal = EmotionQuestionPrompts.Length,
+                    questionId = prompt.Id,
+                    questionVersion = prompt.Version,
                     questionText = prompt.Text,
+                    presentedAtUnixMs = currentEmotionQuestionPresentedAt?.ToUnixTimeMilliseconds(),
+                    isTest = false,
                     questionType = prompt.QuestionType,
                     startedAtUnixMs = currentEmotionQuestionStartedAt?.ToUnixTimeMilliseconds(),
                     endedAtUnixMs = completedAt.ToUnixTimeMilliseconds(),
@@ -341,62 +338,7 @@ public sealed partial class AssessmentCaptureViewModel
             return;
         }
 
-        emotionQuestionPhase = EmotionQuestionPhase.Resting;
-        emotionQuestionRemainingSeconds = CaptureWorkbenchForcedRestSeconds;
-        currentEmotionQuestionRestStartedAt = completedAt;
-        currentEmotionQuestionRestStartedTimestamp = completedTimestamp;
-        EmotionQuestionStatusText = T(
-            "CaptureWorkspaceEmotionQuestionCompletedCount",
-            emotionQuestionIndex,
-            EmotionQuestionPrompts.Length);
-        UpdateEmotionQuestionRestText();
-
-        RecordModuleEventSafely(
-            "emotion_question_rest_started",
-            $"情绪问答第 {completedQuestionIndex + 1} 题后休息开始",
-            new
-            {
-                completedQuestionIndex = completedQuestionIndex + 1,
-                nextQuestionIndex = emotionQuestionIndex + 1,
-                durationSeconds = CaptureWorkbenchForcedRestSeconds,
-                startedAtUnixMs = completedAt.ToUnixTimeMilliseconds()
-            },
-            completedAt,
-            null);
-
-        NotifyStageChanged();
-        NotifyEmotionQuestionStateChanged();
-    }
-
-    private void CompleteEmotionQuestionRest(long completedTimestamp, DateTimeOffset completedAt)
-    {
-        if (emotionQuestionPhase != EmotionQuestionPhase.Resting)
-        {
-            return;
-        }
-
-        var durationMs = currentEmotionQuestionRestStartedTimestamp.HasValue
-            ? (long)timeProvider.GetElapsedTime(
-                currentEmotionQuestionRestStartedTimestamp.Value,
-                completedTimestamp).TotalMilliseconds
-            : 0L;
-        RecordModuleEventSafely(
-            "emotion_question_rest_completed",
-            $"情绪问答第 {emotionQuestionIndex} 题后休息完成",
-            new
-            {
-                completedQuestionIndex = emotionQuestionIndex,
-                nextQuestionIndex = emotionQuestionIndex + 1,
-                startedAtUnixMs = currentEmotionQuestionRestStartedAt?.ToUnixTimeMilliseconds(),
-                endedAtUnixMs = completedAt.ToUnixTimeMilliseconds(),
-                durationMs
-            },
-            currentEmotionQuestionRestStartedAt,
-            completedAt);
-
-        currentEmotionQuestionRestStartedAt = null;
-        currentEmotionQuestionRestStartedTimestamp = null;
-        StartEmotionQuestionAnswer();
+        PresentEmotionQuestion();
     }
 
     private void CompleteEmotionQuestion()
@@ -406,10 +348,7 @@ public sealed partial class AssessmentCaptureViewModel
         emotionQuestionRemainingSeconds = 0;
         currentEmotionQuestionStartedAt = null;
         currentEmotionQuestionStartedTimestamp = null;
-        currentEmotionQuestionRestStartedAt = null;
-        currentEmotionQuestionRestStartedTimestamp = null;
         EmotionQuestionStatusText = T("CaptureWorkspaceEmotionQuestionCompleted");
-        EmotionQuestionRestText = string.Empty;
         StageNoticeText = T("CaptureWorkspaceEmotionQuestionCompletedNotice");
         NotifyEmotionQuestionStateChanged();
         MoveToStep(CaptureWorkbenchStep.Completed);
@@ -442,18 +381,13 @@ public sealed partial class AssessmentCaptureViewModel
             EmotionQuestionTimingRules.MaximumAnswerSeconds);
     }
 
-    private void UpdateEmotionQuestionRestText()
-    {
-        EmotionQuestionRestText = T(
-            "CaptureWorkspaceRestRemaining",
-            emotionQuestionRemainingSeconds);
-    }
-
     private void NotifyEmotionQuestionStateChanged()
     {
         OnPropertyChanged(nameof(IsEmotionQuestionWaiting));
         OnPropertyChanged(nameof(IsEmotionQuestionAnswering));
-        OnPropertyChanged(nameof(IsEmotionQuestionResting));
+        OnPropertyChanged(nameof(EmotionQuestionText));
+        OnPropertyChanged(nameof(EmotionQuestionProgressText));
+        (StartEmotionQuestionCommand as RelayCommand)?.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(IsEmotionQuestionPromptVisible));
         OnPropertyChanged(nameof(CanCompleteEmotionQuestionAnswer));
         OnPropertyChanged(nameof(EmotionQuestionSubmitHintText));
@@ -465,13 +399,12 @@ public sealed partial class AssessmentCaptureViewModel
         emotionQuestionTimer.Stop();
         emotionQuestionPhase = EmotionQuestionPhase.Idle;
         emotionQuestionIndex = 0;
+        currentEmotionQuestionPresentedAt = null;
+        currentEmotionQuestionPresentedTimestamp = null;
         emotionQuestionRemainingSeconds = EmotionQuestionTimingRules.MinimumAnswerSeconds;
         currentEmotionQuestionStartedAt = null;
         currentEmotionQuestionStartedTimestamp = null;
-        currentEmotionQuestionRestStartedAt = null;
-        currentEmotionQuestionRestStartedTimestamp = null;
         EmotionQuestionStatusText = T("CaptureWorkspaceRecordingPending");
-        EmotionQuestionRestText = string.Empty;
         NotifyEmotionQuestionStateChanged();
     }
 
